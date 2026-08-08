@@ -93,11 +93,30 @@ func benchClient() *http.Client {
 	}
 }
 
+// benchClientH2 返回启用 HTTP/2 的客户端（webx 默认协议路径）。
+func benchClientH2() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+			ForceAttemptHTTP2:   true,
+			MaxIdleConns:        128,
+			MaxIdleConnsPerHost: 64,
+			MaxConnsPerHost:     64,
+			IdleConnTimeout:     60 * time.Second,
+			DisableCompression:  true,
+		},
+	}
+}
+
 // runBenchRequests 并行压测指定地址（预热后计时）。
 // 公平性约定：所有框架统一使用 HTTPS（webx 仅支持 HTTPS，不做明文对比）。
 func runBenchRequests(b *testing.B, base string, warmup int) {
+	runBenchRequestsWithClient(b, base, warmup, benchClient())
+}
+
+// runBenchRequestsWithClient 使用指定客户端并行压测（预热后计时）。
+func runBenchRequestsWithClient(b *testing.B, base string, warmup int, client *http.Client) {
 	b.Helper()
-	client := benchClient()
 	// 并行预热：让连接池预先建立多条 keep-alive 连接，避免计时阶段混入握手开销。
 	var wg sync.WaitGroup
 	for g := 0; g < 12; g++ {
@@ -179,6 +198,44 @@ func BenchmarkServerTLSWebx(b *testing.B) {
 		b.Fatal("webx 启动超时")
 	}
 	runBenchRequests(b, base, 200)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func BenchmarkServerH2Webx(b *testing.B) {
+	certFile, keyFile, _ := writeBenchCert(b)
+	cfg := webx.Config{
+		TLSCertFile:     certFile,
+		TLSKeyFile:      keyFile,
+		ShutdownTimeout: 5 * time.Second,
+	}
+	s := webx.NewServer(cfg, benchLogger())
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(webx.Route{
+		Method:  http.MethodGet,
+		Path:    "/ping",
+		Handler: func(c *webx.Context) { _ = c.String(http.StatusOK, "hello") },
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- s.Start() }()
+	base := ""
+	for i := 0; i < 500; i++ {
+		if addr := s.ListenerAddr(); addr != "" {
+			base = "https://" + addr
+			break
+		}
+		select {
+		case err := <-errCh:
+			b.Fatal(err)
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if base == "" {
+		b.Fatal("webx 启动超时")
+	}
+	runBenchRequestsWithClient(b, base, 200, benchClientH2())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = s.Stop(ctx)
