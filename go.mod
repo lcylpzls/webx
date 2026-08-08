@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/lcylpzls/confx v0.3.0
+	github.com/lcylpzls/confx v0.3.1
 	github.com/lcylpzls/errx v1.2.0
 	github.com/lcylpzls/logx v1.0.0
 	github.com/quic-go/quic-go v0.61.0
