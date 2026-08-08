@@ -6,7 +6,7 @@
 [![Go Version](https://img.shields.io/badge/Go-%3E%3D1.26-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> 当前状态：**v1.2.0 已发布，API 冻结**。各包语句覆盖率 100%，
+> 当前状态：**v1.2.1 已发布，API 冻结**。各包语句覆盖率 100%，
 > 三平台 CI + race + fuzz + apidiff 全绿。
 
 ## 技术栈
@@ -76,14 +76,13 @@
 
 | 基准 | 结果 |
 | --- | --- |
-| 路由匹配+分发（50 条路由） | 0.21µs/op，4 allocs |
-| 路由匹配+分发（100 条路由） | 0.21µs/op，4 allocs |
-| 路由匹配+分发（500 条路由） | 0.22µs/op，4 allocs |
-| 中间件链（3 层） | 10.6ns/op，0 allocs |
-| 标准化 JSON 响应 | 148ns/op，1 alloc |
-| 端到端 HTTPS 请求（TLS+中间件+JSON） | 41µs/op，90 allocs |
+| 路由匹配+分发（500 条参数化路由） | 0.10µs/op，**0 allocs** |
+| HTTP/1.1 端到端（HTTPS，单核/多核） | 35.3µs / 8.6µs |
+| HTTP/2 端到端（HTTPS，单核/多核） | 50.4µs / 12.3µs |
+| HTTP/3 端到端（QUIC，单核/多核） | 118.1µs / 29.9µs |
 
-与 gin / echo / fasthttp 的横向对比（HTTPS、单核/多核）见
+与 gin / echo / fasthttp / hertz 的横向对比（HTTPS、单核/多核，
+含 HTTP/2/HTTP/3 完整矩阵与方法学）见
 [benchmarks/BENCHMARKS.md](benchmarks/BENCHMARKS.md)。
 
 ## API 速查

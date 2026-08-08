@@ -153,15 +153,21 @@ func runBenchRequestsWithClient(b *testing.B, base string, warmup int, client *h
 // startStdTLS 启动标准 net/http TLS 服务（HTTP/1.1）。
 func startStdTLS(b testing.TB, handler http.Handler, cert tls.Certificate) (string, func()) {
 	b.Helper()
-	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
-	})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		b.Fatal(err)
 	}
-	srv := &http.Server{Handler: handler, ErrorLog: log.New(io.Discard, "", 0)}
-	go func() { _ = srv.Serve(ln) }()
+	// 使用 ServeTLS + TLSConfig：标准库会在此路径上自动启用 HTTP/2（ALPN h2），
+	// 同时保持 TLS 1.2 下限与外部 tls.Listen 行为一致。
+	srv := &http.Server{
+		Handler: handler,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+		},
+		ErrorLog: log.New(io.Discard, "", 0),
+	}
+	go func() { _ = srv.ServeTLS(ln, "", "") }()
 	return "https://" + ln.Addr().String(), func() { _ = srv.Close() }
 }
 
@@ -198,44 +204,6 @@ func BenchmarkServerTLSWebx(b *testing.B) {
 		b.Fatal("webx 启动超时")
 	}
 	runBenchRequests(b, base, 200)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_ = s.Stop(ctx)
-}
-
-func BenchmarkServerH2Webx(b *testing.B) {
-	certFile, keyFile, _ := writeBenchCert(b)
-	cfg := webx.Config{
-		TLSCertFile:     certFile,
-		TLSKeyFile:      keyFile,
-		ShutdownTimeout: 5 * time.Second,
-	}
-	s := webx.NewServer(cfg, benchLogger())
-	s.UseHttp2Listen("127.0.0.1:0")
-	s.RegisterRoute(webx.Route{
-		Method:  http.MethodGet,
-		Path:    "/ping",
-		Handler: func(c *webx.Context) { _ = c.String(http.StatusOK, "hello") },
-	})
-	errCh := make(chan error, 1)
-	go func() { errCh <- s.Start() }()
-	base := ""
-	for i := 0; i < 500; i++ {
-		if addr := s.ListenerAddr(); addr != "" {
-			base = "https://" + addr
-			break
-		}
-		select {
-		case err := <-errCh:
-			b.Fatal(err)
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-	if base == "" {
-		b.Fatal("webx 启动超时")
-	}
-	runBenchRequestsWithClient(b, base, 200, benchClientH2())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = s.Stop(ctx)
@@ -300,6 +268,17 @@ func BenchmarkServerTLSGin(b *testing.B) {
 	runBenchRequests(b, base, 200)
 }
 
+// BenchmarkServerH2Gin 对比 gin HTTPS + HTTP/2 端到端吞吐（标准库封装阵营）。
+func BenchmarkServerH2Gin(b *testing.B) {
+	_, _, cert := writeBenchCert(b)
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.GET("/ping", func(c *gin.Context) { c.String(http.StatusOK, "hello") })
+	base, stop := startStdTLS(b, r, cert)
+	defer stop()
+	runBenchRequestsWithClient(b, base, 200, benchClientH2())
+}
+
 func BenchmarkServerTLSEcho(b *testing.B) {
 	_, _, cert := writeBenchCert(b)
 	e := echo.New()
@@ -307,6 +286,66 @@ func BenchmarkServerTLSEcho(b *testing.B) {
 	base, stop := startStdTLS(b, e, cert)
 	defer stop()
 	runBenchRequests(b, base, 200)
+}
+
+// BenchmarkServerH2Echo 对比 echo HTTPS + HTTP/2 端到端吞吐（标准库封装阵营）。
+func BenchmarkServerH2Echo(b *testing.B) {
+	_, _, cert := writeBenchCert(b)
+	e := echo.New()
+	e.GET("/ping", func(c echo.Context) error { return c.String(http.StatusOK, "hello") })
+	base, stop := startStdTLS(b, e, cert)
+	defer stop()
+	runBenchRequestsWithClient(b, base, 200, benchClientH2())
+}
+
+// BenchmarkServerTLSServeMux 对比标准库裸 ServeMux HTTPS + HTTP/1.1（下限参照）。
+func BenchmarkServerTLSServeMux(b *testing.B) {
+	_, _, cert := writeBenchCert(b)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ping", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("hello"))
+	})
+	base, stop := startStdTLS(b, mux, cert)
+	defer stop()
+	runBenchRequests(b, base, 200)
+}
+
+// BenchmarkServerH2ServeMux 对比标准库裸 ServeMux HTTPS + HTTP/2（下限参照）。
+func BenchmarkServerH2ServeMux(b *testing.B) {
+	_, _, cert := writeBenchCert(b)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ping", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("hello"))
+	})
+	base, stop := startStdTLS(b, mux, cert)
+	defer stop()
+	runBenchRequestsWithClient(b, base, 200, benchClientH2())
+}
+
+// TestStdTLSServeMuxH2 验证标准库 TLS 服务在 h2 客户端下协商 HTTP/2。
+func TestStdTLSServeMuxH2(t *testing.T) {
+	_, _, cert := writeBenchCert(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ping", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("hello"))
+	})
+	base, stop := startStdTLS(t, mux, cert)
+	defer stop()
+	client := benchClientH2()
+	var proto string
+	for i := 0; i < 200; i++ {
+		resp, err := client.Get(base + "/ping")
+		if err == nil {
+			proto = resp.Proto
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if proto != "HTTP/2.0" {
+		t.Fatalf("标准库 h2 基准未协商到 HTTP/2，实际协议=%q", proto)
+	}
 }
 
 func BenchmarkServerTLSFasthttp(b *testing.B) {

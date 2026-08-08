@@ -2,6 +2,20 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v1.2.1] - 2026-08-09
+
+### 基准与性能文档
+
+- 基准模块新增 hertz（v0.10.6 + `hertz-contrib/http2` v0.1.8）的
+  HTTPS HTTP/1.1 与 HTTP/2 对比；
+- 基准模块新增 HTTP/3 矩阵：ServeMux / gin / echo / webx 统一挂载
+  quic-go `http3.Server`，客户端使用 `http3.Transport`；
+- 修复基准模块 `startStdTLS` 未启用 HTTP/2 的问题（改为 `ServeTLS`），
+  并为 h2/h3 各协议新增协商断言测试（防止静默回退 HTTP/1.1）；
+- `BENCHMARKS.md` 重构：方法学、标准库阵营 h1/h2/h3 三协议矩阵、
+  三协议总览、结论与限制；
+- README 性能段同步更新为最新实测摘要。
+
 ## [v1.2.0] - 2026-08-08
 
 ### 性能（热路径深度优化）
