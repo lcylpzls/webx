@@ -18,6 +18,7 @@ type Router struct {
 	patterns []*routePattern
 	noRoute  core.HandlerFunc
 	noMethod core.HandlerFunc
+	maxBody  int64
 }
 
 // routePattern 是一条已翻译的 ServeMux 模式及其注册信息。
@@ -43,6 +44,11 @@ func NewRouter(noRoute, noMethod core.HandlerFunc) *Router {
 		noRoute:  noRoute,
 		noMethod: noMethod,
 	}
+}
+
+// SetMaxBodyBytes 设置路由处理链中 BindJSON 的最大请求体字节数。
+func (rt *Router) SetMaxBodyBytes(n int64) {
+	rt.maxBody = n
 }
 
 // Handle 注册一条路由（chain 为全局中间件 + 路由中间件 + 最终处理器的完整链）。
@@ -122,6 +128,9 @@ func (rt *Router) wrap(chain []core.HandlerFunc, params []string) func(http.Resp
 				values[name] = r.PathValue(name)
 			}
 			c.SetParams(values)
+		}
+		if rt.maxBody > 0 {
+			c.SetMaxBodyBytes(rt.maxBody)
 		}
 		c.SetHandlers(chain)
 		c.Run()

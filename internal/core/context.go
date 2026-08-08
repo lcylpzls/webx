@@ -25,6 +25,7 @@ type Context struct {
 	aborted  bool
 	status   int
 	wrote    bool
+	maxBody  int64
 }
 
 // NewContext 创建请求上下文。
@@ -32,7 +33,6 @@ func NewContext(w http.ResponseWriter, r *http.Request) *Context {
 	return &Context{
 		writer:  w,
 		request: r,
-		values:  make(map[string]any),
 		index:   -1,
 	}
 }
@@ -50,6 +50,11 @@ func (c *Context) Writer() http.ResponseWriter {
 // SetWriter 替换响应写入器（供 Timeout 等中间件包装使用）。
 func (c *Context) SetWriter(w http.ResponseWriter) {
 	c.writer = w
+}
+
+// SetMaxBodyBytes 设置 BindJSON 的最大请求体字节数；<=0 表示不限制。
+func (c *Context) SetMaxBodyBytes(n int64) {
+	c.maxBody = n
 }
 
 // SetRequest 替换请求（供 Timeout 等中间件注入带超时的 Context）。
@@ -99,6 +104,9 @@ func (c *Context) RemoteIP() string {
 
 // Set 保存请求级 KV。
 func (c *Context) Set(key string, val any) {
+	if c.values == nil {
+		c.values = make(map[string]any)
+	}
 	c.values[key] = val
 }
 
@@ -158,7 +166,11 @@ func (c *Context) String(code int, format string, args ...any) error {
 
 // BindJSON 解析请求体 JSON 到 out。
 func (c *Context) BindJSON(out any) error {
-	decoder := json.NewDecoder(c.request.Body)
+	body := c.request.Body
+	if c.maxBody > 0 {
+		body = http.MaxBytesReader(c.writer, body, c.maxBody)
+	}
+	decoder := json.NewDecoder(body)
 	return decoder.Decode(out)
 }
 

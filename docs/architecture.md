@@ -154,6 +154,9 @@ srv := webx.NewServer(cfg)
 > 注意：不要在请求 Handler 内调用 `Stop()`——`http.Server.Shutdown`
 > 会等待当前连接变为空闲，Handler 自身阻塞将导致关闭等待直到超时。
 
+> 注意：`Stop()` 后同一 Server 实例不能再次 `Start()`（需新建实例）；
+> `logger` 必须在 `NewServer` 时注入，`WithLogger(nil)` 会让 `Start()` 失败。
+
 ## 5. 与 ginx 的迁移关系
 
 - ginx 保持现状继续维护，webx 是新项目、新模块，不共享历史包袱；

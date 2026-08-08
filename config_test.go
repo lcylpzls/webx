@@ -22,6 +22,9 @@ func TestConfigValidateSuccessWithDefaults(t *testing.T) {
 	if len(cfg.CORSAllowedOrigins) == 0 || len(cfg.CORSAllowedMethods) == 0 {
 		t.Error("CORS 默认值未填充")
 	}
+	if cfg.MaxBodyBytes != 10*1024*1024 {
+		t.Errorf("MaxBodyBytes 默认值不符：%d", cfg.MaxBodyBytes)
+	}
 }
 
 func TestConfigValidateErrors(t *testing.T) {
@@ -44,6 +47,7 @@ func TestConfigValidateErrors(t *testing.T) {
 		{"写入超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, WriteTimeout: -1}, "写入超时时间不能为负数"},
 		{"空闲超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, IdleTimeout: -1}, "空闲超时时间不能为负数"},
 		{"请求头负数", Config{TLSCertFile: cert, TLSKeyFile: key, MaxHeaderBytes: -1}, "最大请求头字节数不能为负数"},
+		{"请求体负数", Config{TLSCertFile: cert, TLSKeyFile: key, MaxBodyBytes: -1}, "最大请求体字节数不能为负数"},
 		{"日志级别非法", Config{TLSCertFile: cert, TLSKeyFile: key, LogLevel: "verbose"}, "日志级别无效"},
 	}
 	for _, tc := range cases {

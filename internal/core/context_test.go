@@ -152,6 +152,26 @@ func TestContextBindJSON(t *testing.T) {
 	}
 }
 
+func TestContextBindJSONMaxBytes(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/",
+		bytes.NewBufferString(`{"name":"这是一个超长请求体"}`))
+	rec := httptest.NewRecorder()
+	c := NewContext(rec, req)
+	c.SetMaxBodyBytes(4)
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := c.BindJSON(&body); err == nil {
+		t.Error("超过最大请求体应返回错误")
+	}
+	// 未设置限制时正常解析
+	req2 := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"name":"ok"}`))
+	c2 := NewContext(httptest.NewRecorder(), req2)
+	if err := c2.BindJSON(&body); err != nil || body.Name != "ok" {
+		t.Errorf("无限制 BindJSON 不符：%v %+v", err, body)
+	}
+}
+
 func TestContextChain(t *testing.T) {
 	var order []string
 	mw1 := func(c *Context) {

@@ -32,6 +32,8 @@ type Config struct {
 	ShutdownTimeout time.Duration `toml:"shutdown_timeout"`
 	// MaxHeaderBytes 请求头的最大字节数。
 	MaxHeaderBytes int `toml:"max_header_bytes"`
+	// MaxBodyBytes BindJSON 的最大请求体字节数，0 表示默认 10MB。
+	MaxBodyBytes int64 `toml:"max_body_bytes"`
 
 	// HealthPath 健康检查端点路径，默认为 "/health"。
 	HealthPath string `toml:"health_path"`
@@ -114,6 +116,12 @@ func (c *Config) Validate() error {
 	}
 	if c.MaxHeaderBytes < 0 {
 		return errx.New(errx.KindInvalid, CodeConfigInvalid, "最大请求头字节数不能为负数")
+	}
+	if c.MaxBodyBytes < 0 {
+		return errx.New(errx.KindInvalid, CodeConfigInvalid, "最大请求体字节数不能为负数")
+	}
+	if c.MaxBodyBytes == 0 {
+		c.MaxBodyBytes = 10 * 1024 * 1024
 	}
 	if c.LogLevel == "" {
 		c.LogLevel = "info"

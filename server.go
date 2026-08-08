@@ -6,6 +6,7 @@ package webx
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -327,6 +328,7 @@ func (s *Server) Start() error {
 		noRoute = spaNoRoute(s.spa.fs, s.spa.indexPath)
 	}
 	s.router = NewRouter(noRoute, core.NoMethodHandler)
+	s.router.SetMaxBodyBytes(s.config.MaxBodyBytes)
 
 	ctx := context.Background()
 	globalChain := s.mwManager.Build(ctx)
@@ -349,14 +351,20 @@ func (s *Server) Start() error {
 	}
 	for _, entry := range s.routeGroups {
 		rg := &RouteGroup{prefix: entry.prefix}
-		entry.fn(rg)
+		if err := callRouteGroupFn(entry.fn, rg); err != nil {
+			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "路由分组回调执行失败")
+		}
 		for _, route := range rg.flatten() {
 			if err := s.router.Handle(route.Method, route.Path, buildChain(route)); err != nil {
 				return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "路由注册失败："+route.Method+" "+route.Path)
 			}
 		}
 	}
-	if !s.hasRoute(s.config.HealthPath) {
+	hasHealth, err := s.hasRoute(s.config.HealthPath)
+	if err != nil {
+		return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "健康检查路由检查失败")
+	}
+	if !hasHealth {
 		if err := s.router.Handle("GET", s.config.HealthPath, []core.HandlerFunc{healthHandler(s.startTime)}); err != nil {
 			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "健康检查路由注册失败")
 		}
@@ -401,7 +409,7 @@ func (s *Server) Start() error {
 			defer wg.Done()
 			s.logger.WithContext(ctx).Info("webx：HTTP/3 (QUIC) 服务已启动", logx.Fields(logx.String("地址", s.http3Addr)))
 			if err := serveHTTP3(ctx, h3s, qln); err != nil {
-				s.logger.WithContext(ctx).Error("webx：HTTP/3 服务异常退出", logx.Fields(logx.Any("error", err)))
+				logHTTP3Exit(s.logger, ctx, err)
 			}
 		}()
 	}
@@ -504,22 +512,36 @@ func (s *Server) shutdownAll(ctx context.Context) error {
 }
 
 // hasRoute 判断用户是否已注册指定路径（任意方法），用于跳过自动健康检查注册。
-func (s *Server) hasRoute(path string) bool {
+// 分组回调 panic 会转为错误返回，避免启动崩溃。
+func (s *Server) hasRoute(path string) (bool, error) {
 	for _, route := range s.routes {
 		if route.Path == path {
-			return true
+			return true, nil
 		}
 	}
 	for _, entry := range s.routeGroups {
 		rg := &RouteGroup{prefix: entry.prefix}
-		entry.fn(rg)
+		if err := callRouteGroupFn(entry.fn, rg); err != nil {
+			return false, err
+		}
 		for _, route := range rg.flatten() {
 			if route.Path == path {
-				return true
+				return true, nil
 			}
 		}
 	}
-	return false
+	return false, nil
+}
+
+// callRouteGroupFn 执行路由分组回调，panic 转为错误。
+func callRouteGroupFn(fn func(*RouteGroup), rg *RouteGroup) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("webx：路由分组回调 panic：%v", r)
+		}
+	}()
+	fn(rg)
+	return nil
 }
 
 // registerBuiltinMiddleware 按配置注册内置中间件。
@@ -623,8 +645,13 @@ func (s *Server) logWarn(msg string) {
 	}
 }
 
+// quicAccepter 抽象 QUIC 监听器的 Accept，便于测试注入异常。
+type quicAccepter interface {
+	Accept(context.Context) (quic.Connection, error)
+}
+
 // serveHTTP3 在 QUIC Listener 上运行 HTTP/3 服务。
-func serveHTTP3(ctx context.Context, h3s *http3.Server, qln *quic.Listener) error {
+func serveHTTP3(ctx context.Context, h3s *http3.Server, qln quicAccepter) error {
 	for {
 		conn, err := qln.Accept(ctx)
 		if err != nil {
@@ -632,4 +659,13 @@ func serveHTTP3(ctx context.Context, h3s *http3.Server, qln *quic.Listener) erro
 		}
 		go h3s.ServeQUICConn(conn)
 	}
+}
+
+// logHTTP3Exit 记录 HTTP/3 服务退出日志：预期关闭记 Info，异常退出记 Error。
+func logHTTP3Exit(logger logx.Logger, ctx context.Context, err error) {
+	if errors.Is(err, quic.ErrServerClosed) {
+		logger.WithContext(ctx).Info("webx：HTTP/3 服务已关闭", logx.Fields())
+		return
+	}
+	logger.WithContext(ctx).Error("webx：HTTP/3 服务异常退出", logx.Fields(logx.Any("error", err)))
 }

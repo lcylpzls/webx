@@ -18,6 +18,7 @@ import (
 	"github.com/lcylpzls/errx"
 	"github.com/lcylpzls/logx"
 	"github.com/lcylpzls/webx/internal/core"
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 )
 
@@ -216,6 +217,100 @@ func TestServerStartErrors(t *testing.T) {
 	if err := s.Start(); err == nil {
 		t.Error("非法健康检查路径应报错")
 	}
+	// 路由分组回调 panic（注册阶段）
+	s = newTestServer(t, validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRouteGroup("/g", func(rg *RouteGroup) {
+		panic("分组回调 panic")
+	})
+	if err := s.Start(); !errx.Is(err, CodeStartFailed) {
+		t.Errorf("分组回调 panic 应转为启动错误：%v", err)
+	}
+	// 路由分组回调 panic（hasRoute 二次执行阶段）
+	s = newTestServer(t, validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	calls := 0
+	s.RegisterRouteGroup("/g", func(rg *RouteGroup) {
+		calls++
+		if calls == 2 {
+			panic("第二次执行 panic")
+		}
+		rg.GET("/x", noopHandler)
+	})
+	if err := s.Start(); !errx.Is(err, CodeStartFailed) {
+		t.Errorf("hasRoute 阶段 panic 应转为启动错误：%v", err)
+	}
+}
+
+func TestServerMaxBodyBytes(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MaxBodyBytes = 16
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method: "POST",
+		Path:   "/echo",
+		Handler: func(c *core.Context) {
+			var body map[string]string
+			if err := c.BindJSON(&body); err != nil {
+				c.Fail(http.StatusBadRequest, http.StatusBadRequest, "请求体过大或非法")
+				return
+			}
+			c.Success("ok", body)
+		},
+	})
+	startServer(t, s)
+	client := testHTTPClient()
+	base := "https://" + s.ListenerAddr()
+
+	resp, err := client.Post(base+"/echo", "application/json",
+		strings.NewReader(`{"data":"这是一个超过十六字节的请求体内容"}`))
+	if err != nil {
+		t.Fatalf("POST 失败：%v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("超大请求体应 400：%d %s", resp.StatusCode, body)
+	}
+
+	resp, err = client.Post(base+"/echo", "application/json", strings.NewReader(`{"a":"b"}`))
+	if err != nil {
+		t.Fatalf("POST 失败：%v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"a":"b"`) {
+		t.Errorf("合法请求体应成功：%d %s", resp.StatusCode, body)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestLogHTTP3Exit(t *testing.T) {
+	logger := newTestLogger(t)
+	ctx := context.Background()
+	logHTTP3Exit(logger, ctx, quic.ErrServerClosed)
+	logHTTP3Exit(logger, ctx, errors.New("自定义异常"))
+}
+
+func TestServeHTTP3AcceptError(t *testing.T) {
+	h3s := &http3.Server{}
+	accepter := &errAccepter{err: errors.New("自定义 Accept 错误")}
+	if err := serveHTTP3(context.Background(), h3s, accepter); err == nil {
+		t.Error("Accept 失败应返回错误")
+	}
+}
+
+// errAccepter 是 Accept 必然失败的假 QUIC 监听器。
+type errAccepter struct {
+	err error
+}
+
+func (a *errAccepter) Accept(context.Context) (quic.Connection, error) {
+	return nil, a.err
 }
 
 func TestServerIntegration(t *testing.T) {

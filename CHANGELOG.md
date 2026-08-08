@@ -2,7 +2,18 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
-## [Unreleased]
+## [v0.3.0] - 2026-08-08
+
+### 新增
+
+- `BindJSON` 请求体大小限制：`Config.MaxBodyBytes`（默认 10MB，`toml:"max_body_bytes"`）；
+- `FuzzRouterServeHTTP` 模糊目标：随机方法/路径/模式，确保路由处理不 panic。
+
+### 修复
+
+- 路由分组回调 panic 不再导致启动崩溃，转为 `WEBX_START_FAILED` 错误；
+- HTTP/3 预期关闭（`quic.ErrServerClosed`）降级为 Info 日志，不再误报 Error；
+- 文档补充使用禁忌：Handler 内调 Stop、Stop 后不可重启、logger 注入要求。
 
 ### 工程
 
