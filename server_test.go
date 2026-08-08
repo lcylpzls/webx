@@ -504,17 +504,18 @@ func TestServerHealthUserRegistered(t *testing.T) {
 }
 
 func TestServerShutdownErrorWrapped(t *testing.T) {
-	s := NewServer(validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
-	startServer(t, s)
-	// 注入无法清理的 Unix Socket 路径（非空目录），触发关闭错误
+	logger := DefaultLogger(logx.InfoLevel)
+	defer logger.Close()
 	nonEmptyDir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(nonEmptyDir, "x"), []byte("x"), 0o600)
-	s.unixEnabled = true
-	s.unixSocketPath = nonEmptyDir
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := s.Stop(ctx); !errx.Is(err, CodeShutdownFailed) {
+	// 直接构造未运行的 Server 并触发关闭错误，避免与 Start 并发读写字段。
+	s := &Server{
+		logger:         logger,
+		config:         Config{ShutdownTimeout: time.Second},
+		unixEnabled:    true,
+		unixSocketPath: nonEmptyDir,
+	}
+	if err := s.shutdownAll(context.Background()); !errx.Is(err, CodeShutdownFailed) {
 		t.Errorf("关闭错误应包装为 WEBX_SHUTDOWN_FAILED：%v", err)
 	}
 }
