@@ -15,6 +15,8 @@ type Route struct {
 	Handler HandlerFunc
 	// Middleware 路由专属中间件（可选），仅对当前路由生效。
 	Middleware []HandlerFunc
+	// Group 路由所属分组前缀（由 RouteGroup 自动填充，供分组级指标聚合；直接注册的路由留空）。
+	Group string
 }
 
 // RouteGroup 路由分组，支持嵌套分组和分组级中间件。
@@ -68,6 +70,7 @@ func (rg *RouteGroup) register(method, path string, handler HandlerFunc, mw ...H
 		Path:       rg.prefix + path,
 		Handler:    handler,
 		Middleware: append(append([]HandlerFunc{}, rg.middleware...), mw...),
+		Group:      rg.prefix,
 	})
 }
 

@@ -65,7 +65,7 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 			logx.String("requestId", c.RequestID()),
 			logx.String("ip", c.RemoteIP()),
 			logx.String("host", c.Request().Host),
-			logx.String("proto", c.Request().Proto),
+			logx.String("proto", friendlyProto(c.Request().Proto)),
 			logx.String("query", query),
 			logx.String("user_agent", c.GetHeader("User-Agent")),
 			logx.Any("duration", time.Since(start).String()),
@@ -77,6 +77,18 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 			return
 		}
 		logger.Info("访问日志", fields)
+	}
+}
+
+// friendlyProto 将请求协议转为可读名称：HTTP/2.0 → HTTP/2，HTTP/3.0 → HTTP/3。
+func friendlyProto(proto string) string {
+	switch proto {
+	case "HTTP/2.0":
+		return "HTTP/2"
+	case "HTTP/3.0":
+		return "HTTP/3"
+	default:
+		return proto
 	}
 }
 

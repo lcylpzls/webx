@@ -39,10 +39,38 @@ type Metrics struct {
 	AvgHTTP2RequestDurationMs uint64
 	// AvgHTTP3RequestDurationMs HTTP/3 平均请求耗时（毫秒，需启用 MiddlewareMetrics）。
 	AvgHTTP3RequestDurationMs uint64
+	// Routes 路由级统计（按注册路径聚合，需启用 MiddlewareMetrics）。
+	Routes []RouteStat
+	// Groups 分组级统计（按分组前缀聚合，需启用 MiddlewareMetrics）。
+	Groups []GroupStat
 	// ActiveConnections 当前打开的连接数。
 	ActiveConnections int64
 	// RequestsInFlight 当前活跃请求数（需启用 MiddlewareMetrics）。
 	RequestsInFlight int64
+}
+
+// RouteStat 单条路由的指标统计。
+type RouteStat struct {
+	// Path 路由注册路径。
+	Path string
+	// Requests 请求数。
+	Requests uint64
+	// Errors5xx 5xx 响应数。
+	Errors5xx uint64
+	// AvgRequestDurationMs 平均请求耗时（毫秒）。
+	AvgRequestDurationMs uint64
+}
+
+// GroupStat 单个路由分组的指标统计。
+type GroupStat struct {
+	// Prefix 分组前缀。
+	Prefix string
+	// Requests 请求数。
+	Requests uint64
+	// Errors5xx 5xx 响应数。
+	Errors5xx uint64
+	// AvgRequestDurationMs 平均请求耗时（毫秒）。
+	AvgRequestDurationMs uint64
 }
 
 // Metrics 返回运行指标快照；未启用对应能力时字段为 0。
@@ -63,6 +91,26 @@ func (s *Server) Metrics() Metrics {
 		m.AvgHTTP1RequestDurationMs = ps.HTTP1AvgMs
 		m.AvgHTTP2RequestDurationMs = ps.HTTP2AvgMs
 		m.AvgHTTP3RequestDurationMs = ps.HTTP3AvgMs
+		routeStats := s.metrics.RouteStats()
+		m.Routes = make([]RouteStat, len(routeStats))
+		for i, st := range routeStats {
+			m.Routes[i] = RouteStat{
+				Path:                 st.Path,
+				Requests:             st.Requests,
+				Errors5xx:            st.Errors5xx,
+				AvgRequestDurationMs: st.AvgDurationMs,
+			}
+		}
+		groupStats := s.metrics.GroupStats()
+		m.Groups = make([]GroupStat, len(groupStats))
+		for i, st := range groupStats {
+			m.Groups[i] = GroupStat{
+				Prefix:               st.Prefix,
+				Requests:             st.Requests,
+				Errors5xx:            st.Errors5xx,
+				AvgRequestDurationMs: st.AvgDurationMs,
+			}
+		}
 		m.RequestsInFlight = s.metrics.InFlight()
 	}
 	if s.rateLimiter != nil {

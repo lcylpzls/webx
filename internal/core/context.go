@@ -21,6 +21,8 @@ type Context struct {
 	request  *http.Request
 	params   map[string]string
 	values   map[string]any
+	route    string
+	group    string
 	handlers []HandlerFunc
 	index    int
 	aborted  bool
@@ -95,6 +97,26 @@ func (c *Context) Param(key string) string {
 		return ""
 	}
 	return c.params[key]
+}
+
+// SetRoute 记录当前请求匹配的路由模式（由路由层在进入处理器链前调用）。
+func (c *Context) SetRoute(route string) {
+	c.route = route
+}
+
+// Route 返回当前请求匹配的路由模式；未匹配（404/405 等）时为空字符串。
+func (c *Context) Route() string {
+	return c.route
+}
+
+// SetGroup 记录当前请求所属分组前缀（由路由层在进入处理器链前调用）。
+func (c *Context) SetGroup(group string) {
+	c.group = group
+}
+
+// Group 返回当前请求所属分组前缀；未分组时为空字符串。
+func (c *Context) Group() string {
+	return c.group
 }
 
 // Query 返回查询参数值。
@@ -238,6 +260,8 @@ func (c *Context) Reset() {
 	c.request = nil
 	c.params = nil
 	c.values = nil
+	c.route = ""
+	c.group = ""
 	c.handlers = nil
 	c.index = -1
 	c.aborted = false

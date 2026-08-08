@@ -33,7 +33,9 @@ func TestAccessLogSuccessOnly(t *testing.T) {
 
 	// 失败请求：记录 Warn
 	rec = httptest.NewRecorder()
-	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/fail", nil))
+	failReq := httptest.NewRequest(http.MethodGet, "/fail", nil)
+	failReq.Proto = "HTTP/3.0"
+	c = core.NewContext(rec, failReq)
 	c.SetHandlers([]core.HandlerFunc{
 		AccessLog(logger, AccessLogOptions{}),
 		func(c *core.Context) { c.JSONResponse(http.StatusNotFound, "不存在", nil) },
@@ -48,8 +50,11 @@ func TestAccessLogSuccessOnly(t *testing.T) {
 	if !strings.Contains(buf.String(), "bytes=") {
 		t.Errorf("访问日志应包含响应字节数：%s", buf.String())
 	}
-	if !strings.Contains(buf.String(), "proto=") {
-		t.Errorf("访问日志应包含协议字段：%s", buf.String())
+	if !strings.Contains(buf.String(), "proto=HTTP/3") {
+		t.Errorf("访问日志应包含可读协议字段：%s", buf.String())
+	}
+	if strings.Contains(buf.String(), "proto=HTTP/3.0") {
+		t.Errorf("协议字段不应保留版本点：%s", buf.String())
 	}
 }
 
@@ -155,6 +160,21 @@ func TestRedactQuery(t *testing.T) {
 	}
 	if got := redactQuery("bad=%zz", []string{"a"}); got != "bad=%zz" {
 		t.Errorf("非法 query 应原样返回：%s", got)
+	}
+}
+
+func TestFriendlyProto(t *testing.T) {
+	if got := friendlyProto("HTTP/2.0"); got != "HTTP/2" {
+		t.Errorf("HTTP/2 转换不符：%s", got)
+	}
+	if got := friendlyProto("HTTP/3.0"); got != "HTTP/3" {
+		t.Errorf("HTTP/3 转换不符：%s", got)
+	}
+	if got := friendlyProto("HTTP/1.1"); got != "HTTP/1.1" {
+		t.Errorf("HTTP/1.1 应原样返回：%s", got)
+	}
+	if got := friendlyProto("unknown"); got != "unknown" {
+		t.Errorf("未知协议应原样返回：%s", got)
 	}
 }
 

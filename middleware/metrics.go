@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"net/http"
+	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,6 +32,8 @@ type Metrics struct {
 	http1Samples atomic.Uint64
 	http2Samples atomic.Uint64
 	http3Samples atomic.Uint64
+	routes       sync.Map
+	groups       sync.Map
 }
 
 // NewMetrics 创建指标计数器。
@@ -52,47 +57,91 @@ type ProtocolStats struct {
 	HTTP3AvgMs uint64
 }
 
+// RouteStat 单条路由的指标统计快照。
+type RouteStat struct {
+	// Path 路由注册路径。
+	Path string
+	// Requests 请求数。
+	Requests uint64
+	// Errors5xx 5xx 响应数。
+	Errors5xx uint64
+	// AvgDurationMs 平均请求耗时（毫秒）。
+	AvgDurationMs uint64
+}
+
+// GroupStat 单个路由分组的指标统计快照。
+type GroupStat struct {
+	// Prefix 分组前缀。
+	Prefix string
+	// Requests 请求数。
+	Requests uint64
+	// Errors5xx 5xx 响应数。
+	Errors5xx uint64
+	// AvgDurationMs 平均请求耗时（毫秒）。
+	AvgDurationMs uint64
+}
+
+// routeStat 单条路由或分组的内部计数器。
+type routeStat struct {
+	requests   atomic.Uint64
+	errors5x   atomic.Uint64
+	durationNs atomic.Uint64
+	samples    atomic.Uint64
+}
+
 // MetricsHandler 返回指标采集中间件。
+// panic 安全：请求处理发生 panic 时仍会记录请求数、耗时与 5xx 分布，
+// 随后重新抛出 panic 交由 Recovery 中间件处理。
 func MetricsHandler(m *Metrics) core.HandlerFunc {
 	return func(c *core.Context) {
 		start := time.Now()
 		m.requests.Add(1)
 		m.inFlight.Add(1)
+		defer func() {
+			m.inFlight.Add(-1)
+			elapsed := uint64(time.Since(start))
+			m.durationNs.Add(elapsed)
+			m.samples.Add(1)
+			status := c.StatusCode()
+			if r := recover(); r != nil {
+				status = http.StatusInternalServerError
+				m.status5xx.Add(1)
+				m.errors5x.Add(1)
+				m.recordRoute(c, status, elapsed)
+				panic(r)
+			}
+			switch {
+			case status < 200:
+				m.status1xx.Add(1)
+			case status < 300:
+				m.status2xx.Add(1)
+			case status < 400:
+				m.status3xx.Add(1)
+			case status < 500:
+				m.status4xx.Add(1)
+			default:
+				m.status5xx.Add(1)
+			}
+			if status >= 500 {
+				m.errors5x.Add(1)
+			}
+			switch c.Request().Proto {
+			case "HTTP/1.0", "HTTP/1.1":
+				m.http1Req.Add(1)
+				m.http1Ns.Add(elapsed)
+				m.http1Samples.Add(1)
+			case "HTTP/2.0":
+				m.http2Req.Add(1)
+				m.http2Ns.Add(elapsed)
+				m.http2Samples.Add(1)
+			case "HTTP/3.0":
+				m.http3Req.Add(1)
+				m.http3Ns.Add(elapsed)
+				m.http3Samples.Add(1)
+			}
+			m.recordRoute(c, status, elapsed)
+		}()
 		c.Next()
-		m.inFlight.Add(-1)
-		elapsed := uint64(time.Since(start))
-		m.durationNs.Add(elapsed)
-		m.samples.Add(1)
-		status := c.StatusCode()
-		switch {
-		case status < 200:
-			m.status1xx.Add(1)
-		case status < 300:
-			m.status2xx.Add(1)
-		case status < 400:
-			m.status3xx.Add(1)
-		case status < 500:
-			m.status4xx.Add(1)
-		default:
-			m.status5xx.Add(1)
-		}
-		if status >= 500 {
-			m.errors5x.Add(1)
-		}
-		switch c.Request().Proto {
-		case "HTTP/1.0", "HTTP/1.1":
-			m.http1Req.Add(1)
-			m.http1Ns.Add(elapsed)
-			m.http1Samples.Add(1)
-		case "HTTP/2.0":
-			m.http2Req.Add(1)
-			m.http2Ns.Add(elapsed)
-			m.http2Samples.Add(1)
-		case "HTTP/3.0":
-			m.http3Req.Add(1)
-			m.http3Ns.Add(elapsed)
-			m.http3Samples.Add(1)
-		}
 	}
 }
 
@@ -132,6 +181,90 @@ func (m *Metrics) ProtocolStats() ProtocolStats {
 		ps.HTTP3AvgMs = m.http3Ns.Load() / s / 1_000_000
 	}
 	return ps
+}
+
+// RouteStats 返回路由级统计快照（按注册路径排序）。
+func (m *Metrics) RouteStats() []RouteStat {
+	var out []RouteStat
+	m.routes.Range(func(key, value any) bool {
+		s := value.(*routeStat)
+		out = append(out, RouteStat{
+			Path:          key.(string),
+			Requests:      s.requests.Load(),
+			Errors5xx:     s.errors5x.Load(),
+			AvgDurationMs: avgMs(s.durationNs.Load(), s.samples.Load()),
+		})
+		return true
+	})
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
+// GroupStats 返回分组级统计快照（按分组前缀排序）。
+func (m *Metrics) GroupStats() []GroupStat {
+	var out []GroupStat
+	m.groups.Range(func(key, value any) bool {
+		s := value.(*routeStat)
+		out = append(out, GroupStat{
+			Prefix:        key.(string),
+			Requests:      s.requests.Load(),
+			Errors5xx:     s.errors5x.Load(),
+			AvgDurationMs: avgMs(s.durationNs.Load(), s.samples.Load()),
+		})
+		return true
+	})
+	sort.Slice(out, func(i, j int) bool { return out[i].Prefix < out[j].Prefix })
+	return out
+}
+
+// recordRoute 更新当前请求的路由级与分组级统计。
+func (m *Metrics) recordRoute(c *core.Context, status int, elapsed uint64) {
+	if route := c.Route(); route != "" {
+		s := m.routeStat(route)
+		s.requests.Add(1)
+		s.durationNs.Add(elapsed)
+		s.samples.Add(1)
+		if status >= 500 {
+			s.errors5x.Add(1)
+		}
+	}
+	if group := c.Group(); group != "" {
+		s := m.groupStat(group)
+		s.requests.Add(1)
+		s.durationNs.Add(elapsed)
+		s.samples.Add(1)
+		if status >= 500 {
+			s.errors5x.Add(1)
+		}
+	}
+}
+
+// routeStat 返回指定路由的计数器，不存在时创建。
+func (m *Metrics) routeStat(route string) *routeStat {
+	if v, ok := m.routes.Load(route); ok {
+		return v.(*routeStat)
+	}
+	s := &routeStat{}
+	v, _ := m.routes.LoadOrStore(route, s)
+	return v.(*routeStat)
+}
+
+// groupStat 返回指定分组的计数器，不存在时创建。
+func (m *Metrics) groupStat(group string) *routeStat {
+	if v, ok := m.groups.Load(group); ok {
+		return v.(*routeStat)
+	}
+	s := &routeStat{}
+	v, _ := m.groups.LoadOrStore(group, s)
+	return v.(*routeStat)
+}
+
+// avgMs 计算平均耗时（毫秒），无样本时返回 0。
+func avgMs(totalNs, samples uint64) uint64 {
+	if samples == 0 {
+		return 0
+	}
+	return totalNs / samples / 1_000_000
 }
 
 // InFlight 返回当前活跃请求数。

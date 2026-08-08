@@ -454,7 +454,15 @@ func (s *Server) Start() error {
 	ctx := context.Background()
 	globalChain := s.mwManager.Build(ctx)
 	buildChain := func(route Route) []core.HandlerFunc {
-		chain := append([]core.HandlerFunc{}, globalChain...)
+		// 首个处理器注入路由/分组元数据，供 Metrics 等中间件做路由级聚合。
+		chain := []core.HandlerFunc{
+			func(c *core.Context) {
+				c.SetRoute(route.Path)
+				c.SetGroup(route.Group)
+				c.Next()
+			},
+		}
+		chain = append(chain, globalChain...)
 		chain = append(chain, route.Middleware...)
 		chain = append(chain, route.Handler)
 		return chain

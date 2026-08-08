@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 当前状态：**核心实现完成**。各包语句覆盖率 100%，
-> 当前版本：v0.24.0（v1.0.0 定版评估中）。
+> 当前版本：v0.25.0（v1.0.0 定版评估中）。
 
 ## 技术栈
 
@@ -76,7 +76,7 @@
 | 健康检查 | `RegisterHealthCheck`（/health 聚合输出） |
 | 静态/SPA | `ServeStaticDir / ServeStaticFS / ServeStatic*WithOptions / EnableSPA` |
 | 反向代理 | `webx/proxy.Handler(target, opts...)` |
-| 指标 | `Server.Metrics()`（状态码分布、HTTP/1·2·3 协议维度、活跃请求/连接、限流/Panic） |
+| 指标 | `Server.Metrics()`（状态码分布、协议维度、路由/分组级聚合、活跃请求/连接、限流/Panic） |
 | 优雅关闭 | `Stop(ctx)` / 信号自动关闭 |
 | 证书热重载 | `SetCertificateLoader`（默认按文件 mtime 自动重载） |
 

@@ -91,6 +91,25 @@ func TestContextParams(t *testing.T) {
 	}
 }
 
+func TestContextRouteGroup(t *testing.T) {
+	rec := httptest.NewRecorder()
+	c := NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if got := c.Route(); got != "" {
+		t.Errorf("未设置路由时应为空：%s", got)
+	}
+	if got := c.Group(); got != "" {
+		t.Errorf("未设置分组时应为空：%s", got)
+	}
+	c.SetRoute("/api/users/:id")
+	c.SetGroup("/api")
+	if got := c.Route(); got != "/api/users/:id" {
+		t.Errorf("Route 不符：%s", got)
+	}
+	if got := c.Group(); got != "/api" {
+		t.Errorf("Group 不符：%s", got)
+	}
+}
+
 func TestContextStatusAndHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -311,6 +330,8 @@ func TestContextPoolReuse(t *testing.T) {
 	c := Acquire(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	c.Set("k", "v")
 	c.SetParams(map[string]string{"id": "1"})
+	c.SetRoute("/r")
+	c.SetGroup("/g")
 	c.Status(http.StatusCreated)
 	c.SetMaxBodyBytes(5)
 	c.SetHandlers([]HandlerFunc{func(c *Context) {}})
@@ -320,6 +341,9 @@ func TestContextPoolReuse(t *testing.T) {
 	defer Release(c2)
 	if c2.values != nil || c2.params != nil || c2.handlers != nil {
 		t.Error("Reset 未清空状态")
+	}
+	if c2.route != "" || c2.group != "" {
+		t.Error("Reset 未清空路由/分组信息")
 	}
 	if c2.StatusCode() != http.StatusOK || c2.maxBody != 0 || c2.IsAborted() {
 		t.Errorf("Reset 后默认状态不符：%d %d %v", c2.StatusCode(), c2.maxBody, c2.IsAborted())

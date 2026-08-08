@@ -459,9 +459,10 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareRecovery = true
 	cfg.MiddlewareRequestID = true
+	cfg.MiddlewareMetrics = true
 	s := newTestServer(t, cfg)
 	s.UseHttp2Listen("127.0.0.1:0")
-	s.EnableRateLimit(RateLimitOptions{QPS: 1, Window: time.Second, CleanupInterval: time.Millisecond})
+	s.EnableRateLimit(RateLimitOptions{QPS: 3, Window: time.Second, CleanupInterval: time.Millisecond})
 	s.RegisterRoute(Route{
 		Method: "GET",
 		Path:   "/boom",
@@ -475,6 +476,20 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 	client := testHTTPClient()
 	base := "https://" + s.ListenerAddr()
 
+	// 放行两次 /ok（消耗限流令牌，验证正常路由统计）
+	for i := 0; i < 2; i++ {
+		resp, err := client.Get(base + "/ok")
+		if err != nil {
+			t.Fatalf("GET /ok 失败：%v", err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("放行请求应 200：%d", resp.StatusCode)
+		}
+	}
+
+	// /boom 消耗最后一枚令牌并触发 panic
 	resp, err := client.Get(base + "/boom")
 	if err != nil {
 		t.Fatalf("GET /boom 失败：%v", err)
@@ -485,10 +500,7 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 		t.Errorf("panic 应 500：%d", resp.StatusCode)
 	}
 
-	// 限流：1 QPS，第二次应 429
-	resp, _ = client.Get(base + "/ok")
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
+	// 限流：令牌耗尽后应 429
 	resp, _ = client.Get(base + "/ok")
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
@@ -499,12 +511,86 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 	if m.Panics < 1 || m.RateLimited < 1 {
 		t.Errorf("Metrics 扩展计数不符：%+v", m)
 	}
+	if m.Status5xx < 1 || m.Errors5xx < 1 {
+		t.Errorf("panic 应计入 5xx 指标：%+v", m)
+	}
+	var boomOK, okOK bool
+	for _, rs := range m.Routes {
+		switch rs.Path {
+		case "/boom":
+			boomOK = rs.Requests == 1 && rs.Errors5xx == 1
+		case "/ok":
+			// 被限流拦截的请求不会进入 metrics（限流在外层直接 Abort）。
+			okOK = rs.Requests == 2 && rs.Errors5xx == 0
+		}
+	}
+	if !boomOK || !okOK {
+		t.Errorf("路由级统计不符：%+v", m.Routes)
+	}
+	if len(m.Groups) != 0 {
+		t.Errorf("直接注册路由不应有分组统计：%+v", m.Groups)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := s.Stop(ctx); err != nil {
 		t.Fatalf("Stop 失败：%v", err)
 	}
+}
+
+func TestServerRouteGroupStats(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareMetrics = true
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRouteGroup("/api", func(rg *RouteGroup) {
+		rg.GET("/users/:id", func(c *core.Context) { c.Success("ok", nil) })
+		rg.GET("/admin", func(c *core.Context) {
+			c.Fail(http.StatusInternalServerError, http.StatusInternalServerError, "内部错误")
+		})
+	})
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/ping",
+		Handler: func(c *core.Context) { c.Success("ok", nil) },
+	})
+	startServer(t, s)
+	client := testHTTPClient()
+	base := "https://" + s.ListenerAddr()
+	for _, path := range []string{"/api/users/1", "/api/users/2", "/api/admin", "/ping"} {
+		resp, err := client.Get(base + path)
+		if err != nil {
+			t.Fatalf("GET %s 失败：%v", path, err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+	m := s.Metrics()
+	if len(m.Routes) != 3 {
+		t.Fatalf("路由统计数量不符：%+v", m.Routes)
+	}
+	var users, admin, ping bool
+	for _, rs := range m.Routes {
+		switch rs.Path {
+		case "/api/users/:id":
+			users = rs.Requests == 2 && rs.Errors5xx == 0
+		case "/api/admin":
+			admin = rs.Requests == 1 && rs.Errors5xx == 1
+		case "/ping":
+			ping = rs.Requests == 1 && rs.Errors5xx == 0
+		}
+	}
+	if !users || !admin || !ping {
+		t.Errorf("路由级统计不符：%+v", m.Routes)
+	}
+	if len(m.Groups) != 1 || m.Groups[0].Prefix != "/api" ||
+		m.Groups[0].Requests != 3 || m.Groups[0].Errors5xx != 1 {
+		t.Errorf("分组级统计不符：%+v", m.Groups)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
 }
 
 func TestServerRateLimitKeyFunc(t *testing.T) {
