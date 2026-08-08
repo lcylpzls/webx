@@ -1,7 +1,9 @@
 package webx
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/lcylpzls/webx/internal/core"
@@ -9,20 +11,45 @@ import (
 
 // healthData 健康检查响应中的 data 字段。
 type healthData struct {
-	Status  string `json:"status"`
-	Uptime  string `json:"uptime"`
-	Started string `json:"started"`
+	Status  string            `json:"status"`
+	Uptime  string            `json:"uptime"`
+	Started string            `json:"started"`
+	Checks  map[string]string `json:"checks,omitempty"`
+}
+
+// healthCheck 是用户注册的健康检查项。
+type healthCheck struct {
+	name string
+	fn   func(context.Context) error
 }
 
 // healthHandler 返回健康检查处理器。
-func healthHandler(startTime time.Time) HandlerFunc {
+func healthHandler(startTime time.Time, checks []healthCheck) HandlerFunc {
 	return func(c *core.Context) {
 		uptime := time.Since(startTime)
-		c.Success("ok", healthData{
+		data := healthData{
 			Status:  "运行中",
 			Uptime:  formatUptime(uptime),
 			Started: startTime.Format(time.RFC3339),
-		})
+		}
+		allOK := true
+		if len(checks) > 0 {
+			data.Checks = make(map[string]string, len(checks))
+			for _, check := range checks {
+				if err := check.fn(c.Request().Context()); err != nil {
+					allOK = false
+					data.Checks[check.name] = err.Error()
+					continue
+				}
+				data.Checks[check.name] = "ok"
+			}
+		}
+		if !allOK {
+			data.Status = "异常"
+			c.JSONResponse(http.StatusServiceUnavailable, "健康检查未通过", data)
+			return
+		}
+		c.Success("ok", data)
 	}
 }
 

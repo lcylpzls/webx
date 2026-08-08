@@ -38,6 +38,7 @@ type Server struct {
 	routeGroups   []routeGroupEntry
 	staticEntries []staticEntry
 	spa           *spaConfig
+	healthChecks  []healthCheck
 	mwManager     *middleware.Manager
 	rateLimiter   *middleware.RateLimiter
 	metrics       *middleware.Metrics
@@ -276,6 +277,21 @@ func (s *Server) DisableRateLimit() *Server {
 	return s
 }
 
+// RegisterHealthCheck 注册自定义健康检查项，/health 会执行全部检查项。
+func (s *Server) RegisterHealthCheck(name string, fn func(context.Context) error) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.logWarn("webx：服务已启动，不允许注册健康检查")
+		return s
+	}
+	if name == "" || fn == nil {
+		return s
+	}
+	s.healthChecks = append(s.healthChecks, healthCheck{name: name, fn: fn})
+	return s
+}
+
 // ListenerAddr 返回第一个 Listener 的监听地址（port 0 动态端口时可用）。
 func (s *Server) ListenerAddr() string {
 	s.listenersMu.Lock()
@@ -369,7 +385,7 @@ func (s *Server) Start() error {
 		return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "健康检查路由检查失败")
 	}
 	if !hasHealth {
-		if err := s.router.Handle("GET", s.config.HealthPath, []core.HandlerFunc{healthHandler(s.startTime)}); err != nil {
+		if err := s.router.Handle("GET", s.config.HealthPath, []core.HandlerFunc{healthHandler(s.startTime, s.healthChecks)}); err != nil {
 			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "健康检查路由注册失败")
 		}
 	}

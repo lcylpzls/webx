@@ -878,6 +878,47 @@ func TestServerHealthUserRegistered(t *testing.T) {
 	_ = s2.Stop(ctx2)
 }
 
+func TestServerHealthChecks(t *testing.T) {
+	s := newTestServer(t, validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterHealthCheck("db", func(ctx context.Context) error { return nil })
+	s.RegisterHealthCheck("redis", func(ctx context.Context) error { return errors.New("连接失败") })
+	startServer(t, s)
+	client := testHTTPClient()
+	resp, err := client.Get("https://" + s.ListenerAddr() + "/health")
+	if err != nil {
+		t.Fatalf("GET /health 失败：%v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("检查失败应 503：%d", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "redis") || !strings.Contains(string(body), "连接失败") {
+		t.Errorf("检查结果不符：%s", body)
+	}
+	// 启动后注册不生效（仅告警）
+	if got := s.RegisterHealthCheck("late", func(ctx context.Context) error { return nil }); got != s {
+		t.Error("RegisterHealthCheck 应返回自身")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestRegisterHealthCheckInvalid(t *testing.T) {
+	s := newTestServer(t, validConfig(t))
+	if got := s.RegisterHealthCheck("", func(ctx context.Context) error { return nil }); got != s {
+		t.Error("空名称应返回自身")
+	}
+	if got := s.RegisterHealthCheck("x", nil); got != s {
+		t.Error("nil 函数应返回自身")
+	}
+	if len(s.healthChecks) != 0 {
+		t.Error("非法检查项不应注册")
+	}
+}
+
 func TestServerShutdownErrorWrapped(t *testing.T) {
 	logger := newTestLogger(t)
 	defer logger.Close()

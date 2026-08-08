@@ -1,6 +1,10 @@
 package webx
 
-import "github.com/lcylpzls/webx/internal/core"
+import (
+	"net/http"
+
+	"github.com/lcylpzls/webx/internal/core"
+)
 
 // 对外类型别名：业务代码只接触 webx 包，不感知 internal/core。
 type (
@@ -20,3 +24,8 @@ const (
 	CodeInternalError      = core.CodeInternalError
 	CodeServiceUnavailable = core.CodeServiceUnavailable
 )
+
+// NewContext 创建请求上下文（用于在自定义路由器中嵌入 webx Handler）。
+func NewContext(w http.ResponseWriter, r *http.Request) *Context {
+	return core.NewContext(w, r)
+}

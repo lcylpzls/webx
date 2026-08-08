@@ -2,6 +2,16 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.10.0] - 2026-08-08
+
+### 新增
+
+- errx 集成：`RespondError`/`StatusForError` 将 errx 错误自动映射为
+  标准化 HTTP 响应；导出 `NewContext` 便于自定义路由器嵌入；
+- 健康检查注册：`RegisterHealthCheck(name, fn)`，/health 输出各检查项状态，
+  失败时返回 503；
+- `webx/proxy` 子包：基于标准库 `httputil.ReverseProxy` 的上游代理封装。
+
 ## [v0.9.0] - 2026-08-08
 
 ### 增强
