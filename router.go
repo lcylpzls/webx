@@ -121,7 +121,8 @@ func (rt *Router) safeHandle(pattern string, handler http.Handler) (err error) {
 // wrap 将 webx 处理器链包装为标准 http.HandlerFunc。
 func (rt *Router) wrap(chain []core.HandlerFunc, params []string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c := core.NewContext(w, r)
+		c := core.Acquire(w, r)
+		defer core.Release(c)
 		if len(params) > 0 {
 			values := make(map[string]string, len(params))
 			for _, name := range params {
@@ -163,7 +164,8 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // runFallback 执行 404/405 兜底处理器。
 func (rt *Router) runFallback(w http.ResponseWriter, r *http.Request, h core.HandlerFunc) {
-	c := core.NewContext(w, r)
+	c := core.Acquire(w, r)
+	defer core.Release(c)
 	c.SetHandlers([]core.HandlerFunc{h})
 	c.Run()
 }

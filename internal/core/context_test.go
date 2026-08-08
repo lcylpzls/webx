@@ -307,6 +307,25 @@ func TestContextResetWriteState(t *testing.T) {
 	}
 }
 
+func TestContextPoolReuse(t *testing.T) {
+	c := Acquire(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	c.Set("k", "v")
+	c.SetParams(map[string]string{"id": "1"})
+	c.Status(http.StatusCreated)
+	c.SetMaxBodyBytes(5)
+	c.SetHandlers([]HandlerFunc{func(c *Context) {}})
+	Release(c)
+
+	c2 := Acquire(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	defer Release(c2)
+	if c2.values != nil || c2.params != nil || c2.handlers != nil {
+		t.Error("Reset 未清空状态")
+	}
+	if c2.StatusCode() != http.StatusOK || c2.maxBody != 0 || c2.IsAborted() {
+		t.Errorf("Reset 后默认状态不符：%d %d %v", c2.StatusCode(), c2.maxBody, c2.IsAborted())
+	}
+}
+
 func TestContextRunReset(t *testing.T) {
 	var n int
 	h := func(c *Context) { n++ }

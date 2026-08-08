@@ -57,6 +57,7 @@
 | 路由匹配+分发（50 条路由） | 1.5µs/op，6 allocs |
 | 中间件链（3 层） | 10.6ns/op，0 allocs |
 | 标准化 JSON 响应 | 148ns/op，1 alloc |
+| 端到端 HTTPS 请求（TLS+中间件+JSON） | 41µs/op，90 allocs |
 
 ## 功能清单
 

@@ -1,11 +1,13 @@
 package webx
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/lcylpzls/webx/internal/core"
@@ -290,6 +292,32 @@ func TestRouterCustomFallbacks(t *testing.T) {
 	if rec.Code != http.StatusTeapot || rec.Body.String() != "自定义405" {
 		t.Errorf("自定义 405 不符：%d %s", rec.Code, rec.Body.String())
 	}
+}
+
+func TestRouterConcurrentPooled(t *testing.T) {
+	rt := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
+	if err := rt.Handle("GET", "/u/:id", []core.HandlerFunc{
+		func(c *core.Context) { _ = c.String(http.StatusOK, "%s", c.Param("id")) },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for g := 0; g < 8; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 50; i++ {
+				id := fmt.Sprintf("%d", i%10)
+				rec := httptest.NewRecorder()
+				rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/u/"+id, nil))
+				if rec.Code != http.StatusOK || rec.Body.String() != id {
+					t.Errorf("并发响应不符：%d %s", rec.Code, rec.Body.String())
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func noopCore(*core.Context) {}

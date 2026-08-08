@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // HandlerFunc 是 webx 的业务处理器签名，不依赖任何第三方类型。
@@ -26,6 +27,27 @@ type Context struct {
 	status   int
 	wrote    bool
 	maxBody  int64
+}
+
+// ctxPool 是请求上下文的复用池。
+var ctxPool = sync.Pool{
+	New: func() any {
+		return NewContext(nil, nil)
+	},
+}
+
+// Acquire 从池中获取一个上下文并绑定请求。
+func Acquire(w http.ResponseWriter, r *http.Request) *Context {
+	c := ctxPool.Get().(*Context)
+	c.Reset()
+	c.writer = w
+	c.request = r
+	return c
+}
+
+// Release 将上下文归还池中复用。
+func Release(c *Context) {
+	ctxPool.Put(c)
 }
 
 // NewContext 创建请求上下文。
@@ -208,6 +230,20 @@ func (c *Context) IsAborted() bool {
 func (c *Context) ResetWriteState() {
 	c.wrote = false
 	c.status = 0
+}
+
+// Reset 清空全部状态，供池化复用。
+func (c *Context) Reset() {
+	c.writer = nil
+	c.request = nil
+	c.params = nil
+	c.values = nil
+	c.handlers = nil
+	c.index = -1
+	c.aborted = false
+	c.status = 0
+	c.wrote = false
+	c.maxBody = 0
 }
 
 // writeHeader 仅写入一次响应头。
