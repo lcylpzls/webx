@@ -9,26 +9,30 @@ import (
 	"github.com/lcylpzls/webx/internal/core"
 )
 
-// Router 基于标准库 http.ServeMux 实现路由：
-// 负责 gin 风格语法（:id / *filepath）到 ServeMux 模式（{id} / {path...}）的翻译，
-// 以及 404/405 标准化 JSON 响应。路径匹配由内置轻量匹配器完成，
-// 实际分发交给 ServeMux（保留其冲突检测与 PathValue 能力）。
+// Router 基于自研 radix 匹配树实现路由：
+// 支持 gin 风格语法（:id / *filepath）、404/405 标准化 JSON 与尾斜杠重定向。
+// 匹配与分发均由自身完成，不依赖 http.ServeMux。
 type Router struct {
-	mux      *http.ServeMux
-	patterns []*routePattern
+	root     *routeNode
 	noRoute  core.HandlerFunc
 	noMethod core.HandlerFunc
 	maxBody  int64
 }
 
-// routePattern 是一条已翻译的 ServeMux 模式及其注册信息。
-type routePattern struct {
-	pattern  string
-	segments []segment
-	params   []string
-	methods  map[string]bool
-	subtree  bool
+// routeNode 是匹配树中的一个节点。
+type routeNode struct {
+	literal    string
+	param      string
+	wildcard   bool
+	subtree    bool
+	handlers   map[string]requestHandler
+	children   map[string]*routeNode
+	paramChild *routeNode
+	wildChild  *routeNode
 }
+
+// requestHandler 是带路由参数的最终处理器。
+type requestHandler func(http.ResponseWriter, *http.Request, map[string]string)
 
 // segment 是路径模式中的一段。
 type segment struct {
@@ -40,7 +44,6 @@ type segment struct {
 // NewRouter 创建路由，并指定 404/405 兜底处理器。
 func NewRouter(noRoute, noMethod core.HandlerFunc) *Router {
 	return &Router{
-		mux:      http.NewServeMux(),
 		noRoute:  noRoute,
 		noMethod: noMethod,
 	}
@@ -52,7 +55,6 @@ func (rt *Router) SetMaxBodyBytes(n int64) {
 }
 
 // Handle 注册一条路由（chain 为全局中间件 + 路由中间件 + 最终处理器的完整链）。
-// 路径冲突或语法非法时返回错误。
 func (rt *Router) Handle(method, path string, chain []core.HandlerFunc) error {
 	translated, params, err := translateGinPattern(path)
 	if err != nil {
@@ -61,25 +63,12 @@ func (rt *Router) Handle(method, path string, chain []core.HandlerFunc) error {
 	if method == "" {
 		return fmt.Errorf("webx：路由方法不能为空：%s", path)
 	}
-	// translateGinPattern 已保证模式合法，这里不再重复校验。
+	// translateGinPattern 已保证规范形式合法，这里不再重复校验。
 	segs, _ := parsePattern(translated)
-	p := &routePattern{
-		pattern:  translated,
-		segments: segs,
-		params:   params,
-		methods:  map[string]bool{method: true},
-		subtree:  strings.HasSuffix(translated, "/"),
-	}
-	if err := rt.safeHandle(method+" "+translated, http.HandlerFunc(rt.wrap(chain, params))); err != nil {
-		return err
-	}
-	rt.patterns = append(rt.patterns, p)
-	return nil
+	return rt.insert(method, segs, wrapRequestHandler(rt, chain, params), false)
 }
 
 // HandleStatic 注册静态文件服务（支持子树路径）。
-// 使用无方法模式注册，避免 ServeMux 中 GET 隐式匹配 HEAD 导致
-// "静态根 + 具体 GET 路由" 的冲突；方法判定由匹配器负责。
 func (rt *Router) HandleStatic(prefix string, fs http.FileSystem) error {
 	return rt.HandleStaticWithOptions(prefix, fs, StaticOptions{})
 }
@@ -98,58 +87,69 @@ func (rt *Router) HandleStaticWithOptions(prefix string, fs http.FileSystem, opt
 		return err
 	}
 	strip := strings.TrimSuffix(pattern, "/")
-	handler := http.StripPrefix(strip, staticOptionsFileServer(fs, opts))
-	p := &routePattern{
-		pattern:  pattern,
-		segments: segs,
-		methods:  map[string]bool{"GET": true, "HEAD": true},
-		subtree:  true,
+	h := http.StripPrefix(strip, staticOptionsFileServer(fs, opts))
+	handler := func(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+		h.ServeHTTP(w, r)
 	}
-	if err := rt.safeHandle(pattern, handler); err != nil {
+	if err := rt.insert("GET", segs, handler, true); err != nil {
 		return err
 	}
-	rt.patterns = append(rt.patterns, p)
-	return nil
+	return rt.insert("HEAD", segs, handler, true)
 }
 
-// safeHandle 包装 mux.Handle，将冲突/非法模式 panic 转为错误，遵守"绝不 panic"铁律。
-func (rt *Router) safeHandle(pattern string, handler http.Handler) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("webx：路由注册失败：%v", r)
-		}
-	}()
-	rt.mux.Handle(pattern, handler)
-	return nil
-}
-
-// wrap 将 webx 处理器链包装为标准 http.HandlerFunc。
-func (rt *Router) wrap(chain []core.HandlerFunc, params []string) func(http.ResponseWriter, *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		c := core.Acquire(w, r)
-		defer core.Release(c)
-		if len(params) > 0 {
-			values := make(map[string]string, len(params))
-			for _, name := range params {
-				values[name] = r.PathValue(name)
-			}
-			c.SetParams(values)
-		}
-		if rt.maxBody > 0 {
-			c.SetMaxBodyBytes(rt.maxBody)
-		}
-		c.SetHandlers(chain)
-		c.Run()
+// insert 将模式段插入匹配树。
+func (rt *Router) insert(method string, segs []segment, handler requestHandler, subtree bool) error {
+	if rt.root == nil {
+		rt.root = &routeNode{children: map[string]*routeNode{}}
 	}
+	node := rt.root
+	for _, seg := range segs {
+		switch {
+		case seg.wildcard:
+			if node.wildChild == nil {
+				node.wildChild = &routeNode{wildcard: true, param: seg.param, children: map[string]*routeNode{}}
+			}
+			if node.wildChild.param != seg.param {
+				return fmt.Errorf("webx：通配参数名冲突：%s 与 %s", node.wildChild.param, seg.param)
+			}
+			node = node.wildChild
+		case seg.param != "":
+			if node.paramChild == nil {
+				node.paramChild = &routeNode{param: seg.param, children: map[string]*routeNode{}}
+			}
+			if node.paramChild.param != seg.param {
+				return fmt.Errorf("webx：路由参数名冲突：%s 与 %s", node.paramChild.param, seg.param)
+			}
+			node = node.paramChild
+		default:
+			if node.children[seg.literal] == nil {
+				node.children[seg.literal] = &routeNode{literal: seg.literal, children: map[string]*routeNode{}}
+			}
+			node = node.children[seg.literal]
+		}
+	}
+	if node.handlers == nil {
+		node.handlers = map[string]requestHandler{}
+	}
+	if _, dup := node.handlers[method]; dup {
+		return fmt.Errorf("webx：路由重复注册：%s", method)
+	}
+	if len(node.handlers) > 0 && node.subtree != subtree {
+		return fmt.Errorf("webx：精确路由与子树路由冲突")
+	}
+	node.handlers[method] = handler
+	if subtree {
+		node.subtree = true
+	}
+	return nil
 }
 
-// ServeHTTP 实现 http.Handler：先做 404/405 判定，再交给 ServeMux 分发。
+// ServeHTTP 实现 http.Handler：树匹配 + 方法判定 + 分发。
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	matches := rt.match(r.URL.Path)
-	if len(matches) == 0 {
-		// 兼容 ServeMux 的尾斜杠重定向：/path → /path/
+	node, params, ok := rt.lookup(r.URL.Path)
+	if !ok {
 		if !strings.HasSuffix(r.URL.Path, "/") {
-			if len(rt.match(r.URL.Path+"/")) > 0 {
+			if n, _, ok2 := rt.lookup(r.URL.Path + "/"); ok2 && n.subtree {
 				w.Header().Set("Location", r.URL.Path+"/")
 				w.WriteHeader(http.StatusMovedPermanently)
 				return
@@ -158,92 +158,94 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rt.runFallback(w, r, rt.noRoute)
 		return
 	}
-	best := mostSpecific(matches)
-	if !methodAllowedAny(best, r.Method) {
-		w.Header().Set("Allow", allowHeader(best))
+	handler, ok := node.handlers[r.Method]
+	if !ok && r.Method == http.MethodHead {
+		handler, ok = node.handlers[http.MethodGet]
+	}
+	if !ok {
+		w.Header().Set("Allow", allowHeader(node))
 		rt.runFallback(w, r, rt.noMethod)
 		return
 	}
-	rt.mux.ServeHTTP(w, r)
+	handler(w, r, params)
 }
 
-// runFallback 执行 404/405 兜底处理器。
-func (rt *Router) runFallback(w http.ResponseWriter, r *http.Request, h core.HandlerFunc) {
-	c := core.Acquire(w, r)
-	defer core.Release(c)
-	c.SetHandlers([]core.HandlerFunc{h})
-	c.Run()
-}
-
-// match 返回与路径匹配的全部已注册模式。
-func (rt *Router) match(path string) []*routePattern {
-	out := make([]*routePattern, 0, 2)
-	for _, p := range rt.patterns {
-		if matchPath(p, path) {
-			out = append(out, p)
-		}
+// lookup 在匹配树中查找路径对应的节点与参数。
+func (rt *Router) lookup(path string) (*routeNode, map[string]string, bool) {
+	if rt.root == nil {
+		return nil, nil, false
 	}
-	return out
+	cur := rt.root
+	idx := 0
+	var params map[string]string
+	var best *routeNode
+
+	for cur != nil {
+		// 子树候选：路径还有内容（含尾斜杠）时记录最浅匹配
+		if cur.subtree && (idx < len(path) || strings.HasSuffix(path, "/")) {
+			best = cur
+		}
+		if idx >= len(path) {
+			if len(cur.handlers) > 0 {
+				if cur.subtree && strings.HasSuffix(path, "/") {
+					return cur, params, true
+				}
+				if !cur.subtree && !strings.HasSuffix(path, "/") {
+					return cur, params, true
+				}
+			}
+			if cur.wildChild != nil && strings.HasSuffix(path, "/") {
+				params = ensureParams(params)
+				params[cur.wildChild.param] = ""
+				return cur.wildChild, params, true
+			}
+			break
+		}
+		seg, next := nextSegment(path, idx)
+		if child := cur.children[seg]; child != nil {
+			cur = child
+			idx = next
+			if idx < 0 {
+				idx = len(path)
+			}
+			continue
+		}
+		if cur.paramChild != nil {
+			params = ensureParams(params)
+			params[cur.paramChild.param] = seg
+			cur = cur.paramChild
+			idx = next
+			if idx < 0 {
+				idx = len(path)
+			}
+			continue
+		}
+		if cur.wildChild != nil {
+			params = ensureParams(params)
+			params[cur.wildChild.param] = path[idx:]
+			return cur.wildChild, params, true
+		}
+		break
+	}
+	if best != nil {
+		return best, params, true
+	}
+	return nil, nil, false
 }
 
-// methodAllowedAny 判断方法是否被同优先级模式组中的任一模式允许；
-// GET 路由同时响应 HEAD。
-func methodAllowedAny(patterns []*routePattern, method string) bool {
-	for _, p := range patterns {
-		if p.methods[method] {
-			return true
-		}
-		if method == http.MethodHead && p.methods[http.MethodGet] {
-			return true
-		}
+func ensureParams(params map[string]string) map[string]string {
+	if params == nil {
+		return map[string]string{}
 	}
-	return false
+	return params
 }
 
-// mostSpecific 返回最具体的匹配模式组，与 ServeMux 的选择保持一致：
-// 字面段 > 参数段 > 通配/子树，段数越多越具体。
-// 同路径不同方法注册会得到相同分数，作为一组参与方法判定。
-func mostSpecific(matches []*routePattern) []*routePattern {
-	bestScore := patternScore(matches[0])
-	best := []*routePattern{matches[0]}
-	for _, p := range matches[1:] {
-		score := patternScore(p)
-		switch {
-		case score > bestScore:
-			bestScore = score
-			best = []*routePattern{p}
-		case score == bestScore:
-			best = append(best, p)
-		}
+// allowHeader 汇总节点方法，生成 Allow 响应头（GET 附带 HEAD）。
+func allowHeader(node *routeNode) string {
+	set := make(map[string]bool, len(node.handlers)+1)
+	for m := range node.handlers {
+		set[m] = true
 	}
-	return best
-}
-
-// patternScore 计算模式优先级分数（越大越具体）。
-func patternScore(p *routePattern) int {
-	score := 0
-	for _, s := range p.segments {
-		switch {
-		case s.wildcard:
-			score += 1
-		case s.param != "":
-			score += 2
-		default:
-			score += 4
-		}
-	}
-	return score
-}
-
-// allowHeader 汇总匹配模式的全部方法，生成 Allow 响应头。
-func allowHeader(matches []*routePattern) string {
-	set := make(map[string]bool)
-	for _, p := range matches {
-		for m := range p.methods {
-			set[m] = true
-		}
-	}
-	// HTTP 语义：GET 路由同时响应 HEAD，Allow 一并列出。
 	if set[http.MethodGet] {
 		set[http.MethodHead] = true
 	}
@@ -255,7 +257,35 @@ func allowHeader(matches []*routePattern) string {
 	return strings.Join(methods, ", ")
 }
 
-// translateGinPattern 将 gin 风格路径翻译为 ServeMux 模式：
+// wrapRequestHandler 将 webx 处理器链包装为带参数的最终处理器。
+func wrapRequestHandler(rt *Router, chain []core.HandlerFunc, params []string) requestHandler {
+	return func(w http.ResponseWriter, r *http.Request, matched map[string]string) {
+		c := core.Acquire(w, r)
+		defer core.Release(c)
+		if len(params) > 0 {
+			values := make(map[string]string, len(params))
+			for _, name := range params {
+				values[name] = matched[name]
+			}
+			c.SetParams(values)
+		}
+		if rt.maxBody > 0 {
+			c.SetMaxBodyBytes(rt.maxBody)
+		}
+		c.SetHandlers(chain)
+		c.Run()
+	}
+}
+
+// runFallback 执行 404/405 兜底处理器。
+func (rt *Router) runFallback(w http.ResponseWriter, r *http.Request, h core.HandlerFunc) {
+	c := core.Acquire(w, r)
+	defer core.Release(c)
+	c.SetHandlers([]core.HandlerFunc{h})
+	c.Run()
+}
+
+// translateGinPattern 将 gin 风格路径翻译为规范形式：
 // ":name" → "{name}"，"*name" → "{name...}"。
 func translateGinPattern(path string) (string, []string, error) {
 	var b strings.Builder
@@ -315,7 +345,7 @@ func validParamName(name string) bool {
 	return true
 }
 
-// parsePattern 将已翻译的 ServeMux 模式拆分为段。
+// parsePattern 将规范路径拆分为段。
 func parsePattern(pattern string) ([]segment, error) {
 	parts := strings.Split(pattern, "/")
 	segs := make([]segment, 0, len(parts))
@@ -334,7 +364,6 @@ func parsePattern(pattern string) ([]segment, error) {
 		}
 		segs = append(segs, segment{literal: part})
 	}
-	// 校验：通配段必须是最后一段
 	for i, s := range segs {
 		if s.wildcard && i != len(segs)-1 {
 			return nil, fmt.Errorf("webx：通配参数必须是路径最后一段：%s", pattern)
@@ -343,46 +372,7 @@ func parsePattern(pattern string) ([]segment, error) {
 	return segs, nil
 }
 
-// matchPath 判断模式是否匹配请求路径（按需分段，零分配）。
-// 语义与 ServeMux 对齐：
-//   - 精确模式：段数完全一致且无尾斜杠；
-//   - 子树模式（以 "/" 结尾）：路径至少还有尾斜杠或更多段；
-//   - 通配模式（{p...}）：前缀段匹配后剩余部分非空（含空段 "/"）。
-func matchPath(p *routePattern, path string) bool {
-	segs := p.segments
-	if len(segs) == 0 {
-		return true
-	}
-	idx := 0
-	last := len(segs) - 1
-	for i := 0; i < last; i++ {
-		seg, next := nextSegment(path, idx)
-		if !matchSegment(segs[i], seg) {
-			return false
-		}
-		if next < 0 {
-			// 后续仍有模式段，但路径已结束。
-			return false
-		}
-		idx = next
-	}
-	if segs[last].wildcard {
-		// 通配段要求剩余部分非空（含尾斜杠）。
-		return idx < len(path) || (idx == len(path) && strings.HasSuffix(path, "/"))
-	}
-	seg, next := nextSegment(path, idx)
-	if !matchSegment(segs[last], seg) {
-		return false
-	}
-	if p.subtree {
-		return next != -1
-	}
-	// 精确模式：路径必须恰好结束。
-	return next == -1
-}
-
 // nextSegment 返回从 idx 开始的下一段及下一段起始位置。
-// 路径已结束时返回 ("", -1)。
 func nextSegment(path string, idx int) (string, int) {
 	for idx < len(path) && path[idx] == '/' {
 		idx++
@@ -398,12 +388,4 @@ func nextSegment(path string, idx int) (string, int) {
 		return path[start:idx], -1
 	}
 	return path[start:idx], idx + 1
-}
-
-// matchSegment 匹配单个段。
-func matchSegment(p segment, s string) bool {
-	if p.param != "" {
-		return s != ""
-	}
-	return p.literal == s
 }

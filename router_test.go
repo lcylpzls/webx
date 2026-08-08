@@ -94,6 +94,12 @@ func TestRouterParamsAndMethods(t *testing.T) {
 	if rec.Code != http.StatusOK || rec.Body.String() != "|css/app.css" {
 		t.Errorf("通配参数不符：%d %s", rec.Code, rec.Body.String())
 	}
+	// 通配尾斜杠（空剩余）
+	rec = httptest.NewRecorder()
+	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/assets/", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "|" {
+		t.Errorf("通配尾斜杠不符：%d %s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestRouterMethodNotAllowed(t *testing.T) {
@@ -240,12 +246,26 @@ func TestRouterHandleErrors(t *testing.T) {
 	if err := rt.Handle("GET", "/conflict/:b", chain); err == nil {
 		t.Error("参数名冲突应报错")
 	}
+	if err := rt.Handle("GET", "/w/*a", chain); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.Handle("GET", "/w/*b", chain); err == nil {
+		t.Error("通配参数名冲突应报错")
+	}
 	if err := rt.HandleStatic("/static", http.Dir(t.TempDir())); err != nil {
 		t.Errorf("静态注册失败：%v", err)
 	}
 	// 静态路径重复注册：GET 冲突
 	if err := rt.HandleStatic("/static", http.Dir(t.TempDir())); err == nil {
 		t.Error("重复注册静态路径应报错")
+	}
+	// 精确路由与子树路由冲突
+	rt3 := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
+	if err := rt3.HandleStatic("/mix", http.Dir(t.TempDir())); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt3.Handle("POST", "/mix", chain); err == nil {
+		t.Error("精确与子树冲突应报错")
 	}
 }
 
