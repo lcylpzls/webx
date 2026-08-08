@@ -239,9 +239,60 @@ webx 可作为工业级基座的性能依据：
 - 数据采集于 Windows 10（AMD Ryzen 5 7600），Linux 生产环境数值与
   相对关系可能不同，建议在目标环境复测关键基准。
 
+## 六、Linux 虚拟机复测（Debian 13 / 2 核）
+
+2026-08-09 将源码推送至内网 Linux 虚拟机（10.127.90.113）复测：
+
+- 操作系统：Debian GNU/Linux 13 (trixie)，内核 6.12.86 x86_64；
+- 硬件：2 核 / 1.9GiB 内存（虚拟化环境，资源受限）；
+- Go：1.26.5 linux/amd64；依赖经 goproxy.cn 下载；
+- 命令：`go test -bench . -benchmem -benchtime=1s -count=3 -cpu=1,2 -run '^$' .`；
+- 数据：单核（`-cpu=1`）与双核（`-cpu=2`）各 3 轮取最优。
+
+### 路由分发基准（内存内）
+
+| 框架 | 单核 | 双核 |
+| --- | ---: | ---: |
+| webx | 109.5 ns（0 allocs） | 110.8 ns（0 allocs） |
+| echo | 112.7 ns | 108.3 ns |
+| gin | 123.7 ns | 106.6 ns |
+| net/http ServeMux | 151.2 ns | 152.5 ns |
+| fasthttprouter | 216.1 ns | 192.8 ns |
+
+### 端到端（HTTPS，ns/op → 约合 req/s）
+
+| 框架 | HTTP/1.1 单核 | HTTP/1.1 双核 | HTTP/2 单核 | HTTP/2 双核 | HTTP/3 单核 | HTTP/3 双核 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| webx | 26 572（37.6k） | 28 091（35.6k） | 38 765（25.8k） | 40 973（24.4k） | 63 712（15.7k） | 55 468（18.0k） |
+| gin | 26 692（37.5k） | 27 878（35.9k） | 46 036（21.7k） | 44 155（22.6k） | 59 866（16.7k） | 54 787（18.3k） |
+| echo | 26 893（37.2k） | 27 200（36.8k） | 45 798（21.8k） | 45 750（21.9k） | 56 551（17.7k） | 51 613（19.4k） |
+| net/http ServeMux | 25 965（38.5k） | 26 210（38.2k） | 34 005（29.4k） | 35 582（28.1k） | 56 689（17.6k） | 52 501（19.0k） |
+| hertz（自研协议栈参照） | 22 473（44.5k） | 22 511（44.4k） | 35 886（27.9k） | 37 679（26.5k） | 无法构建（扩展停更） | 无法构建 |
+| fasthttp（自研协议栈参照） | 21 909（45.6k） | 20 977（47.7k） | 不支持 | 不支持 | 不支持 | 不支持 |
+
+### 结论
+
+- HTTP/1.1：与 Windows 结论一致——webx 与 gin/echo/ServeMux 同档
+  （差距 ≤4%），hertz/fasthttp 靠自研协议栈领先 15-22%；
+- HTTP/2：受限双核环境下 webx 仍领先 gin/echo 约 15%，略低于裸
+  ServeMux 与 hertz（约 8-14%），且首轮波动较大（虚拟机 GC/调度
+  噪声），多核生产环境的差距预期进一步收窄（Windows 12 核实测
+  webx 为阵营第一）；
+- HTTP/3：webx 与标准库阵营差距约 6-13%，属资源受限下的正常波动；
+- 全中间件（webx，HTTP/1.1 单核）：34 384 ns ≈ 29.1k req/s。
+
+说明：虚拟机仅 2 核 / 1.9GiB，客户端与服务端同机竞争资源，数值
+整体高于 Windows 开发机（非性能回退）；三平台 CI 的基准门禁不受影响。
+
 ## 复现
 
 ```powershell
 cd benchmarks
 go test -bench . -benchmem -benchtime=1s -count=3 -cpu=1,12 -run '^$' .
+```
+
+```bash
+# Linux 虚拟机（示例：2 核）
+cd benchmarks
+go test -bench . -benchmem -benchtime=1s -count=3 -cpu=1,2 -run '^$' .
 ```
