@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 当前状态：**核心实现完成**。各包语句覆盖率 100%，
-> 当前版本：v0.28.0（v1.0.0 定版评估中）。
+> 当前版本：v0.29.0（v1.0.0 定版评估中）。
 
 ## 技术栈
 
@@ -46,6 +46,7 @@
 - ⚡ 静态资源 ETag：可选弱 ETag，`If-None-Match` 命中返回 304；
 - 📊 标准化响应：`{code, msg, data, requestId, timestamp}`；
 - 🩺 健康检查：`/health`，路径可配置；
+- 🔍 探针分离：`/healthz` 存活 / `/readyz` 就绪（优雅关闭中就绪自动 503）；
 - 📈 Prometheus 指标端点：`/metrics` 文本格式输出（零第三方依赖）；
 - 🪵 日志接入 logx；错误接入 errx；配置接入 confx（TOML）；
 - 🧹 优雅关闭：SIGINT/SIGTERM 信号捕获 + `Stop(ctx)`；
@@ -89,6 +90,7 @@
 | Web 便捷方法 | `c.Redirect / c.Cookie / c.SetCookie / c.File` |
 | errx 集成 | `webx.RespondError / StatusForError` |
 | 健康检查 | `RegisterHealthCheck`（/health 聚合输出） |
+| 存活/就绪探针 | `RegisterLivenessCheck`（/healthz）/ `RegisterReadinessCheck`（/readyz） |
 | 静态/SPA | `ServeStaticDir / ServeStaticFS / ServeStatic*WithOptions（MaxAge/DisableIndex/EnableETag）/ EnableSPA` |
 | 反向代理 | `webx/proxy.Handler(target, opts...)` |
 | 代理选项 | `WithErrorHandler / WithTimeout / WithFlushInterval` |

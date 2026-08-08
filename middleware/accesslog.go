@@ -77,6 +77,7 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 			logx.String("requestId", c.RequestID()),
 			logx.String("ip", c.RemoteIP()),
 			logx.String("host", c.Request().Host),
+			logx.String("scheme", requestScheme(c.Request())),
 			logx.String("proto", friendlyProto(c.Request().Proto)),
 			logx.String("query", query),
 			logx.String("user_agent", c.GetHeader("User-Agent")),
@@ -90,6 +91,14 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 		}
 		logger.Info("访问日志", fields)
 	}
+}
+
+// requestScheme 返回请求协议：TLS 或 HTTP/3 记为 https，否则为 http。
+func requestScheme(r *http.Request) string {
+	if r.TLS != nil || r.ProtoMajor >= 3 {
+		return "https"
+	}
+	return "http"
 }
 
 // friendlyProto 将请求协议转为可读名称：HTTP/2.0 → HTTP/2，HTTP/3.0 → HTTP/3。

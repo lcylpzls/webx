@@ -17,7 +17,8 @@ func TestConfigValidateSuccessWithDefaults(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate 失败：%v", err)
 	}
-	if cfg.LogLevel != "info" || cfg.HealthPath != "/health" {
+	if cfg.LogLevel != "info" || cfg.HealthPath != "/health" ||
+		cfg.LivenessPath != "/healthz" || cfg.ReadinessPath != "/readyz" {
 		t.Errorf("默认值未填充：%+v", cfg)
 	}
 	if len(cfg.CORSAllowedOrigins) == 0 || len(cfg.CORSAllowedMethods) == 0 ||
@@ -132,6 +133,21 @@ func TestConfigSlowRequestThreshold(t *testing.T) {
 	cfg.SlowRequestThreshold = time.Second
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("合法慢请求阈值不应报错：%v", err)
+	}
+}
+
+func TestConfigGzipLevel(t *testing.T) {
+	for _, bad := range []int{-1, 10} {
+		cfg := validConfig(t)
+		cfg.GzipLevel = bad
+		if err := cfg.Validate(); err == nil {
+			t.Errorf("GzipLevel=%d 应报错", bad)
+		}
+	}
+	cfg := validConfig(t)
+	cfg.GzipLevel = 9
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("GzipLevel=9 不应报错：%v", err)
 	}
 }
 

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -53,6 +54,9 @@ func TestAccessLogSuccessOnly(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "proto=HTTP/3") {
 		t.Errorf("访问日志应包含可读协议字段：%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "scheme=") {
+		t.Errorf("访问日志应包含协议方案字段：%s", buf.String())
 	}
 	if strings.Contains(buf.String(), "proto=HTTP/3.0") {
 		t.Errorf("协议字段不应保留版本点：%s", buf.String())
@@ -217,6 +221,22 @@ func TestFriendlyProto(t *testing.T) {
 	}
 	if got := friendlyProto("unknown"); got != "unknown" {
 		t.Errorf("未知协议应原样返回：%s", got)
+	}
+}
+
+func TestRequestScheme(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	if got := requestScheme(req); got != "http" {
+		t.Errorf("明文应记 http：%s", got)
+	}
+	req.TLS = &tls.ConnectionState{}
+	if got := requestScheme(req); got != "https" {
+		t.Errorf("TLS 应记 https：%s", got)
+	}
+	req.TLS = nil
+	req.ProtoMajor = 3
+	if got := requestScheme(req); got != "https" {
+		t.Errorf("HTTP/3 应记 https：%s", got)
 	}
 }
 

@@ -41,6 +41,7 @@ func renderMetrics(m Metrics, routes []RouteStat, groups []GroupStat) string {
 	writeCounter(&b, "webx_http2_requests_total", "HTTP/2 请求数", m.HTTP2Requests)
 	writeCounter(&b, "webx_http3_requests_total", "HTTP/3 请求数", m.HTTP3Requests)
 	writeCounter(&b, "webx_rate_limited_total", "限流拒绝数", m.RateLimited)
+	writeCounter(&b, "webx_concurrency_rejected_total", "并发限制拒绝数", m.ConcurrencyRejected)
 	writeCounter(&b, "webx_panics_total", "Recovery 捕获的 panic 数", m.Panics)
 	writeGauge(&b, "webx_active_connections", "当前打开的连接数", m.ActiveConnections)
 	writeGauge(&b, "webx_requests_in_flight", "当前活跃请求数", m.RequestsInFlight)

@@ -2,6 +2,19 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.29.0] - 2026-08-08
+
+### 新增
+
+- 探针分离：`RegisterLivenessCheck`（`/healthz`）与 `RegisterReadinessCheck`
+  （`/readyz`），路径可通过 `liveness_path` / `readiness_path` 配置；
+  服务进入优雅关闭后就绪探针直接返回 503；
+- Gzip 压缩级别配置：`gzip_level`（0=标准库默认，1-9 对应
+  BestSpeed-BestCompression），按级别复用 Writer 池；
+- Metrics 增加 `ConcurrencyRejected`（并发限制拒绝数），Prometheus 端点同步输出
+  `webx_concurrency_rejected_total`；
+- AccessLog 增加 `scheme` 字段（TLS 与 HTTP/3 记为 https）。
+
 ## [v0.28.0] - 2026-08-08
 
 ### 新增

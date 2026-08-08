@@ -48,6 +48,10 @@ type Config struct {
 
 	// HealthPath 健康检查端点路径，默认为 "/health"。
 	HealthPath string `toml:"health_path"`
+	// LivenessPath 存活探针端点路径，默认为 "/healthz"。
+	LivenessPath string `toml:"liveness_path"`
+	// ReadinessPath 就绪探针端点路径，默认为 "/readyz"。
+	ReadinessPath string `toml:"readiness_path"`
 	// MetricsEnabled 是否启用 Prometheus 文本格式指标端点。
 	MetricsEnabled bool `toml:"metrics_enabled"`
 	// MetricsPath 指标端点路径，启用时默认为 "/metrics"。
@@ -109,6 +113,8 @@ type Config struct {
 	SecurityCrossOriginEmbedderPolicy string `toml:"security_cross_origin_embedder_policy"`
 	// GzipMinSize 响应压缩最小字节数（0=默认 1024）。
 	GzipMinSize int `toml:"gzip_min_size"`
+	// GzipLevel 响应压缩级别（0=标准库默认，1-9 对应 BestSpeed-BestCompression）。
+	GzipLevel int `toml:"gzip_level"`
 	// Debug 调试模式：Recovery 响应携带 panic 摘要（生产环境保持 false）。
 	Debug bool `toml:"debug"`
 }
@@ -187,6 +193,9 @@ func (c *Config) Validate() error {
 	if c.GzipMinSize < 0 {
 		return errx.New(errx.KindInvalid, CodeConfigInvalid, "gzip 最小字节数不能为负数")
 	}
+	if c.GzipLevel < 0 || c.GzipLevel > 9 {
+		return errx.New(errx.KindInvalid, CodeConfigInvalid, "gzip 压缩级别必须在 0-9 之间")
+	}
 	if c.SecurityHSTSMaxAge < 0 {
 		return errx.New(errx.KindInvalid, CodeConfigInvalid, "HSTS 缓存秒数不能为负数")
 	}
@@ -218,6 +227,12 @@ func (c *Config) Validate() error {
 	}
 	if c.HealthPath == "" {
 		c.HealthPath = "/health"
+	}
+	if c.LivenessPath == "" {
+		c.LivenessPath = "/healthz"
+	}
+	if c.ReadinessPath == "" {
+		c.ReadinessPath = "/readyz"
 	}
 	if c.MetricsEnabled && c.MetricsPath == "" {
 		c.MetricsPath = "/metrics"

@@ -25,6 +25,8 @@ type Metrics struct {
 	RateLimited uint64
 	// Panics Recovery 捕获的 panic 数（启用 MiddlewareRecovery 后统计）。
 	Panics uint64
+	// ConcurrencyRejected 并发限制拒绝数（启用 SetMaxConcurrentRequests 后统计）。
+	ConcurrencyRejected uint64
 	// AvgRequestDurationMs 平均请求耗时（毫秒，需启用 MiddlewareMetrics）。
 	AvgRequestDurationMs uint64
 	// HTTP1Requests HTTP/1.x 请求数（需启用 MiddlewareMetrics）。
@@ -91,6 +93,9 @@ func (s *Server) Metrics() Metrics {
 	}
 	if s.rateLimiter != nil {
 		m.RateLimited = s.rateLimiter.Rejected()
+	}
+	if s.concurrencyLimiter != nil {
+		m.ConcurrencyRejected = s.concurrencyLimiter.Rejected()
 	}
 	m.ActiveConnections = s.activeConns.Load()
 	return m

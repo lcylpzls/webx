@@ -9,8 +9,9 @@ import (
 
 // ConcurrencyLimiter 限制同一时刻处理的请求数。
 type ConcurrencyLimiter struct {
-	max    int64
-	active atomic.Int64
+	max      int64
+	active   atomic.Int64
+	rejected atomic.Uint64
 }
 
 // NewConcurrencyLimiter 创建并发限制器；max <= 0 表示不限制。
@@ -26,6 +27,7 @@ func (l *ConcurrencyLimiter) TryAcquire() bool {
 	for {
 		current := l.active.Load()
 		if current >= l.max {
+			l.rejected.Add(1)
 			return false
 		}
 		if l.active.CompareAndSwap(current, current+1) {
@@ -42,6 +44,11 @@ func (l *ConcurrencyLimiter) Release() {
 // Active 返回当前占用的并发额度。
 func (l *ConcurrencyLimiter) Active() int64 {
 	return l.active.Load()
+}
+
+// Rejected 返回因额度已满被拒绝的请求数。
+func (l *ConcurrencyLimiter) Rejected() uint64 {
+	return l.rejected.Load()
 }
 
 // ConcurrencyLimit 返回并发限制中间件；额度已满时返回 503 并携带 Retry-After。

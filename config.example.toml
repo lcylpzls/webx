@@ -21,7 +21,9 @@ quic_max_idle_timeout = "30s"  # 空闲连接超时（默认 30s）
 quic_max_incoming_streams = 100 # 单连接最大入站流数（默认 100）
 
 # --- 健康检查 ---
-health_path = "/health"
+health_path = "/health"        # 聚合探针（RegisterHealthCheck）
+liveness_path = "/healthz"     # 存活探针（RegisterLivenessCheck）
+readiness_path = "/readyz"     # 就绪探针（RegisterReadinessCheck，关闭中返回 503）
 
 # --- 指标端点（Prometheus 文本格式，自研零依赖） ---
 metrics_enabled = false            # true=启用 /metrics 指标端点
@@ -47,6 +49,10 @@ cors_allowed_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
 cors_allowed_headers = ["Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"]
 cors_expose_headers = ["X-Request-ID"]  # 允许浏览器读取的响应头
 cors_max_age = "86400s"
+
+# --- 响应压缩 ---
+gzip_min_size = 1024             # 小于该字节数的响应不压缩
+gzip_level = 0                   # 0=标准库默认，1-9 对应 BestSpeed-BestCompression
 
 # --- 安全响应头 ---
 security_hsts_max_age = 0                    # >0 时启用 HSTS（秒）

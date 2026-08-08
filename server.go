@@ -34,24 +34,25 @@ type routeGroupEntry struct {
 // Server 是 webx 的核心类型，提供多通道 HTTPS 服务能力。
 // 通过链式 API 配置，Start() 启动，Stop(ctx) 优雅关闭。
 type Server struct {
-	config        Config
-	logger        logx.Logger
-	routes        []Route
-	routeGroups   []routeGroupEntry
-	staticEntries []staticEntry
-	spa           *spaConfig
-	healthChecks  []healthCheck
-	mwManager     *middleware.Manager
-	rateLimiter   *middleware.RateLimiter
-	metrics       *middleware.Metrics
-	router        *Router
-	startTime     time.Time
-	started       bool
-	mu            sync.Mutex
-	shutdownOnce  sync.Once
-	cleanupFuncs  []func()
-	signalCtx     context.Context
-	signalCancel  context.CancelFunc
+	config             Config
+	logger             logx.Logger
+	routes             []Route
+	routeGroups        []routeGroupEntry
+	staticEntries      []staticEntry
+	spa                *spaConfig
+	healthChecks       []healthCheck
+	mwManager          *middleware.Manager
+	rateLimiter        *middleware.RateLimiter
+	metrics            *middleware.Metrics
+	concurrencyLimiter *middleware.ConcurrencyLimiter
+	router             *Router
+	startTime          time.Time
+	started            bool
+	mu                 sync.Mutex
+	shutdownOnce       sync.Once
+	cleanupFuncs       []func()
+	signalCtx          context.Context
+	signalCancel       context.CancelFunc
 
 	listeners     []net.Listener
 	quicListeners []*quic.Listener
@@ -59,22 +60,25 @@ type Server struct {
 	listenersMu   sync.Mutex
 	httpServers   []*http.Server
 
-	http2Enabled   bool
-	http2Addr      string
-	http3Enabled   bool
-	http3Addr      string
-	unixEnabled    bool
-	unixSocketPath string
-	unixSocketPerm os.FileMode
-	certLoader     func(*tls.ClientHelloInfo) (*tls.Certificate, error)
-	sniCerts       []SNICertificate
-	activeConns    atomic.Int64
-	connCtx        func(context.Context, net.Conn) context.Context
-	onShutdown     []func()
-	mwOrder        []MiddlewareType
-	requestIDOpts  RequestIDOptions
-	metricsPath    string
-	maxConcurrent  int
+	http2Enabled    bool
+	http2Addr       string
+	http3Enabled    bool
+	http3Addr       string
+	unixEnabled     bool
+	unixSocketPath  string
+	unixSocketPerm  os.FileMode
+	certLoader      func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+	sniCerts        []SNICertificate
+	livenessChecks  []healthCheck
+	readinessChecks []healthCheck
+	shuttingDown    atomic.Bool
+	activeConns     atomic.Int64
+	connCtx         func(context.Context, net.Conn) context.Context
+	onShutdown      []func()
+	mwOrder         []MiddlewareType
+	requestIDOpts   RequestIDOptions
+	metricsPath     string
+	maxConcurrent   int
 }
 
 // SNICertificate 是按 ServerName（SNI）指定的证书。
@@ -427,6 +431,37 @@ func (s *Server) RegisterHealthCheck(name string, fn func(context.Context) error
 	return s
 }
 
+// RegisterLivenessCheck 注册存活探针检查项，/healthz 会执行全部存活检查项。
+func (s *Server) RegisterLivenessCheck(name string, fn func(context.Context) error) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.logWarn("webx：服务已启动，不允许注册存活检查")
+		return s
+	}
+	if name == "" || fn == nil {
+		return s
+	}
+	s.livenessChecks = append(s.livenessChecks, healthCheck{name: name, fn: fn})
+	return s
+}
+
+// RegisterReadinessCheck 注册就绪探针检查项，/readyz 会执行全部就绪检查项。
+// 服务进入优雅关闭后，就绪探针直接返回 503。
+func (s *Server) RegisterReadinessCheck(name string, fn func(context.Context) error) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.logWarn("webx：服务已启动，不允许注册就绪检查")
+		return s
+	}
+	if name == "" || fn == nil {
+		return s
+	}
+	s.readinessChecks = append(s.readinessChecks, healthCheck{name: name, fn: fn})
+	return s
+}
+
 // ListenerAddr 返回第一个 Listener 的监听地址（port 0 动态端口时可用）。
 func (s *Server) ListenerAddr() string {
 	s.listenersMu.Lock()
@@ -530,13 +565,23 @@ func (s *Server) Start() error {
 			}
 		}
 	}
-	hasHealth, err := s.hasRoute(s.config.HealthPath)
-	if err != nil {
-		return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "健康检查路由检查失败")
+	probeEndpoints := []struct {
+		path    string
+		handler HandlerFunc
+	}{
+		{s.config.HealthPath, healthHandler(s.startTime, s.healthChecks, nil)},
+		{s.config.LivenessPath, healthHandler(s.startTime, s.livenessChecks, nil)},
+		{s.config.ReadinessPath, healthHandler(s.startTime, s.readinessChecks, func() bool { return s.shuttingDown.Load() })},
 	}
-	if !hasHealth {
-		if err := s.router.Handle("GET", s.config.HealthPath, []core.HandlerFunc{healthHandler(s.startTime, s.healthChecks)}); err != nil {
-			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "健康检查路由注册失败")
+	for _, ep := range probeEndpoints {
+		has, err := s.hasRoute(ep.path)
+		if err != nil {
+			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "健康探针路由检查失败")
+		}
+		if !has {
+			if err := s.router.Handle("GET", ep.path, []core.HandlerFunc{ep.handler}); err != nil {
+				return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "健康探针路由注册失败")
+			}
 		}
 	}
 	if path := s.metricsEndpointPath(); path != "" {
@@ -689,6 +734,7 @@ func (s *Server) requestShutdown(ctx context.Context) {
 
 // shutdownAll 关闭全部 Server 与 Listener，清理 Unix Socket 与清理函数。
 func (s *Server) shutdownAll(ctx context.Context) error {
+	s.shuttingDown.Store(true)
 	if s.signalCancel != nil {
 		s.signalCancel()
 	}
@@ -774,7 +820,8 @@ func (s *Server) registerBuiltinMiddleware() {
 	if s.config.MaxBodyBytes <= 0 {
 		s.mwManager.Disable("body_limit")
 	}
-	s.mwManager.RegisterBuiltin("concurrency_limit", middleware.ConcurrencyLimit(middleware.NewConcurrencyLimiter(s.maxConcurrent)))
+	s.concurrencyLimiter = middleware.NewConcurrencyLimiter(s.maxConcurrent)
+	s.mwManager.RegisterBuiltin("concurrency_limit", middleware.ConcurrencyLimit(s.concurrencyLimiter))
 	if s.maxConcurrent <= 0 {
 		s.mwManager.Disable("concurrency_limit")
 	}
@@ -819,6 +866,7 @@ func (s *Server) registerBuiltinMiddleware() {
 	}
 	s.mwManager.RegisterBuiltin("gzip", middleware.GzipWithOptions(middleware.GzipOptions{
 		MinSize: s.config.GzipMinSize,
+		Level:   s.config.GzipLevel,
 	}))
 	if !s.config.MiddlewareGzip {
 		s.mwManager.Disable("gzip")

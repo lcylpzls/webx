@@ -113,6 +113,15 @@ func TestServerChainAPI(t *testing.T) {
 	if got := s.RegisterRouteGroup("/g", func(rg *RouteGroup) { rg.GET("/c", noopHandler) }); got != s {
 		t.Error("RegisterRouteGroup 应返回自身")
 	}
+	if got := s.RegisterHealthCheck("ok", func(ctx context.Context) error { return nil }); got != s {
+		t.Error("RegisterHealthCheck 应返回自身")
+	}
+	if got := s.RegisterLivenessCheck("", nil); got != s {
+		t.Error("非法存活检查应直接返回")
+	}
+	if got := s.RegisterReadinessCheck("", nil); got != s {
+		t.Error("非法就绪检查应直接返回")
+	}
 	if got := s.UseHttp2Listen(":0"); got != s {
 		t.Error("UseHttp2Listen 应返回自身")
 	}
@@ -666,6 +675,7 @@ func TestServerGzipAndMetrics(t *testing.T) {
 	cfg.MiddlewareGzip = true
 	cfg.MiddlewareMetrics = true
 	cfg.MiddlewareRecovery = true
+	cfg.GzipLevel = 9
 	s := newTestServer(t, cfg)
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.RegisterRoute(Route{
@@ -1222,6 +1232,9 @@ func TestServerMaxConcurrentRequests(t *testing.T) {
 	if got := resp.Header.Get("Retry-After"); got != "1" {
 		t.Errorf("应携带 Retry-After：%s", got)
 	}
+	if got := s.Metrics().ConcurrencyRejected; got < 1 {
+		t.Errorf("并发拒绝计数不符：%d", got)
+	}
 	close(release)
 	<-slowDone
 
@@ -1454,6 +1467,84 @@ func TestServerHealthChecks(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = s.Stop(ctx)
+}
+
+func TestServerLivenessReadiness(t *testing.T) {
+	cfg := validConfig(t)
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterLivenessCheck("live", func(ctx context.Context) error { return nil })
+	s.RegisterReadinessCheck("db", func(ctx context.Context) error { return errors.New("数据库未就绪") })
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/ok",
+		Handler: func(c *core.Context) { c.Success("ok", nil) },
+	})
+	startServer(t, s)
+	client := testHTTPClient()
+	base := "https://" + s.ListenerAddr()
+
+	resp, err := client.Get(base + "/healthz")
+	if err != nil {
+		t.Fatalf("GET /healthz 失败：%v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "运行中") {
+		t.Errorf("存活探针不符：%d %s", resp.StatusCode, body)
+	}
+
+	resp, err = client.Get(base + "/readyz")
+	if err != nil {
+		t.Fatalf("GET /readyz 失败：%v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable || !strings.Contains(string(body), "数据库未就绪") {
+		t.Errorf("就绪探针不符：%d %s", resp.StatusCode, body)
+	}
+
+	resp, err = client.Get(base + "/health")
+	if err != nil {
+		t.Fatalf("GET /health 失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("/health 聚合探针不符：%d", resp.StatusCode)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestRegisterProbeStartedGuard(t *testing.T) {
+	s := &Server{started: true}
+	if got := s.RegisterLivenessCheck("x", func(ctx context.Context) error { return nil }); got != s {
+		t.Error("RegisterLivenessCheck 应返回自身")
+	}
+	if got := s.RegisterReadinessCheck("x", func(ctx context.Context) error { return nil }); got != s {
+		t.Error("RegisterReadinessCheck 应返回自身")
+	}
+}
+
+func TestShutdownMarksReadinessDown(t *testing.T) {
+	cfg := validConfig(t)
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/ok",
+		Handler: func(c *core.Context) { c.Success("ok", nil) },
+	})
+	startServer(t, s)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+	if !s.shuttingDown.Load() {
+		t.Error("Stop 后应标记服务关闭中")
+	}
 }
 
 func TestRegisterHealthCheckInvalid(t *testing.T) {

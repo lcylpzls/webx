@@ -24,13 +24,19 @@ type healthCheck struct {
 }
 
 // healthHandler 返回健康检查处理器。
-func healthHandler(startTime time.Time, checks []healthCheck) HandlerFunc {
+// shuttingDown 返回 true 时（就绪探针场景）直接返回 503，表示服务关闭中。
+func healthHandler(startTime time.Time, checks []healthCheck, shuttingDown func() bool) HandlerFunc {
 	return func(c *core.Context) {
 		uptime := time.Since(startTime)
 		data := healthData{
 			Status:  "运行中",
 			Uptime:  formatUptime(uptime),
 			Started: startTime.Format(time.RFC3339),
+		}
+		if shuttingDown != nil && shuttingDown() {
+			data.Status = "关闭中"
+			c.JSONResponse(http.StatusServiceUnavailable, "服务关闭中", data)
+			return
 		}
 		allOK := true
 		if len(checks) > 0 {

@@ -20,6 +20,9 @@ func TestConcurrencyLimiter(t *testing.T) {
 	if l.TryAcquire() {
 		t.Error("额度已满应拒绝")
 	}
+	if got := l.Rejected(); got != 1 {
+		t.Errorf("拒绝计数不符：%d", got)
+	}
 	if got := l.Active(); got != 2 {
 		t.Errorf("Active 不符：%d", got)
 	}
@@ -34,6 +37,9 @@ func TestConcurrencyLimiter(t *testing.T) {
 	unlimited := NewConcurrencyLimiter(0)
 	if !unlimited.TryAcquire() {
 		t.Error("不限制时应总是可获取")
+	}
+	if got := unlimited.Rejected(); got != 0 {
+		t.Errorf("不限制时拒绝计数应为 0：%d", got)
 	}
 }
 

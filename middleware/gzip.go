@@ -10,17 +10,28 @@ import (
 	"github.com/lcylpzls/webx/internal/core"
 )
 
-// gzipPool 复用 gzip.Writer，降低每请求分配。
-var gzipPool = sync.Pool{
-	New: func() any {
-		return gzip.NewWriter(io.Discard)
-	},
-}
+// gzipPools 按压缩级别复用 gzip.Writer，降低每请求分配。
+var gzipPools sync.Map // int → *sync.Pool
 
 // GzipOptions 定义响应压缩中间件的选项。
 type GzipOptions struct {
 	// MinSize 未显式写状态码时，小于该字节数的响应不压缩（0=默认 1024）。
 	MinSize int
+	// Level 压缩级别（0=标准库默认；1-9 对应 BestSpeed-BestCompression）。
+	Level int
+}
+
+// gzipPoolForLevel 返回指定压缩级别的 Writer 池。
+func gzipPoolForLevel(level int) *sync.Pool {
+	if v, ok := gzipPools.Load(level); ok {
+		return v.(*sync.Pool)
+	}
+	pool := &sync.Pool{New: func() any {
+		w, _ := gzip.NewWriterLevel(io.Discard, level)
+		return w
+	}}
+	actual, _ := gzipPools.LoadOrStore(level, pool)
+	return actual.(*sync.Pool)
 }
 
 // Gzip 返回响应压缩中间件：客户端 Accept-Encoding 含 gzip 时启用。
@@ -34,19 +45,24 @@ func GzipWithOptions(opts GzipOptions) core.HandlerFunc {
 	if minSize <= 0 {
 		minSize = 1024
 	}
+	level := opts.Level
+	if level == 0 || level < gzip.HuffmanOnly || level > gzip.BestCompression {
+		level = gzip.DefaultCompression
+	}
+	pool := gzipPoolForLevel(level)
 	return func(c *core.Context) {
 		if !acceptsGzip(c.GetHeader("Accept-Encoding")) {
 			c.Next()
 			return
 		}
 		orig := c.Writer()
-		gz := gzipPool.Get().(*gzip.Writer)
+		gz := pool.Get().(*gzip.Writer)
 		gw := &gzipWriter{ResponseWriter: orig, gz: gz, minSize: minSize}
 		c.SetWriter(gw)
 
 		c.Next()
 		_ = gw.Close()
-		gzipPool.Put(gz)
+		pool.Put(gz)
 		c.SetWriter(orig)
 	}
 }

@@ -38,6 +38,54 @@ func TestGzipCompresses(t *testing.T) {
 	}
 }
 
+func TestGzipCustomLevel(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, req)
+	c.SetHandlers([]core.HandlerFunc{
+		GzipWithOptions(GzipOptions{Level: 9}),
+		func(c *core.Context) { _ = c.String(http.StatusOK, "自定义级别压缩内容") },
+	})
+	c.Run()
+	if rec.Header().Get("Content-Encoding") != "gzip" {
+		t.Fatalf("自定义级别未启用 gzip：%v", rec.Header())
+	}
+	zr, err := gzip.NewReader(rec.Body)
+	if err != nil {
+		t.Fatalf("响应体不是合法 gzip：%v", err)
+	}
+	got, _ := io.ReadAll(zr)
+	zr.Close()
+	if string(got) != "自定义级别压缩内容" {
+		t.Errorf("解压内容不符：%s", got)
+	}
+}
+
+func TestGzipInvalidLevelNormalized(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, req)
+	c.SetHandlers([]core.HandlerFunc{
+		GzipWithOptions(GzipOptions{Level: 99}),
+		func(c *core.Context) { _ = c.String(http.StatusOK, "非法级别回退默认") },
+	})
+	c.Run()
+	if rec.Header().Get("Content-Encoding") != "gzip" {
+		t.Fatalf("非法级别应回退默认并压缩：%v", rec.Header())
+	}
+	zr, err := gzip.NewReader(rec.Body)
+	if err != nil {
+		t.Fatalf("响应体不是合法 gzip：%v", err)
+	}
+	got, _ := io.ReadAll(zr)
+	zr.Close()
+	if string(got) != "非法级别回退默认" {
+		t.Errorf("解压内容不符：%s", got)
+	}
+}
+
 func TestGzipNoAcceptEncoding(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
