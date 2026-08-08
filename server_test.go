@@ -315,7 +315,7 @@ type errAccepter struct {
 	err error
 }
 
-func (a *errAccepter) Accept(context.Context) (quic.Connection, error) {
+func (a *errAccepter) Accept(context.Context) (*quic.Conn, error) {
 	return nil, a.err
 }
 

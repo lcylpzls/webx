@@ -682,7 +682,7 @@ func (s *Server) logWarn(msg string) {
 
 // quicAccepter 抽象 QUIC 监听器的 Accept，便于测试注入异常。
 type quicAccepter interface {
-	Accept(context.Context) (quic.Connection, error)
+	Accept(context.Context) (*quic.Conn, error)
 }
 
 // serveHTTP3 在 QUIC Listener 上运行 HTTP/3 服务。
