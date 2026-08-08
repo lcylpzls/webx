@@ -15,7 +15,7 @@ func Validation() core.HandlerFunc {
 			c.Next()
 			return
 		}
-		contentType := c.GetHeader("Content-Type")
+		contentType := c.GetHeaderCanonical(canonicalContentType)
 		if contentType == "" {
 			c.Next()
 			return

@@ -156,7 +156,7 @@ func RateLimit(rl *RateLimiter) core.HandlerFunc {
 		}
 		if !rl.Allow(key) {
 			if retryAfter := rl.RetryAfter(key); retryAfter > 0 {
-				c.Header("Retry-After", strconv.FormatInt(int64(retryAfter.Seconds()), 10))
+				c.SetHeaderCanonical(canonicalRetryAfter, strconv.FormatInt(int64(retryAfter.Seconds()), 10))
 			}
 			rl.mu.Lock()
 			message := rl.rejectMsg

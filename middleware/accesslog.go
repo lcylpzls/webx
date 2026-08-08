@@ -5,11 +5,14 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lcylpzls/logx"
 	"github.com/lcylpzls/webx/internal/core"
 )
+
+var countingWriterPool = sync.Pool{New: func() any { return &countingWriter{} }}
 
 // AccessLogOptions 定义访问日志中间件的配置。
 type AccessLogOptions struct {
@@ -48,13 +51,21 @@ var sampleRand = rand.IntN
 
 // AccessLog 返回访问日志中间件。
 func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
+	headerKeys := make([]string, len(opts.HeaderKeys))
+	for i, k := range opts.HeaderKeys {
+		headerKeys[i] = core.CanonicalHeaderKey(k)
+	}
 	return func(c *core.Context) {
 		start := time.Now()
 		orig := c.Writer()
-		cw := &countingWriter{ResponseWriter: orig}
+		cw := countingWriterPool.Get().(*countingWriter)
+		cw.ResponseWriter = orig
+		cw.n = 0
 		c.SetWriter(cw)
 		c.Next()
 		c.SetWriter(orig)
+		bytes := cw.n
+		countingWriterPool.Put(cw)
 		status := c.StatusCode()
 		elapsed := time.Since(start)
 		if opts.SlowThreshold > 0 && elapsed >= opts.SlowThreshold {
@@ -83,16 +94,16 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 			logx.String("scheme", requestScheme(c.Request())),
 			logx.String("proto", friendlyProto(c.Request().Proto)),
 			logx.String("query", query),
-			logx.String("user_agent", c.GetHeader("User-Agent")),
+			logx.String("user_agent", c.GetHeaderCanonical(canonicalUserAgent)),
 			logx.Any("duration", elapsed.String()),
 			logx.Int64("duration_ms", elapsed.Milliseconds()),
-			logx.Int64("bytes", cw.n),
+			logx.Int64("bytes", bytes),
 		}
-		for _, key := range opts.HeaderKeys {
+		for i, key := range opts.HeaderKeys {
 			if key == "" {
 				continue
 			}
-			value := c.GetHeader(key)
+			value := c.GetHeaderCanonical(headerKeys[i])
 			if value == "" {
 				continue
 			}

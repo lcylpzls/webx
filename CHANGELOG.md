@@ -2,7 +2,22 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
-## [Unreleased]
+## [v1.2.0] - 2026-08-08
+
+### 性能（热路径深度优化）
+
+- 响应/请求头写入全部改为预计算规范化键（`textproto` 键只计算一次），
+  RequestID / CORS / Security / Gzip / Validation / AccessLog / 限流
+  中间件全部切换，消除每请求的键规范化分配；
+- `RemoteIP` 请求头读取免规范化；
+- AccessLog `countingWriter` 池化；
+- 新增全中间件基准（`BenchmarkServerRequestFull` /
+  `BenchmarkServerTLSWebxFull`）与 CI 参考输出。
+
+### 基准
+
+- 全中间件并行：约 12.5µs/op（≈80k req/s），相对裸路径 9.3µs 增加约 35%
+  （日志、压缩、安全头、超时上下文等中间件固有成本）。
 
 ### 依赖
 

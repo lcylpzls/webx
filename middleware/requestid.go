@@ -29,15 +29,16 @@ func RequestIDWithOptions(opts RequestIDOptions) core.HandlerFunc {
 	if generator == nil {
 		generator = newUUIDV7
 	}
+	canonical := core.CanonicalHeaderKey(header)
 	return func(c *core.Context) {
-		requestID := c.GetHeader(header)
+		requestID := c.GetHeaderCanonical(canonical)
 		if requestID == "" {
 			requestID = generator()
 		}
 		c.Set("requestId", requestID)
-		c.Header(header, requestID)
+		c.SetHeaderCanonical(canonical, requestID)
 		// 出站透传：转发到上游时保留同一条请求 ID。
-		c.Request().Header.Set(header, requestID)
+		c.SetRequestHeaderCanonical(canonical, requestID)
 		c.Next()
 	}
 }

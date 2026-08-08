@@ -169,6 +169,38 @@ func TestContextStatusAndHeader(t *testing.T) {
 	}
 }
 
+func TestContextCanonicalHeaders(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header[CanonicalHeaderKey("X-Request-ID")] = []string{"incoming"}
+	rec := httptest.NewRecorder()
+	c := NewContext(rec, req)
+
+	if got := CanonicalHeaderKey("Content-Type"); got != "Content-Type" {
+		t.Errorf("规范化键不符：%s", got)
+	}
+	key := CanonicalHeaderKey("X-Request-ID")
+	if got := c.GetHeaderCanonical(key); got != "incoming" {
+		t.Errorf("GetHeaderCanonical 不符：%s", got)
+	}
+	if got := c.GetHeaderCanonical(CanonicalHeaderKey("X-Missing")); got != "" {
+		t.Errorf("缺失头应返回空：%s", got)
+	}
+
+	ct := CanonicalHeaderKey("Content-Type")
+	c.SetHeaderCanonical(ct, "application/json")
+	c.SetHeaderCanonical(ct, "text/plain") // 复用已有切片
+	if got := rec.Header().Get("Content-Type"); got != "text/plain" {
+		t.Errorf("SetHeaderCanonical 复用不符：%s", got)
+	}
+
+	traceKey := CanonicalHeaderKey("X-Trace-ID")
+	c.SetRequestHeaderCanonical(traceKey, "out-1") // 首次创建
+	c.SetRequestHeaderCanonical(traceKey, "out-2") // 复用已有切片
+	if got := req.Header.Get("X-Trace-ID"); got != "out-2" {
+		t.Errorf("SetRequestHeaderCanonical 复用不符：%s", got)
+	}
+}
+
 func TestContextStringFastPath(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))

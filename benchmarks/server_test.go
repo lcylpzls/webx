@@ -241,6 +241,55 @@ func BenchmarkServerH2Webx(b *testing.B) {
 	_ = s.Stop(ctx)
 }
 
+func BenchmarkServerTLSWebxFull(b *testing.B) {
+	certFile, keyFile, _ := writeBenchCert(b)
+	cfg := webx.Config{
+		TLSCertFile:          certFile,
+		TLSKeyFile:           keyFile,
+		ShutdownTimeout:      5 * time.Second,
+		RequestTimeout:       5 * time.Second,
+		MiddlewareRequestID:  true,
+		MiddlewareRecovery:   true,
+		MiddlewareTimeout:    true,
+		MiddlewareCORS:       true,
+		MiddlewareValidation: true,
+		MiddlewareSecurity:   true,
+		MiddlewareGzip:       true,
+		MiddlewareMetrics:    true,
+		AccessLogEnabled:     true,
+		LogSuccessReq:        true,
+	}
+	s := webx.NewServer(cfg, benchLogger())
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(webx.Route{
+		Method:  http.MethodGet,
+		Path:    "/ping",
+		Handler: func(c *webx.Context) { _ = c.String(http.StatusOK, "hello") },
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- s.Start() }()
+	base := ""
+	for i := 0; i < 500; i++ {
+		if addr := s.ListenerAddr(); addr != "" {
+			base = "https://" + addr
+			break
+		}
+		select {
+		case err := <-errCh:
+			b.Fatal(err)
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if base == "" {
+		b.Fatal("webx 启动超时")
+	}
+	runBenchRequests(b, base, 200)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
 func BenchmarkServerTLSGin(b *testing.B) {
 	_, _, cert := writeBenchCert(b)
 	gin.SetMode(gin.ReleaseMode)

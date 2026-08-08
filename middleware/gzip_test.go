@@ -114,6 +114,19 @@ func TestAcceptsGzip(t *testing.T) {
 	}
 }
 
+func TestSetHeaderReuse(t *testing.T) {
+	h := make(http.Header)
+	key := core.CanonicalHeaderKey("X-Test")
+	setHeader(h, key, "1")
+	setHeader(h, key, "2") // 复用已有切片
+	if got := h.Get("X-Test"); got != "2" {
+		t.Errorf("setHeader 复用不符：%s", got)
+	}
+	if len(h[key]) != 1 {
+		t.Errorf("setHeader 不应追加切片：%d", len(h[key]))
+	}
+}
+
 func TestGzipWriterMethods(t *testing.T) {
 	rec := httptest.NewRecorder()
 	gz := gzip.NewWriter(rec)

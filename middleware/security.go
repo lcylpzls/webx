@@ -7,6 +7,21 @@ import (
 	"github.com/lcylpzls/webx/internal/core"
 )
 
+// 安全响应头的预计算规范化键。
+var (
+	canonicalContentTypeOptions = core.CanonicalHeaderKey("X-Content-Type-Options")
+	canonicalFrameOptions       = core.CanonicalHeaderKey("X-Frame-Options")
+	canonicalReferrerPolicy     = core.CanonicalHeaderKey("Referrer-Policy")
+	canonicalHSTS               = core.CanonicalHeaderKey("Strict-Transport-Security")
+	canonicalPermissionsPolicy  = core.CanonicalHeaderKey("Permissions-Policy")
+	canonicalCOOP               = core.CanonicalHeaderKey("Cross-Origin-Opener-Policy")
+	canonicalCORP               = core.CanonicalHeaderKey("Cross-Origin-Resource-Policy")
+	canonicalCOEP               = core.CanonicalHeaderKey("Cross-Origin-Embedder-Policy")
+	canonicalCSP                = core.CanonicalHeaderKey("Content-Security-Policy")
+	canonicalCSPReportOnly      = core.CanonicalHeaderKey("Content-Security-Policy-Report-Only")
+	canonicalOriginAgentCluster = core.CanonicalHeaderKey("Origin-Agent-Cluster")
+)
+
 // SecurityHeadersOptions 定义安全响应头中间件的配置。
 type SecurityHeadersOptions struct {
 	// ContentTypeNoSniff 设置 X-Content-Type-Options: nosniff。
@@ -41,13 +56,13 @@ type SecurityHeadersOptions struct {
 func SecurityHeaders(opts SecurityHeadersOptions) core.HandlerFunc {
 	return func(c *core.Context) {
 		if opts.ContentTypeNoSniff {
-			c.Header("X-Content-Type-Options", "nosniff")
+			c.SetHeaderCanonical(canonicalContentTypeOptions, "nosniff")
 		}
 		if opts.FrameDeny {
-			c.Header("X-Frame-Options", "DENY")
+			c.SetHeaderCanonical(canonicalFrameOptions, "DENY")
 		}
 		if opts.ReferrerPolicy != "" {
-			c.Header("Referrer-Policy", opts.ReferrerPolicy)
+			c.SetHeaderCanonical(canonicalReferrerPolicy, opts.ReferrerPolicy)
 		}
 		if opts.HSTSMaxAge > 0 {
 			hsts := fmt.Sprintf("max-age=%d", int64(opts.HSTSMaxAge.Seconds()))
@@ -57,28 +72,28 @@ func SecurityHeaders(opts SecurityHeadersOptions) core.HandlerFunc {
 			if opts.HSTSPreload {
 				hsts += "; preload"
 			}
-			c.Header("Strict-Transport-Security", hsts)
+			c.SetHeaderCanonical(canonicalHSTS, hsts)
 		}
 		if opts.PermissionsPolicy != "" {
-			c.Header("Permissions-Policy", opts.PermissionsPolicy)
+			c.SetHeaderCanonical(canonicalPermissionsPolicy, opts.PermissionsPolicy)
 		}
 		if opts.CrossOriginOpenerPolicy != "" {
-			c.Header("Cross-Origin-Opener-Policy", opts.CrossOriginOpenerPolicy)
+			c.SetHeaderCanonical(canonicalCOOP, opts.CrossOriginOpenerPolicy)
 		}
 		if opts.CrossOriginResourcePolicy != "" {
-			c.Header("Cross-Origin-Resource-Policy", opts.CrossOriginResourcePolicy)
+			c.SetHeaderCanonical(canonicalCORP, opts.CrossOriginResourcePolicy)
 		}
 		if opts.CrossOriginEmbedderPolicy != "" {
-			c.Header("Cross-Origin-Embedder-Policy", opts.CrossOriginEmbedderPolicy)
+			c.SetHeaderCanonical(canonicalCOEP, opts.CrossOriginEmbedderPolicy)
 		}
 		if opts.ContentSecurityPolicy != "" {
-			c.Header("Content-Security-Policy", opts.ContentSecurityPolicy)
+			c.SetHeaderCanonical(canonicalCSP, opts.ContentSecurityPolicy)
 		}
 		if opts.ContentSecurityPolicyReportOnly != "" {
-			c.Header("Content-Security-Policy-Report-Only", opts.ContentSecurityPolicyReportOnly)
+			c.SetHeaderCanonical(canonicalCSPReportOnly, opts.ContentSecurityPolicyReportOnly)
 		}
 		if opts.OriginAgentCluster {
-			c.Header("Origin-Agent-Cluster", "?1")
+			c.SetHeaderCanonical(canonicalOriginAgentCluster, "?1")
 		}
 		c.Next()
 	}

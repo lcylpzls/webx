@@ -61,7 +61,7 @@ func (l *ConcurrencyLimiter) SetRejectMessage(msg string) {
 func ConcurrencyLimit(l *ConcurrencyLimiter) core.HandlerFunc {
 	return func(c *core.Context) {
 		if !l.TryAcquire() {
-			c.Header("Retry-After", "1")
+			c.SetHeaderCanonical(canonicalRetryAfter, "1")
 			if p := l.rejectMsg.Load(); p != nil && *p != "" {
 				c.AbortWithStatusJSON(http.StatusServiceUnavailable, *p, nil)
 				return

@@ -10,6 +10,15 @@ import (
 	"github.com/lcylpzls/webx/internal/core"
 )
 
+// setHeader 以预计算键写入响应头（复用已有切片，热路径零分配）。
+func setHeader(h http.Header, key, value string) {
+	if len(h[key]) == 0 {
+		h[key] = []string{value}
+		return
+	}
+	h[key][0] = value
+}
+
 // gzipPools 按压缩级别复用 gzip.Writer，降低每请求分配。
 var gzipPools sync.Map // int → *sync.Pool
 
@@ -51,7 +60,7 @@ func GzipWithOptions(opts GzipOptions) core.HandlerFunc {
 	}
 	pool := gzipPoolForLevel(level)
 	return func(c *core.Context) {
-		if !acceptsGzip(c.GetHeader("Accept-Encoding")) {
+		if !acceptsGzip(c.GetHeaderCanonical(canonicalAcceptEncoding)) {
 			c.Next()
 			return
 		}
@@ -94,12 +103,12 @@ func (w *gzipWriter) WriteHeader(code int) {
 	if !w.wroteHead {
 		w.wroteHead = true
 		if !w.compressible() {
-			w.Header().Del("Content-Encoding")
+			delete(w.Header(), canonicalContentEncoding)
 			w.ResponseWriter.WriteHeader(code)
 			return
 		}
-		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Vary", "Accept-Encoding")
+		setHeader(w.Header(), canonicalContentEncoding, "gzip")
+		setHeader(w.Header(), canonicalVary, "Accept-Encoding")
 		w.gz.Reset(w.ResponseWriter)
 		w.started = true
 		w.ResponseWriter.WriteHeader(code)
@@ -130,7 +139,7 @@ func (w *gzipWriter) Close() error {
 		return w.gz.Close()
 	}
 	if len(w.buf) > 0 {
-		w.Header().Del("Content-Encoding")
+		delete(w.Header(), canonicalContentEncoding)
 		_, err := w.ResponseWriter.Write(w.buf)
 		w.buf = nil
 		return err
@@ -144,7 +153,10 @@ func (w *gzipWriter) compressible() bool {
 		return w.compress
 	}
 	w.decided = true
-	ct := w.Header().Get("Content-Type")
+	var ct string
+	if v := w.Header()[canonicalContentType]; len(v) > 0 {
+		ct = v[0]
+	}
 	if ct == "" {
 		w.compress = true
 		return true
@@ -170,8 +182,8 @@ func (w *gzipWriter) compressible() bool {
 func (w *gzipWriter) startGzip(code int) {
 	if !w.wroteHead {
 		w.wroteHead = true
-		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Vary", "Accept-Encoding")
+		setHeader(w.Header(), canonicalContentEncoding, "gzip")
+		setHeader(w.Header(), canonicalVary, "Accept-Encoding")
 		w.gz.Reset(w.ResponseWriter)
 		w.started = true
 		w.ResponseWriter.WriteHeader(code)

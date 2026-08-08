@@ -136,6 +136,78 @@ func BenchmarkServerRequest(b *testing.B) {
 	}
 }
 
+func BenchmarkServerRequestFull(b *testing.B) {
+	cert, key := writeTestCert(b)
+	cfg := Config{
+		TLSCertFile:     cert,
+		TLSKeyFile:      key,
+		ShutdownTimeout: 5 * time.Second,
+		RequestTimeout:  5 * time.Second,
+	}
+	cfg.MiddlewareRequestID = true
+	cfg.MiddlewareRecovery = true
+	cfg.MiddlewareTimeout = true
+	cfg.MiddlewareCORS = true
+	cfg.MiddlewareValidation = true
+	cfg.MiddlewareSecurity = true
+	cfg.MiddlewareGzip = true
+	cfg.MiddlewareMetrics = true
+	cfg.AccessLogEnabled = true
+	cfg.LogSuccessReq = true
+	s := NewServer(cfg, newTestLogger(b))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/ping",
+		Handler: func(c *core.Context) {
+			c.Success("pong", nil)
+		},
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- s.Start() }()
+	deadline := time.After(10 * time.Second)
+	for s.ListenerAddr() == "" {
+		select {
+		case err := <-errCh:
+			b.Fatalf("Start 失败：%v", err)
+		case <-deadline:
+			b.Fatal("启动超时")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.Stop(ctx)
+	}()
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			MaxIdleConns:    1,
+		},
+	}
+	url := "https://" + s.ListenerAddr() + "/ping"
+	resp, err := client.Get(url)
+	if err != nil {
+		b.Fatalf("预热请求失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		resp, err := client.Get(url)
+		if err != nil {
+			b.Fatalf("请求失败：%v", err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+}
+
 func BenchmarkRouterServeHTTP100(b *testing.B) {
 	benchRouter(b, 100)
 }

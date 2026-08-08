@@ -8,6 +8,18 @@ import (
 	"github.com/lcylpzls/webx/internal/core"
 )
 
+// CORS 响应头的预计算规范化键。
+var (
+	canonicalOrigin              = core.CanonicalHeaderKey("Origin")
+	canonicalAllowOrigin         = core.CanonicalHeaderKey("Access-Control-Allow-Origin")
+	canonicalAllowMethods        = core.CanonicalHeaderKey("Access-Control-Allow-Methods")
+	canonicalAllowHeaders        = core.CanonicalHeaderKey("Access-Control-Allow-Headers")
+	canonicalExposeHeaders       = core.CanonicalHeaderKey("Access-Control-Expose-Headers")
+	canonicalAllowCredentials    = core.CanonicalHeaderKey("Access-Control-Allow-Credentials")
+	canonicalAllowPrivateNetwork = core.CanonicalHeaderKey("Access-Control-Allow-Private-Network")
+	canonicalMaxAge              = core.CanonicalHeaderKey("Access-Control-Max-Age")
+)
+
 // CORSConfig 定义 CORS 中间件的配置参数。
 type CORSConfig struct {
 	AllowedOrigins   []string
@@ -30,35 +42,35 @@ func CORS(cfg CORSConfig) core.HandlerFunc {
 		}
 	}
 	return func(c *core.Context) {
-		origin := c.GetHeader("Origin")
+		origin := c.GetHeaderCanonical(canonicalOrigin)
 		if allowAll {
-			c.Header("Access-Control-Allow-Origin", "*")
+			c.SetHeaderCanonical(canonicalAllowOrigin, "*")
 		} else if origin != "" {
 			for _, o := range cfg.AllowedOrigins {
 				if o == origin {
-					c.Header("Access-Control-Allow-Origin", origin)
-					c.Header("Vary", "Origin")
+					c.SetHeaderCanonical(canonicalAllowOrigin, origin)
+					c.SetHeaderCanonical(canonicalVary, "Origin")
 					break
 				}
 			}
 		}
 		if len(cfg.AllowedMethods) > 0 {
-			c.Header("Access-Control-Allow-Methods", strings.Join(cfg.AllowedMethods, ", "))
+			c.SetHeaderCanonical(canonicalAllowMethods, strings.Join(cfg.AllowedMethods, ", "))
 		}
 		if len(cfg.AllowedHeaders) > 0 {
-			c.Header("Access-Control-Allow-Headers", strings.Join(cfg.AllowedHeaders, ", "))
+			c.SetHeaderCanonical(canonicalAllowHeaders, strings.Join(cfg.AllowedHeaders, ", "))
 		}
 		if len(cfg.ExposeHeaders) > 0 {
-			c.Header("Access-Control-Expose-Headers", strings.Join(cfg.ExposeHeaders, ", "))
+			c.SetHeaderCanonical(canonicalExposeHeaders, strings.Join(cfg.ExposeHeaders, ", "))
 		}
 		if cfg.AllowCredentials {
-			c.Header("Access-Control-Allow-Credentials", "true")
+			c.SetHeaderCanonical(canonicalAllowCredentials, "true")
 		}
 		if cfg.AllowPrivateNetwork {
-			c.Header("Access-Control-Allow-Private-Network", "true")
+			c.SetHeaderCanonical(canonicalAllowPrivateNetwork, "true")
 		}
 		if cfg.MaxAge > 0 {
-			c.Header("Access-Control-Max-Age", strconv.Itoa(cfg.MaxAge))
+			c.SetHeaderCanonical(canonicalMaxAge, strconv.Itoa(cfg.MaxAge))
 		}
 		if c.Request().Method == http.MethodOptions {
 			c.Status(http.StatusNoContent)

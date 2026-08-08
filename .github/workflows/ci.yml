@@ -188,3 +188,5 @@ jobs:
             echo "标准化响应分配回退超过阈值（要求 ≤1 allocs/op）"
             exit 1
           fi
+          go test -bench '^BenchmarkServerRequestFull$' -benchmem -run '^$' . 2>&1 | tee full-bench.log
+          grep 'BenchmarkServerRequestFull' full-bench.log || exit 1

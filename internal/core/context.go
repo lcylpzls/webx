@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,6 +41,18 @@ type Context struct {
 type Param struct {
 	Name  string
 	Value string
+}
+
+// 常用请求头的预计算规范化键（热路径零规范化分配）。
+var (
+	canonicalXForwardedFor = textproto.CanonicalMIMEHeaderKey("X-Forwarded-For")
+	canonicalXRealIP       = textproto.CanonicalMIMEHeaderKey("X-Real-IP")
+)
+
+// CanonicalHeaderKey 返回 textproto 规范化的响应头键。
+// 建议在包初始化时预计算一次，热路径配合 Get/SetHeaderCanonical 使用。
+func CanonicalHeaderKey(key string) string {
+	return textproto.CanonicalMIMEHeaderKey(key)
 }
 
 // ctxPool 是请求上下文的复用池。
@@ -143,6 +156,35 @@ func (c *Context) GetHeader(key string) string {
 	return c.request.Header.Get(key)
 }
 
+// GetHeaderCanonical 以预计算键直接读取请求头（零规范化分配）。
+func (c *Context) GetHeaderCanonical(key string) string {
+	v := c.request.Header[key]
+	if len(v) == 0 {
+		return ""
+	}
+	return v[0]
+}
+
+// SetHeaderCanonical 以预计算键直接写入响应头（零规范化分配）。
+func (c *Context) SetHeaderCanonical(key, value string) {
+	h := c.writer.Header()
+	if len(h[key]) == 0 {
+		h[key] = []string{value}
+		return
+	}
+	h[key][0] = value
+}
+
+// SetRequestHeaderCanonical 以预计算键直接写入请求头（零规范化分配）。
+func (c *Context) SetRequestHeaderCanonical(key, value string) {
+	h := c.request.Header
+	if len(h[key]) == 0 {
+		h[key] = []string{value}
+		return
+	}
+	h[key][0] = value
+}
+
 // SetTrustedProxies 设置可信代理网段（由服务层在进入处理器链前调用）。
 // 仅当对端地址位于可信网段时才信任 X-Forwarded-For / X-Real-IP。
 func (c *Context) SetTrustedProxies(proxies []*net.IPNet) {
@@ -155,11 +197,11 @@ func (c *Context) SetTrustedProxies(proxies []*net.IPNet) {
 func (c *Context) RemoteIP() string {
 	remote := c.remoteHost()
 	if c.isTrustedProxy(remote) {
-		if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
+		if xff := c.GetHeaderCanonical(canonicalXForwardedFor); xff != "" {
 			parts := strings.Split(xff, ",")
 			return strings.TrimSpace(parts[0])
 		}
-		if xri := c.GetHeader("X-Real-IP"); xri != "" {
+		if xri := c.GetHeaderCanonical(canonicalXRealIP); xri != "" {
 			return strings.TrimSpace(xri)
 		}
 	}
