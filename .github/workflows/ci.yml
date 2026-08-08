@@ -47,9 +47,12 @@ jobs:
             grep -E '^(--- FAIL|WARNING: DATA RACE|panic:|FAIL|ok  )' race.log | head -n 10 | while IFS= read -r line; do
               echo "::error::$line"
             done
-            tail -n 8 race.log | while IFS= read -r line; do
-              echo "::error::$line"
-            done
+            {
+              echo "### Race 失败日志"
+              grep -E '^(--- FAIL|WARNING: DATA RACE|panic:|FAIL|ok  )' race.log | head -n 40
+              echo "--- 末尾 ---"
+              tail -n 25 race.log
+            } >> "$GITHUB_STEP_SUMMARY"
             exit $status
           fi
 
