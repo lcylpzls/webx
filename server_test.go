@@ -1,0 +1,640 @@
+package webx
+
+import (
+	"context"
+	"crypto/tls"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/lcylpzls/errx"
+	"github.com/lcylpzls/logx"
+	"github.com/lcylpzls/webx/internal/core"
+	"github.com/quic-go/quic-go/http3"
+)
+
+func validConfig(t *testing.T) Config {
+	t.Helper()
+	cert, key := writeTestCert(t)
+	return Config{
+		TLSCertFile:     cert,
+		TLSKeyFile:      key,
+		ShutdownTimeout: 3 * time.Second,
+		RequestTimeout:  3 * time.Second,
+	}
+}
+
+// startServer 在 goroutine 中启动服务并等待监听就绪。
+func startServer(t *testing.T, s *Server) {
+	t.Helper()
+	errCh := make(chan error, 1)
+	go func() { errCh <- s.Start() }()
+	deadline := time.After(5 * time.Second)
+	for {
+		if s.ListenerAddr() != "" {
+			return
+		}
+		select {
+		case err := <-errCh:
+			t.Fatalf("Start 失败：%v", err)
+		case <-deadline:
+			t.Fatal("服务启动超时")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+func testHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+}
+
+func TestServerChainAPI(t *testing.T) {
+	s := NewServer(validConfig(t))
+	if s == nil {
+		t.Fatal("NewServer 返回 nil")
+	}
+	if got := s.WithLogger(DefaultLogger(logx.InfoLevel)); got != s {
+		t.Error("链式方法应返回自身")
+	}
+	if got := s.UseGlobalMiddleware(noopHandler); got != s {
+		t.Error("UseGlobalMiddleware 应返回自身")
+	}
+	if got := s.OverrideMiddleware(MiddlewareRequestID, noopHandler); got != s {
+		t.Error("OverrideMiddleware 应返回自身")
+	}
+	if got := s.DisableMiddleware(MiddlewareCORS); got != s {
+		t.Error("DisableMiddleware 应返回自身")
+	}
+	if got := s.EnableMiddleware(MiddlewareCORS); got != s {
+		t.Error("EnableMiddleware 应返回自身")
+	}
+	if got := s.RegisterRoute(Route{Method: "GET", Path: "/a", Handler: noopHandler}); got != s {
+		t.Error("RegisterRoute 应返回自身")
+	}
+	if got := s.RegisterRoutes([]Route{{Method: "GET", Path: "/b", Handler: noopHandler}}); got != s {
+		t.Error("RegisterRoutes 应返回自身")
+	}
+	if got := s.RegisterRouteGroup("/g", func(rg *RouteGroup) { rg.GET("/c", noopHandler) }); got != s {
+		t.Error("RegisterRouteGroup 应返回自身")
+	}
+	if got := s.UseHttp2Listen(":0"); got != s {
+		t.Error("UseHttp2Listen 应返回自身")
+	}
+	if got := s.UseHttp3Listen(":0"); got != s {
+		t.Error("UseHttp3Listen 应返回自身")
+	}
+	if got := s.UseUnixSocketListen("test.sock", 0); got != s {
+		t.Error("UseUnixSocketListen 应返回自身")
+	}
+	if got := s.EnableRateLimit(RateLimitOptions{QPS: 0, Window: 0}); got != s {
+		t.Error("非法限流参数应直接返回")
+	}
+	if got := s.EnableRateLimit(RateLimitOptions{QPS: 10, Window: time.Second}); got != s {
+		t.Error("EnableRateLimit 应返回自身")
+	}
+	if got := s.DisableRateLimit(); got != s {
+		t.Error("DisableRateLimit 应返回自身")
+	}
+	if got := s.ServeStaticDir("/static", t.TempDir()); got != s {
+		t.Error("ServeStaticDir 应返回自身")
+	}
+	if got := s.ServeStaticFS("/embed", http.Dir(t.TempDir())); got != s {
+		t.Error("ServeStaticFS 应返回自身")
+	}
+	if got := s.EnableSPA(http.Dir(t.TempDir()), "index.html"); got != s {
+		t.Error("EnableSPA 应返回自身")
+	}
+	if got := s.ListenerAddr(); got != "" {
+		t.Errorf("未启动时 ListenerAddr 应为空：%s", got)
+	}
+}
+
+func TestServerStartErrors(t *testing.T) {
+	// 无监听方式
+	s := NewServer(validConfig(t))
+	if err := s.Start(); !errx.Is(err, CodeStartFailed) {
+		t.Errorf("无监听方式错误不符：%v", err)
+	}
+	// 配置校验失败
+	s = NewServer(Config{})
+	s.UseHttp2Listen(":0")
+	if err := s.Start(); err == nil {
+		t.Error("非法配置应报错")
+	}
+	// Unix 平台检查失败
+	orig := checkUnixSocket
+	checkUnixSocket = func() error { return errors.New("平台不支持") }
+	defer func() { checkUnixSocket = orig }()
+	s = NewServer(validConfig(t))
+	s.UseUnixSocketListen("x.sock", 0o600)
+	if err := s.Start(); err == nil {
+		t.Error("平台检查失败应报错")
+	}
+	// HTTP/2 监听失败
+	s = NewServer(validConfig(t))
+	s.UseHttp2Listen("bad-addr")
+	if err := s.Start(); err == nil {
+		t.Error("非法 HTTP/2 地址应报错")
+	}
+	// 路由注册失败（非法参数名）
+	s = NewServer(validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{Method: "GET", Path: "/x/:", Handler: noopHandler})
+	if err := s.Start(); err == nil {
+		t.Error("非法路由应报错")
+	}
+	// 路由组注册失败
+	s = NewServer(validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRouteGroup("/g", func(rg *RouteGroup) { rg.GET("/x/:", noopHandler) })
+	if err := s.Start(); err == nil {
+		t.Error("非法分组路由应报错")
+	}
+	// 静态路由注册失败（非法前缀）
+	s = NewServer(validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.ServeStaticFS("/a/{p...}/b", http.Dir(t.TempDir()))
+	if err := s.Start(); err == nil {
+		t.Error("非法静态前缀应报错")
+	}
+	// 健康检查注册失败（非法路径）
+	cfg := validConfig(t)
+	cfg.HealthPath = "/x/:"
+	s = NewServer(cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	if err := s.Start(); err == nil {
+		t.Error("非法健康检查路径应报错")
+	}
+}
+
+func TestServerIntegration(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareRecovery = true
+	cfg.MiddlewareRequestID = true
+	cfg.MiddlewareTimeout = true
+	cfg.MiddlewareCORS = true
+	cfg.MiddlewareValidation = true
+	cfg.AccessLogEnabled = true
+	cfg.LogSuccessReq = true
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello-webx"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := NewServer(cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/ping",
+		Handler: func(c *core.Context) {
+			c.Success("pong", map[string]string{"id": c.Param("id")})
+		},
+	})
+	s.RegisterRouteGroup("/api/v2", func(rg *RouteGroup) {
+		rg.GET("/items", func(c *core.Context) { c.Success("ok", "items") })
+	})
+	s.ServeStaticDir("/static", dir)
+	startServer(t, s)
+
+	client := testHTTPClient()
+	base := "https://" + s.ListenerAddr()
+
+	// 正常路由 + 请求 ID
+	resp, err := client.Get(base + "/ping")
+	if err != nil {
+		t.Fatalf("GET /ping 失败：%v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "pong") {
+		t.Errorf("/ping 不符：%d %s", resp.StatusCode, body)
+	}
+	if resp.Header.Get("X-Request-ID") == "" {
+		t.Error("请求 ID 响应头缺失")
+	}
+
+	// 路由组
+	resp, err = client.Get(base + "/api/v2/items")
+	if err != nil {
+		t.Fatalf("GET /api/v2/items 失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("/api/v2/items 状态不符：%d", resp.StatusCode)
+	}
+
+	// 健康检查
+	resp, err = client.Get(base + "/health")
+	if err != nil {
+		t.Fatalf("GET /health 失败：%v", err)
+	}
+	hb, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(hb), "运行中") {
+		t.Errorf("/health 不符：%d %s", resp.StatusCode, hb)
+	}
+
+	// 404 / 405
+	resp, err = client.Get(base + "/nope")
+	if err != nil {
+		t.Fatalf("GET /nope 失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("404 状态不符：%d", resp.StatusCode)
+	}
+	req, _ := http.NewRequest(http.MethodPost, base+"/ping", nil)
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatalf("POST /ping 失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusMethodNotAllowed || resp.Header.Get("Allow") != "GET" {
+		t.Errorf("405 不符：%d %s", resp.StatusCode, resp.Header.Get("Allow"))
+	}
+
+	// 静态文件
+	resp, err = client.Get(base + "/static/a.txt")
+	if err != nil {
+		t.Fatalf("静态文件请求失败：%v", err)
+	}
+	sb, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(sb) != "hello-webx" {
+		t.Errorf("静态文件内容不符：%s", sb)
+	}
+
+	// 启动后修改配置仅告警
+	if got := s.RegisterRoute(Route{Method: "GET", Path: "/late", Handler: noopHandler}); got != s {
+		t.Error("RegisterRoute 应返回自身")
+	}
+	_ = s.WithLogger(s.logger)
+	_ = s.UseGlobalMiddleware(noopHandler)
+	_ = s.OverrideMiddleware(MiddlewareCORS, noopHandler)
+	_ = s.DisableMiddleware(MiddlewareCORS)
+	_ = s.EnableMiddleware(MiddlewareCORS)
+	_ = s.RegisterRoutes(nil)
+	_ = s.RegisterRouteGroup("/x", func(rg *RouteGroup) {})
+	_ = s.UseHttp2Listen(":0")
+	_ = s.UseHttp3Listen(":0")
+	_ = s.UseUnixSocketListen("x.sock", 0)
+	_ = s.EnableRateLimit(RateLimitOptions{QPS: 1, Window: time.Second})
+	_ = s.DisableRateLimit()
+	_ = s.ServeStaticDir("/s2", dir)
+	_ = s.ServeStaticFS("/s3", http.Dir(dir))
+	_ = s.EnableSPA(http.Dir(dir), "index.html")
+
+	// 重复启动
+	if err := s.Start(); !errx.Is(err, CodeStartFailed) {
+		t.Errorf("重复启动错误不符：%v", err)
+	}
+
+	// 优雅关闭（幂等）
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.Stop(ctx); err != nil {
+		t.Fatalf("Stop 失败：%v", err)
+	}
+	if err := s.Stop(ctx); err != nil {
+		t.Errorf("重复 Stop 应成功：%v", err)
+	}
+}
+
+func TestServerRecoveryAndRateLimit(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareRecovery = true
+	cfg.MiddlewareRequestID = true
+	s := NewServer(cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.EnableRateLimit(RateLimitOptions{QPS: 1, Window: time.Second, CleanupInterval: time.Millisecond})
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/boom",
+		Handler: func(c *core.Context) {
+			panic("测试 panic")
+		},
+	})
+	s.RegisterRoute(Route{Method: "GET", Path: "/ok", Handler: func(c *core.Context) { c.Success("ok", nil) }})
+	startServer(t, s)
+
+	client := testHTTPClient()
+	base := "https://" + s.ListenerAddr()
+
+	resp, err := client.Get(base + "/boom")
+	if err != nil {
+		t.Fatalf("GET /boom 失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("panic 应 500：%d", resp.StatusCode)
+	}
+
+	// 限流：1 QPS，第二次应 429
+	resp, _ = client.Get(base + "/ok")
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	resp, _ = client.Get(base + "/ok")
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Errorf("限流应 429：%d", resp.StatusCode)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.Stop(ctx); err != nil {
+		t.Fatalf("Stop 失败：%v", err)
+	}
+}
+
+func TestServerHTTP3(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareRequestID = true
+	h3Addr := freeUDPAddr(t)
+	s := NewServer(cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp3Listen(h3Addr)
+	s.RegisterRoute(Route{Method: "GET", Path: "/ping", Handler: func(c *core.Context) { c.Success("h3", nil) }})
+	startServer(t, s)
+
+	transport := &http3.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	defer transport.Close()
+	client := &http.Client{Transport: transport, Timeout: 10 * time.Second}
+	resp, err := client.Get("https://" + h3Addr + "/ping")
+	if err != nil {
+		t.Fatalf("HTTP/3 请求失败：%v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "h3") {
+		t.Errorf("HTTP/3 响应不符：%d %s", resp.StatusCode, body)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.Stop(ctx); err != nil {
+		t.Fatalf("Stop 失败：%v", err)
+	}
+}
+
+func TestServerUnixSocket(t *testing.T) {
+	if err := unixSocketSupported(); err != nil {
+		t.Skipf("当前平台不支持 Unix Socket：%v", err)
+	}
+	path := filepath.Join(t.TempDir(), "webx.sock")
+	s := NewServer(validConfig(t))
+	s.UseUnixSocketListen(path, 0o600)
+	s.RegisterRoute(Route{Method: "GET", Path: "/ping", Handler: func(c *core.Context) { c.Success("unix", nil) }})
+	startServer(t, s)
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return net.Dial("unix", path)
+			},
+		},
+	}
+	resp, err := client.Get("http://unix/ping")
+	if err != nil {
+		t.Fatalf("Unix Socket 请求失败：%v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "unix") {
+		t.Errorf("Unix 响应不符：%d %s", resp.StatusCode, body)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.Stop(ctx); err != nil {
+		t.Fatalf("Stop 失败：%v", err)
+	}
+	if runtime.GOOS != "windows" {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("Socket 文件应被清理：%v", err)
+		}
+	}
+}
+
+func TestServerStartRollback(t *testing.T) {
+	s := NewServer(validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp3Listen("bad-addr")
+	if err := s.Start(); err == nil {
+		t.Error("非法 QUIC 地址应启动失败")
+	}
+	// HTTP/2 + HTTP/3 成功、Unix 失败 → 回滚关闭全部监听器
+	s = NewServer(validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp3Listen(freeUDPAddr(t))
+	dir := t.TempDir()
+	_ = os.Mkdir(filepath.Join(dir, "sub"), 0o700)
+	_ = os.WriteFile(filepath.Join(dir, "sub", "x"), []byte("x"), 0o600)
+	s.UseUnixSocketListen(dir, 0o600) // 目录 → 创建失败
+	if err := s.Start(); err == nil {
+		t.Error("Unix 目录路径应启动失败")
+	}
+}
+
+func TestServerHealthUserRegistered(t *testing.T) {
+	s := NewServer(validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/health",
+		Handler: func(c *core.Context) {
+			_ = c.String(http.StatusOK, "custom-health")
+		},
+	})
+	startServer(t, s)
+	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/health")
+	if err != nil {
+		t.Fatalf("GET /health 失败：%v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(body) != "custom-health" {
+		t.Errorf("用户自定义健康检查应生效：%s", body)
+	}
+	_ = body
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+
+	// 通过路由分组注册 /health 同样跳过自动注册
+	s2 := NewServer(validConfig(t))
+	s2.UseHttp2Listen("127.0.0.1:0")
+	s2.RegisterRouteGroup("", func(rg *RouteGroup) {
+		rg.GET("/health", func(c *core.Context) { _ = c.String(http.StatusOK, "group-health") })
+	})
+	startServer(t, s2)
+	resp, err = testHTTPClient().Get("https://" + s2.ListenerAddr() + "/health")
+	if err != nil {
+		t.Fatalf("GET /health 失败：%v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(body) != "group-health" {
+		t.Errorf("分组自定义健康检查应生效：%s", body)
+	}
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel2()
+	_ = s2.Stop(ctx2)
+}
+
+func TestServerShutdownErrorWrapped(t *testing.T) {
+	s := NewServer(validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	startServer(t, s)
+	// 注入无法清理的 Unix Socket 路径（非空目录），触发关闭错误
+	nonEmptyDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(nonEmptyDir, "x"), []byte("x"), 0o600)
+	s.unixEnabled = true
+	s.unixSocketPath = nonEmptyDir
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.Stop(ctx); !errx.Is(err, CodeShutdownFailed) {
+		t.Errorf("关闭错误应包装为 WEBX_SHUTDOWN_FAILED：%v", err)
+	}
+}
+
+func TestServerUnixServeErrorLogged(t *testing.T) {
+	s := NewServer(validConfig(t))
+	s.UseUnixSocketListen(filepath.Join(t.TempDir(), "x.sock"), 0o600)
+	errCh := make(chan error, 1)
+	go func() { errCh <- s.Start() }()
+	deadline := time.After(5 * time.Second)
+	for s.ListenerAddr() == "" {
+		select {
+		case err := <-errCh:
+			t.Fatalf("Start 失败：%v", err)
+		case <-deadline:
+			t.Fatal("启动超时")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	// 直接关闭监听器，使 Serve 返回非 ErrServerClosed 错误（触发错误日志分支）
+	s.closeListeners()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Errorf("Start 应正常返回：%v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("服务未退出")
+	}
+}
+
+func TestRegisterBuiltinMiddlewareDefaults(t *testing.T) {
+	s := NewServer(Config{})
+	s.registerBuiltinMiddleware()
+	chain := s.mwManager.Build(context.Background())
+	if len(chain) != 0 {
+		t.Errorf("默认配置下不应启用任何中间件：%d", len(chain))
+	}
+}
+
+func TestServerStaticAndSPA(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "app.js"), []byte("console.log(1)"), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>spa</html>"), 0o600)
+
+	s := NewServer(validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.ServeStaticDir("/static", dir)
+	s.EnableSPA(http.Dir(dir), "index.html")
+	startServer(t, s)
+	client := testHTTPClient()
+	base := "https://" + s.ListenerAddr()
+
+	resp, _ := client.Get(base + "/static/app.js")
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(body) != "console.log(1)" {
+		t.Errorf("静态文件不符：%s", body)
+	}
+	resp, _ = client.Get(base + "/app/route")
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(body) != "<html>spa</html>" {
+		t.Errorf("SPA 回退不符：%s", body)
+	}
+	req, _ := http.NewRequest(http.MethodPost, base+"/app/route", nil)
+	resp, _ = client.Do(req)
+	_, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("SPA 非 GET 应 404：%d", resp.StatusCode)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestServerWaitSignal(t *testing.T) {
+	logger := DefaultLogger(logx.InfoLevel)
+	defer logger.Close()
+	s := &Server{logger: logger, config: Config{ShutdownTimeout: time.Second}}
+	s.signalCtx, s.signalCancel = context.WithCancel(context.Background())
+	quit := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	go func() {
+		s.waitSignal(quit)
+		close(done)
+	}()
+	quit <- syscall.SIGTERM
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("waitSignal 未在信号后返回")
+	}
+
+	s2 := &Server{logger: logger, config: Config{ShutdownTimeout: time.Second}}
+	s2.signalCtx, s2.signalCancel = context.WithCancel(context.Background())
+	done2 := make(chan struct{})
+	go func() {
+		s2.waitSignal(make(chan os.Signal))
+		close(done2)
+	}()
+	s2.signalCancel()
+	select {
+	case <-done2:
+	case <-time.After(2 * time.Second):
+		t.Fatal("waitSignal 未在取消后返回")
+	}
+}
+
+// freeUDPAddr 返回一个空闲的 UDP 地址（127.0.0.1:port）。
+func freeUDPAddr(t *testing.T) string {
+	t.Helper()
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := pc.LocalAddr().String()
+	pc.Close()
+	return addr
+}

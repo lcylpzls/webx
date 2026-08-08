@@ -1,0 +1,10 @@
+.idea/
+.vscode/
+coverage.out
+*.exe
+.git/
+
+# AI 工具本地文件（不推送）
+.agents/
+.codex/
+AGENTS.md
