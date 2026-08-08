@@ -41,12 +41,16 @@ jobs:
       - name: Race detector (Linux)
         if: runner.os == 'Linux'
         run: |
-          go test -race -count=1 ./... 2>&1 | tee race.log
-          if [ ${PIPESTATUS[0]} -ne 0 ]; then
-            sed -n '1,80p' race.log | while IFS= read -r line; do
-              echo "::error::$line"
-            done
-            exit 1
+          set +e
+          go test -race -count=1 ./... > race.log 2>&1
+          status=$?
+          if [ $status -ne 0 ]; then
+            REPORT=$(grep -A 60 'WARNING: DATA RACE' race.log | head -n 80 | tr '\n' ' ')
+            if [ -z "$REPORT" ]; then
+              REPORT=$(tail -n 40 race.log | tr '\n' ' ')
+            fi
+            echo "::error::$REPORT"
+            exit $status
           fi
 
       - name: Coverage (Linux)
