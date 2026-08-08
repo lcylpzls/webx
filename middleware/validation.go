@@ -20,8 +20,8 @@ func Validation() core.HandlerFunc {
 			c.Next()
 			return
 		}
-		if !isJSONContentType(contentType) {
-			c.AbortWithStatusJSON(http.StatusBadRequest, "请求参数校验失败：Content-Type 必须为 application/json", nil)
+		if !isJSONContentType(contentType) && !isMultipartForm(contentType) {
+			c.AbortWithStatusJSON(http.StatusBadRequest, "请求参数校验失败：Content-Type 必须为 application/json 或 multipart/form-data", nil)
 			return
 		}
 		if c.Request().ContentLength > 10*1024*1024 {
@@ -38,6 +38,14 @@ func isJSONContentType(ct string) bool {
 		ct = ct[:i]
 	}
 	return ct == "application/json"
+}
+
+// isMultipartForm 检查 Content-Type 是否为 multipart/form-data。
+func isMultipartForm(ct string) bool {
+	if i := stringsIndexByte(ct, ';'); i >= 0 {
+		ct = ct[:i]
+	}
+	return ct == "multipart/form-data"
 }
 
 // stringsIndexByte 返回字节在字符串中的位置，避免额外导入 strings。

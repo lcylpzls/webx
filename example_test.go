@@ -17,3 +17,10 @@ func ExampleRespondError() {
 	// Output:
 	// 404
 }
+
+func ExampleStatusForError() {
+	err := errx.New(errx.KindForbidden, "NO_PERMISSION", "无权限")
+	fmt.Println(webx.StatusForError(err))
+	// Output:
+	// 403
+}

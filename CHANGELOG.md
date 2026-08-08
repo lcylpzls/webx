@@ -2,6 +2,15 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.11.0] - 2026-08-08
+
+### 增强
+
+- 路由分组前缀支持参数（如 `/api/:ver`），补齐专项测试；
+- Validation 中间件支持 multipart/form-data 请求体大小限制（10MB）；
+- 新增 godoc 示例 `ExampleStatusForError`；
+- 新增 Dependabot（Go 模块与 GitHub Actions 每周更新检查）。
+
 ## [v0.10.0] - 2026-08-08
 
 ### 新增

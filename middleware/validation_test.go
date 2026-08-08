@@ -45,7 +45,7 @@ func TestValidationWrongContentType(t *testing.T) {
 	if reached || rec.Code != http.StatusBadRequest {
 		t.Errorf("错误 Content-Type 应 400：%v %d", reached, rec.Code)
 	}
-	if !contains(rec.Body.String(), "Content-Type 必须为 application/json") {
+	if !contains(rec.Body.String(), "Content-Type 必须为 application/json 或 multipart/form-data") {
 		t.Errorf("400 消息不符：%s", rec.Body.String())
 	}
 }
@@ -69,11 +69,34 @@ func TestValidationPasses(t *testing.T) {
 	}
 }
 
+func TestValidationMultipart(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("a=1"))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=x")
+	rec, reached := runValidation(t, req)
+	if !reached || rec.Code != http.StatusOK {
+		t.Errorf("合法 multipart 应放行：%v %d", reached, rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("x"))
+	req.Header.Set("Content-Type", "multipart/form-data")
+	req.ContentLength = 11 * 1024 * 1024
+	rec, reached = runValidation(t, req)
+	if reached || rec.Code != http.StatusBadRequest {
+		t.Errorf("超大 multipart 应 400：%v %d", reached, rec.Code)
+	}
+}
+
 func TestIsJSONContentType(t *testing.T) {
 	if !isJSONContentType("application/json") || !isJSONContentType("application/json; charset=utf-8") {
 		t.Error("JSON Content-Type 判定不符")
 	}
 	if isJSONContentType("text/plain") {
 		t.Error("非 JSON Content-Type 判定不符")
+	}
+	if !isMultipartForm("multipart/form-data") || !isMultipartForm("multipart/form-data; boundary=x") {
+		t.Error("multipart Content-Type 判定不符")
+	}
+	if isMultipartForm("application/json") {
+		t.Error("非 multipart 判定不符")
 	}
 }

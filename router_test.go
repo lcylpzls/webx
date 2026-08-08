@@ -320,4 +320,21 @@ func TestRouterConcurrentPooled(t *testing.T) {
 	wg.Wait()
 }
 
+func TestRouteGroupPrefixParams(t *testing.T) {
+	rg := &RouteGroup{prefix: "/api/:ver"}
+	rg.GET("/users/:id", func(c *core.Context) {
+		_ = c.String(http.StatusOK, "%s|%s", c.Param("ver"), c.Param("id"))
+	})
+	route := rg.flatten()[0]
+	rt := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
+	if err := rt.Handle(route.Method, route.Path, []core.HandlerFunc{route.Handler}); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/users/42", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "v1|42" {
+		t.Errorf("分组前缀参数不符：%d %s", rec.Code, rec.Body.String())
+	}
+}
+
 func noopCore(*core.Context) {}
