@@ -2,6 +2,22 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.27.0] - 2026-08-08
+
+### 新增
+
+- 文件上传：`Context.FormFile(name)` 获取上传文件、
+  `Context.SaveUploadedFile(fh, dest)` 安全落盘（沿用 `max_body_bytes` 限制）；
+- 全局请求体限制：`max_body_bytes` 对所有请求生效，Content-Length 超限直接 413，
+  chunked 请求体由 MaxBytesReader 兜底；
+- CORS 增加 `ExposeHeaders`（默认暴露 X-Request-ID）；
+- 安全头增加 `Cross-Origin-Resource-Policy` 与 `Cross-Origin-Embedder-Policy`；
+- 限流拒绝响应增加 `Retry-After` 头（按令牌桶恢复时间向上取整）。
+
+### 变更
+
+- 超大请求体由 Bind 阶段返回 400 改为全局 413（行为变更）。
+
 ## [v0.26.0] - 2026-08-08
 
 ### 新增

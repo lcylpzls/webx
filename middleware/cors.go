@@ -13,6 +13,7 @@ type CORSConfig struct {
 	AllowedOrigins   []string
 	AllowedMethods   []string
 	AllowedHeaders   []string
+	ExposeHeaders    []string
 	MaxAge           int
 	AllowCredentials bool
 }
@@ -45,6 +46,9 @@ func CORS(cfg CORSConfig) core.HandlerFunc {
 		if len(cfg.AllowedHeaders) > 0 {
 			c.Header("Access-Control-Allow-Headers", strings.Join(cfg.AllowedHeaders, ", "))
 		}
+		if len(cfg.ExposeHeaders) > 0 {
+			c.Header("Access-Control-Expose-Headers", strings.Join(cfg.ExposeHeaders, ", "))
+		}
 		if cfg.AllowCredentials {
 			c.Header("Access-Control-Allow-Credentials", "true")
 		}
@@ -66,6 +70,7 @@ func DefaultCORSConfig() CORSConfig {
 		AllowedOrigins: []string{"*"},
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		AllowedHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"},
+		ExposeHeaders:  []string{"X-Request-ID"},
 		MaxAge:         86400,
 	}
 }

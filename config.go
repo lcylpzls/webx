@@ -70,6 +70,8 @@ type Config struct {
 	CORSAllowedMethods []string `toml:"cors_allowed_methods"`
 	// CORSAllowedHeaders CORS 允许的请求头列表。
 	CORSAllowedHeaders []string `toml:"cors_allowed_headers"`
+	// CORSExposeHeaders CORS 允许浏览器读取的响应头列表。
+	CORSExposeHeaders []string `toml:"cors_expose_headers"`
 	// CORSMaxAge CORS 预检请求的缓存时间。
 	CORSMaxAge time.Duration `toml:"cors_max_age"`
 	// CORSAllowCredentials 是否允许携带凭据。
@@ -99,6 +101,10 @@ type Config struct {
 	SecurityPermissionsPolicy string `toml:"security_permissions_policy"`
 	// SecurityCrossOriginOpenerPolicy Cross-Origin-Opener-Policy 取值（空=不设置）。
 	SecurityCrossOriginOpenerPolicy string `toml:"security_cross_origin_opener_policy"`
+	// SecurityCrossOriginResourcePolicy Cross-Origin-Resource-Policy 取值（空=不设置）。
+	SecurityCrossOriginResourcePolicy string `toml:"security_cross_origin_resource_policy"`
+	// SecurityCrossOriginEmbedderPolicy Cross-Origin-Embedder-Policy 取值（空=不设置）。
+	SecurityCrossOriginEmbedderPolicy string `toml:"security_cross_origin_embedder_policy"`
 	// GzipMinSize 响应压缩最小字节数（0=默认 1024）。
 	GzipMinSize int `toml:"gzip_min_size"`
 	// Debug 调试模式：Recovery 响应携带 panic 摘要（生产环境保持 false）。
@@ -224,6 +230,7 @@ func (c *Config) Validate() error {
 		c.CORSAllowedOrigins = []string{"*"}
 		c.CORSAllowedMethods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}
 		c.CORSAllowedHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"}
+		c.CORSExposeHeaders = []string{"X-Request-ID"}
 	}
 	return nil
 }

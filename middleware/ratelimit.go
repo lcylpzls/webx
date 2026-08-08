@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"math"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -108,6 +110,24 @@ func (rl *RateLimiter) Rejected() uint64 {
 	return rl.rejected.Load()
 }
 
+// RetryAfter 返回指定 key 恢复 1 枚令牌所需的等待时间（秒，向上取整）。
+func (rl *RateLimiter) RetryAfter(key string) time.Duration {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if rl.qps <= 0 {
+		return 0
+	}
+	bucket, ok := rl.buckets[key]
+	if !ok {
+		return 0
+	}
+	missing := 1 - bucket.tokens
+	if missing <= 0 {
+		return 0
+	}
+	return time.Duration(math.Ceil(missing/float64(rl.qps))) * time.Second
+}
+
 // Cleanup 清理超过 window*10 未活动的桶。
 func (rl *RateLimiter) Cleanup(interval time.Duration) {
 	rl.mu.Lock()
@@ -143,6 +163,9 @@ func RateLimit(rl *RateLimiter) core.HandlerFunc {
 			key = rl.keyFunc(c)
 		}
 		if !rl.Allow(key) {
+			if retryAfter := rl.RetryAfter(key); retryAfter > 0 {
+				c.Header("Retry-After", strconv.FormatInt(int64(retryAfter.Seconds()), 10))
+			}
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, "请求过于频繁，请稍后重试", nil)
 			return
 		}

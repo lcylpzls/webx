@@ -756,6 +756,10 @@ func (s *Server) registerBuiltinMiddleware() {
 	if !s.config.MiddlewareRequestID {
 		s.mwManager.Disable("request_id")
 	}
+	s.mwManager.RegisterBuiltin("body_limit", middleware.BodyLimit(s.config.MaxBodyBytes))
+	if s.config.MaxBodyBytes <= 0 {
+		s.mwManager.Disable("body_limit")
+	}
 	s.mwManager.RegisterBuiltin("timeout", middleware.Timeout(s.config.RequestTimeout))
 	if !s.config.MiddlewareTimeout {
 		s.mwManager.Disable("timeout")
@@ -764,11 +768,15 @@ func (s *Server) registerBuiltinMiddleware() {
 		AllowedOrigins:   s.config.CORSAllowedOrigins,
 		AllowedMethods:   s.config.CORSAllowedMethods,
 		AllowedHeaders:   s.config.CORSAllowedHeaders,
+		ExposeHeaders:    s.config.CORSExposeHeaders,
 		MaxAge:           int(s.config.CORSMaxAge.Seconds()),
 		AllowCredentials: s.config.CORSAllowCredentials,
 	}
 	if len(corsCfg.AllowedOrigins) == 0 {
 		corsCfg = middleware.DefaultCORSConfig()
+		if len(s.config.CORSExposeHeaders) > 0 {
+			corsCfg.ExposeHeaders = s.config.CORSExposeHeaders
+		}
 	}
 	s.mwManager.RegisterBuiltin("cors", middleware.CORS(corsCfg))
 	if !s.config.MiddlewareCORS {
@@ -779,12 +787,14 @@ func (s *Server) registerBuiltinMiddleware() {
 		s.mwManager.Disable("validation")
 	}
 	s.mwManager.RegisterBuiltin("security", middleware.SecurityHeaders(middleware.SecurityHeadersOptions{
-		ContentTypeNoSniff:      true,
-		FrameDeny:               true,
-		ReferrerPolicy:          s.config.SecurityReferrerPolicy,
-		HSTSMaxAge:              time.Duration(s.config.SecurityHSTSMaxAge) * time.Second,
-		PermissionsPolicy:       s.config.SecurityPermissionsPolicy,
-		CrossOriginOpenerPolicy: s.config.SecurityCrossOriginOpenerPolicy,
+		ContentTypeNoSniff:        true,
+		FrameDeny:                 true,
+		ReferrerPolicy:            s.config.SecurityReferrerPolicy,
+		HSTSMaxAge:                time.Duration(s.config.SecurityHSTSMaxAge) * time.Second,
+		PermissionsPolicy:         s.config.SecurityPermissionsPolicy,
+		CrossOriginOpenerPolicy:   s.config.SecurityCrossOriginOpenerPolicy,
+		CrossOriginResourcePolicy: s.config.SecurityCrossOriginResourcePolicy,
+		CrossOriginEmbedderPolicy: s.config.SecurityCrossOriginEmbedderPolicy,
 	}))
 	if !s.config.MiddlewareSecurity {
 		s.mwManager.Disable("security")

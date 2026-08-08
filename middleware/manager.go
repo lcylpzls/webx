@@ -29,6 +29,7 @@ func NewManager() *Manager {
 		order: []string{
 			"recovery",
 			"request_id",
+			"body_limit",
 			"timeout",
 			"cors",
 			"validation",

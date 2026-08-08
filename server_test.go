@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -288,8 +289,8 @@ func TestServerMaxBodyBytes(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("超大请求体应 400：%d %s", resp.StatusCode, body)
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Errorf("超大请求体应 413：%d %s", resp.StatusCode, body)
 	}
 
 	resp, err = client.Post(base+"/echo", "application/json", strings.NewReader(`{"a":"b"}`))
@@ -518,6 +519,9 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusTooManyRequests {
 		t.Errorf("限流应 429：%d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Retry-After"); got != "1" {
+		t.Errorf("限流响应应带 Retry-After：%s", got)
 	}
 	m := s.Metrics()
 	if m.Panics < 1 || m.RateLimited < 1 {
@@ -835,6 +839,8 @@ func TestServerSecurityHeaders(t *testing.T) {
 	cfg.MiddlewareSecurity = true
 	cfg.SecurityHSTSMaxAge = 3600
 	cfg.SecurityReferrerPolicy = "no-referrer"
+	cfg.SecurityCrossOriginResourcePolicy = "same-origin"
+	cfg.SecurityCrossOriginEmbedderPolicy = "require-corp"
 	s := newTestServer(t, cfg)
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.RegisterRoute(Route{
@@ -852,7 +858,9 @@ func TestServerSecurityHeaders(t *testing.T) {
 	if resp.Header.Get("X-Content-Type-Options") != "nosniff" ||
 		resp.Header.Get("X-Frame-Options") != "DENY" ||
 		resp.Header.Get("Referrer-Policy") != "no-referrer" ||
-		resp.Header.Get("Strict-Transport-Security") != "max-age=3600" {
+		resp.Header.Get("Strict-Transport-Security") != "max-age=3600" ||
+		resp.Header.Get("Cross-Origin-Resource-Policy") != "same-origin" ||
+		resp.Header.Get("Cross-Origin-Embedder-Policy") != "require-corp" {
 		t.Errorf("安全头缺失：%v", resp.Header)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1438,6 +1446,22 @@ func TestRegisterBuiltinMiddlewareDefaults(t *testing.T) {
 	chain := s.mwManager.Build(context.Background())
 	if len(chain) != 0 {
 		t.Errorf("默认配置下不应启用任何中间件：%d", len(chain))
+	}
+}
+
+func TestRegisterBuiltinMiddlewareCORSExposeOverride(t *testing.T) {
+	s := newTestServer(t, Config{
+		MiddlewareCORS:    true,
+		CORSExposeHeaders: []string{"X-Trace-ID"},
+	})
+	s.registerBuiltinMiddleware()
+	chain := s.mwManager.Build(context.Background())
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetHandlers(append(chain, func(c *core.Context) { c.Success("ok", nil) }))
+	c.Run()
+	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "X-Trace-ID" {
+		t.Errorf("默认 CORS 未保留自定义 ExposeHeaders：%s", got)
 	}
 }
 

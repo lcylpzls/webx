@@ -14,12 +14,14 @@ func TestSecurityHeaders(t *testing.T) {
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
 		SecurityHeaders(SecurityHeadersOptions{
-			ContentTypeNoSniff:      true,
-			FrameDeny:               true,
-			ReferrerPolicy:          "no-referrer",
-			HSTSMaxAge:              3600 * time.Second,
-			PermissionsPolicy:       "camera=()",
-			CrossOriginOpenerPolicy: "same-origin",
+			ContentTypeNoSniff:        true,
+			FrameDeny:                 true,
+			ReferrerPolicy:            "no-referrer",
+			HSTSMaxAge:                3600 * time.Second,
+			PermissionsPolicy:         "camera=()",
+			CrossOriginOpenerPolicy:   "same-origin",
+			CrossOriginResourcePolicy: "same-origin",
+			CrossOriginEmbedderPolicy: "require-corp",
 		}),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
@@ -42,6 +44,12 @@ func TestSecurityHeaders(t *testing.T) {
 	if rec.Header().Get("Cross-Origin-Opener-Policy") != "same-origin" {
 		t.Error("Cross-Origin-Opener-Policy 头缺失")
 	}
+	if rec.Header().Get("Cross-Origin-Resource-Policy") != "same-origin" {
+		t.Error("Cross-Origin-Resource-Policy 头缺失")
+	}
+	if rec.Header().Get("Cross-Origin-Embedder-Policy") != "require-corp" {
+		t.Error("Cross-Origin-Embedder-Policy 头缺失")
+	}
 }
 
 func TestSecurityHeadersDisabled(t *testing.T) {
@@ -52,7 +60,8 @@ func TestSecurityHeadersDisabled(t *testing.T) {
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
-	if rec.Header().Get("X-Content-Type-Options") != "" || rec.Header().Get("Strict-Transport-Security") != "" {
+	if rec.Header().Get("X-Content-Type-Options") != "" || rec.Header().Get("Strict-Transport-Security") != "" ||
+		rec.Header().Get("Cross-Origin-Resource-Policy") != "" || rec.Header().Get("Cross-Origin-Embedder-Policy") != "" {
 		t.Errorf("未启用项不应设置响应头：%v", rec.Header())
 	}
 }

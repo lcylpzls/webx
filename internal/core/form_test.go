@@ -2,10 +2,14 @@ package core
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -227,5 +231,109 @@ func TestBindQueryUnexportedField(t *testing.T) {
 	}
 	if m.hidden != "" {
 		t.Error("未导出字段不应被绑定")
+	}
+}
+
+func TestFormFileAndSave(t *testing.T) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile("file", "a.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("文件内容")); err != nil {
+		t.Fatal(err)
+	}
+	_ = mw.Close()
+	req := httptest.NewRequest(http.MethodPost, "/", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	c := NewContext(httptest.NewRecorder(), req)
+	fh, err := c.FormFile("file")
+	if err != nil {
+		t.Fatalf("FormFile 失败：%v", err)
+	}
+	if fh.Filename != "a.txt" {
+		t.Errorf("文件名不符：%s", fh.Filename)
+	}
+	dest := filepath.Join(t.TempDir(), "out.txt")
+	if err := c.SaveUploadedFile(fh, dest); err != nil {
+		t.Fatalf("SaveUploadedFile 失败：%v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "文件内容" {
+		t.Errorf("落盘内容不符：%s", got)
+	}
+	if _, err := c.FormFile("missing"); err == nil {
+		t.Error("缺失文件应报错")
+	}
+}
+
+func TestFormFileMaxBytes(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 100)))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=x")
+	c := NewContext(httptest.NewRecorder(), req)
+	c.SetMaxBodyBytes(10)
+	if _, err := c.FormFile("file"); err == nil {
+		t.Error("超大请求体应报错")
+	}
+	fh := &multipart.FileHeader{Size: 100}
+	c2 := NewContext(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/", nil))
+	c2.SetMaxBodyBytes(10)
+	if err := c2.SaveUploadedFile(fh, filepath.Join(t.TempDir(), "x")); err == nil {
+		t.Error("文件大小超限应报错")
+	}
+}
+
+func TestFormFileMalformedMultipart(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("这不是 multipart 内容"))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=x")
+	c := NewContext(httptest.NewRecorder(), req)
+	if _, err := c.FormFile("file"); err == nil {
+		t.Error("损坏的 multipart 应报错")
+	}
+}
+
+func TestSaveUploadedFileErrors(t *testing.T) {
+	c := NewContext(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/", nil))
+	if err := c.SaveUploadedFile(nil, "x"); err == nil {
+		t.Error("nil 文件应报错")
+	}
+
+	origOpen := openMultipartFile
+	openMultipartFile = func(*multipart.FileHeader) (multipart.File, error) {
+		return nil, errors.New("打开失败")
+	}
+	err := c.SaveUploadedFile(&multipart.FileHeader{}, filepath.Join(t.TempDir(), "x"))
+	openMultipartFile = origOpen
+	if err == nil {
+		t.Error("打开失败应报错")
+	}
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, _ := mw.CreateFormFile("file", "a.txt")
+	_, _ = part.Write([]byte("内容"))
+	_ = mw.Close()
+	req := httptest.NewRequest(http.MethodPost, "/", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	c2 := NewContext(httptest.NewRecorder(), req)
+	fh, err := c2.FormFile("file")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := c2.SaveUploadedFile(fh, dir); err == nil {
+		t.Error("目标为目录应报错")
+	}
+
+	origCopy := copyFile
+	copyFile = func(io.Writer, io.Reader) (int64, error) { return 0, errors.New("复制失败") }
+	err = c2.SaveUploadedFile(fh, filepath.Join(dir, "out.txt"))
+	copyFile = origCopy
+	if err == nil {
+		t.Error("复制失败应报错")
 	}
 }

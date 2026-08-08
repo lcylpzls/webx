@@ -36,6 +36,26 @@ func TestRateLimiterTokenCap(t *testing.T) {
 	}
 }
 
+func TestRateLimiterRetryAfter(t *testing.T) {
+	rl := NewRateLimiter(2, time.Second, nil)
+	if got := rl.RetryAfter("1.1.1.1"); got != 0 {
+		t.Errorf("无桶应返回 0：%v", got)
+	}
+	rl.Allow("1.1.1.1") // tokens 2→1
+	if got := rl.RetryAfter("1.1.1.1"); got != 0 {
+		t.Errorf("令牌充足应返回 0：%v", got)
+	}
+	rl.Allow("1.1.1.1") // tokens 1→0
+	if got := rl.RetryAfter("1.1.1.1"); got != time.Second {
+		t.Errorf("缺 1 枚令牌应返回 1s：%v", got)
+	}
+	rlZero := NewRateLimiter(0, time.Second, nil)
+	rlZero.Allow("8.8.8.8")
+	if got := rlZero.RetryAfter("8.8.8.8"); got != 0 {
+		t.Errorf("qps=0 应返回 0：%v", got)
+	}
+}
+
 func TestRateLimiterMaxBuckets(t *testing.T) {
 	rl := NewRateLimiter(10, time.Second, nil)
 	rl.SetMaxBuckets(1)
@@ -106,6 +126,37 @@ func TestRateLimitMiddleware(t *testing.T) {
 	}
 	if got := run("1.1.1.1"); got != http.StatusTooManyRequests {
 		t.Errorf("超限应 429：%d", got)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "1.1.1.1:1234"
+	c := core.NewContext(rec, req)
+	c.SetHandlers([]core.HandlerFunc{RateLimit(rl), func(c *core.Context) { c.Success("ok", nil) }})
+	c.Run()
+	if got := rec.Header().Get("Retry-After"); got != "1" {
+		t.Errorf("Retry-After 头不符：%s", got)
+	}
+}
+
+func TestRateLimitMiddlewareNoRetryAfter(t *testing.T) {
+	rl := NewRateLimiter(10, time.Second, nil)
+	rl.SetMaxBuckets(1)
+	run := func(ip string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = ip + ":1234"
+		rec := httptest.NewRecorder()
+		c := core.NewContext(rec, req)
+		c.SetHandlers([]core.HandlerFunc{RateLimit(rl), func(c *core.Context) { c.Success("ok", nil) }})
+		c.Run()
+		return rec
+	}
+	run("1.1.1.1")
+	rec := run("2.2.2.2")
+	if rec.Code != http.StatusTooManyRequests {
+		t.Errorf("桶上限拒绝应 429：%d", rec.Code)
+	}
+	if got := rec.Header().Get("Retry-After"); got != "" {
+		t.Errorf("无桶时不应设置 Retry-After：%s", got)
 	}
 }
 

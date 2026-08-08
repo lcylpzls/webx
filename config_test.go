@@ -20,7 +20,8 @@ func TestConfigValidateSuccessWithDefaults(t *testing.T) {
 	if cfg.LogLevel != "info" || cfg.HealthPath != "/health" {
 		t.Errorf("默认值未填充：%+v", cfg)
 	}
-	if len(cfg.CORSAllowedOrigins) == 0 || len(cfg.CORSAllowedMethods) == 0 {
+	if len(cfg.CORSAllowedOrigins) == 0 || len(cfg.CORSAllowedMethods) == 0 ||
+		len(cfg.CORSExposeHeaders) == 0 || cfg.CORSExposeHeaders[0] != "X-Request-ID" {
 		t.Error("CORS 默认值未填充")
 	}
 	if cfg.MaxBodyBytes != 10*1024*1024 {

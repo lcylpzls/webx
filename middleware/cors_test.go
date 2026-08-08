@@ -100,3 +100,30 @@ func TestCORSAllowCredentials(t *testing.T) {
 		t.Error("凭据头缺失")
 	}
 }
+
+func TestCORSExposeHeaders(t *testing.T) {
+	cfg := CORSConfig{ExposeHeaders: []string{"X-Request-ID", "X-Trace-ID"}}
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetHandlers([]core.HandlerFunc{CORS(cfg), func(c *core.Context) { c.Success("ok", nil) }})
+	c.Run()
+	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "X-Request-ID, X-Trace-ID" {
+		t.Errorf("Expose-Headers 不符：%s", got)
+	}
+
+	rec = httptest.NewRecorder()
+	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetHandlers([]core.HandlerFunc{CORS(DefaultCORSConfig()), func(c *core.Context) { c.Success("ok", nil) }})
+	c.Run()
+	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "X-Request-ID" {
+		t.Errorf("默认 Expose-Headers 应含 X-Request-ID：%s", got)
+	}
+
+	rec = httptest.NewRecorder()
+	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetHandlers([]core.HandlerFunc{CORS(CORSConfig{}), func(c *core.Context) { c.Success("ok", nil) }})
+	c.Run()
+	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "" {
+		t.Errorf("空 ExposeHeaders 不应设置响应头：%s", got)
+	}
+}

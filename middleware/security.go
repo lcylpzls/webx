@@ -21,6 +21,10 @@ type SecurityHeadersOptions struct {
 	PermissionsPolicy string
 	// CrossOriginOpenerPolicy 设置 Cross-Origin-Opener-Policy（空则不设置）。
 	CrossOriginOpenerPolicy string
+	// CrossOriginResourcePolicy 设置 Cross-Origin-Resource-Policy（空则不设置）。
+	CrossOriginResourcePolicy string
+	// CrossOriginEmbedderPolicy 设置 Cross-Origin-Embedder-Policy（空则不设置）。
+	CrossOriginEmbedderPolicy string
 }
 
 // SecurityHeaders 返回安全响应头中间件。
@@ -44,6 +48,12 @@ func SecurityHeaders(opts SecurityHeadersOptions) core.HandlerFunc {
 		}
 		if opts.CrossOriginOpenerPolicy != "" {
 			c.Header("Cross-Origin-Opener-Policy", opts.CrossOriginOpenerPolicy)
+		}
+		if opts.CrossOriginResourcePolicy != "" {
+			c.Header("Cross-Origin-Resource-Policy", opts.CrossOriginResourcePolicy)
+		}
+		if opts.CrossOriginEmbedderPolicy != "" {
+			c.Header("Cross-Origin-Embedder-Policy", opts.CrossOriginEmbedderPolicy)
 		}
 		c.Next()
 	}
