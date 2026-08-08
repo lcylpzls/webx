@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -141,6 +142,104 @@ func TestWithFlushInterval(t *testing.T) {
 	rp := newProxy(tu, WithFlushInterval(-1))
 	if rp.FlushInterval != -1 {
 		t.Errorf("FlushInterval 未生效：%v", rp.FlushInterval)
+	}
+}
+
+func TestWithDirectorAndModifyResponse(t *testing.T) {
+	var upstreamHeader string
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamHeader = r.Header.Get("X-Injected")
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer target.Close()
+	tu, _ := url.Parse(target.URL)
+
+	rp := newProxy(tu,
+		WithDirector(func(r *http.Request) {
+			r.Header.Set("X-Injected", "1")
+		}),
+		WithModifyResponse(func(resp *http.Response) error {
+			resp.Header.Set("X-Modified", "1")
+			return nil
+		}),
+	)
+	if rp.Rewrite == nil || rp.ModifyResponse == nil {
+		t.Fatal("选项未生效")
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "http://webx/", nil)
+	rp.ServeHTTP(rec, req)
+	if upstreamHeader != "1" {
+		t.Errorf("WithDirector 未注入上游请求头：%s", upstreamHeader)
+	}
+	if rec.Header().Get("X-Modified") != "1" {
+		t.Errorf("WithModifyResponse 未改写响应头：%v", rec.Header())
+	}
+}
+
+func TestWithDirectorBareProxy(t *testing.T) {
+	bare := &httputil.ReverseProxy{}
+	WithDirector(func(r *http.Request) {
+		r.Header.Set("X-Bare", "1")
+	})(bare)
+	if bare.Rewrite == nil {
+		t.Fatal("裸代理应设置 Rewrite")
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://webx/", nil)
+	out := req.Clone(context.Background())
+	bare.Rewrite(&httputil.ProxyRequest{In: req, Out: out})
+	if got := out.Header.Get("X-Bare"); got != "1" {
+		t.Errorf("Rewrite 未注入请求头：%s", got)
+	}
+}
+
+func TestWithModifyResponseStacked(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer target.Close()
+	tu, _ := url.Parse(target.URL)
+
+	rp := newProxy(tu,
+		WithModifyResponse(func(resp *http.Response) error {
+			resp.Header.Set("X-Stack-1", "1")
+			return nil
+		}),
+		WithModifyResponse(func(resp *http.Response) error {
+			resp.Header.Set("X-Stack-2", "2")
+			return nil
+		}),
+	)
+	rec := httptest.NewRecorder()
+	rp.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://webx/", nil))
+	if rec.Header().Get("X-Stack-1") != "1" || rec.Header().Get("X-Stack-2") != "2" {
+		t.Errorf("叠加响应改写未全部生效：%v", rec.Header())
+	}
+}
+
+func TestWithModifyResponseErrorPropagation(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer target.Close()
+	tu, _ := url.Parse(target.URL)
+
+	rp := newProxy(tu,
+		WithModifyResponse(func(resp *http.Response) error {
+			return errors.New("改写失败")
+		}),
+		WithModifyResponse(func(resp *http.Response) error {
+			resp.Header.Set("X-Never", "1")
+			return nil
+		}),
+	)
+	rec := httptest.NewRecorder()
+	rp.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://webx/", nil))
+	if rec.Code != http.StatusBadGateway {
+		t.Errorf("改写失败应输出 502：%d", rec.Code)
+	}
+	if rec.Header().Get("X-Never") != "" {
+		t.Error("前置改写失败后不应继续执行")
 	}
 }
 

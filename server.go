@@ -72,6 +72,7 @@ type Server struct {
 	livenessChecks  []healthCheck
 	readinessChecks []healthCheck
 	shuttingDown    atomic.Bool
+	trustedProxies  []*net.IPNet
 	activeConns     atomic.Int64
 	connCtx         func(context.Context, net.Conn) context.Context
 	onShutdown      []func()
@@ -504,6 +505,7 @@ func (s *Server) Start() error {
 	if err := s.config.Validate(); err != nil {
 		return err
 	}
+	s.trustedProxies = s.config.trustedNets
 	if s.unixEnabled {
 		if err := checkUnixSocket(); err != nil {
 			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "Unix Socket 平台检查失败")
@@ -535,6 +537,7 @@ func (s *Server) Start() error {
 			func(c *core.Context) {
 				c.SetRoute(route.Path)
 				c.SetGroup(route.Group)
+				c.SetTrustedProxies(s.trustedProxies)
 				c.Next()
 			},
 		}

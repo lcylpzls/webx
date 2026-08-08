@@ -25,9 +25,12 @@ func Handler(target *url.URL, opts ...Option) webx.HandlerFunc {
 
 // newProxy 创建配置完成的 ReverseProxy（测试可直接校验选项效果）。
 func newProxy(target *url.URL, opts ...Option) *httputil.ReverseProxy {
-	rp := httputil.NewSingleHostReverseProxy(target)
-	if rp.ErrorHandler == nil {
-		rp.ErrorHandler = DefaultErrorHandler
+	rp := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			pr.SetXForwarded()
+		},
+		ErrorHandler: DefaultErrorHandler,
 	}
 	for _, o := range opts {
 		o(rp)
@@ -39,6 +42,35 @@ func newProxy(target *url.URL, opts ...Option) *httputil.ReverseProxy {
 func WithErrorHandler(fn func(http.ResponseWriter, *http.Request, error)) Option {
 	return func(rp *httputil.ReverseProxy) {
 		rp.ErrorHandler = fn
+	}
+}
+
+// WithDirector 设置上游请求改写函数（如注入头、改写路径），
+// 叠加在默认地址改写之后（基于 Rewrite 实现）。
+func WithDirector(fn func(*http.Request)) Option {
+	return func(rp *httputil.ReverseProxy) {
+		base := rp.Rewrite
+		rp.Rewrite = func(pr *httputil.ProxyRequest) {
+			if base != nil {
+				base(pr)
+			}
+			fn(pr.Out)
+		}
+	}
+}
+
+// WithModifyResponse 设置上游响应改写函数（如注入响应头），可叠加使用。
+func WithModifyResponse(fn func(*http.Response) error) Option {
+	return func(rp *httputil.ReverseProxy) {
+		base := rp.ModifyResponse
+		rp.ModifyResponse = func(resp *http.Response) error {
+			if base != nil {
+				if err := base(resp); err != nil {
+					return err
+				}
+			}
+			return fn(resp)
+		}
 	}
 }
 

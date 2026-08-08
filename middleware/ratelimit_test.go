@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -183,25 +184,42 @@ func TestRateLimitKeyFunc(t *testing.T) {
 	}
 }
 
-func TestExtractClientIP(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.RemoteAddr = "9.9.9.9:80"
-	req.Header.Set("X-Forwarded-For", "1.1.1.1, 2.2.2.2")
-	c := core.NewContext(httptest.NewRecorder(), req)
-	if got := extractClientIP(c); got != "1.1.1.1" {
-		t.Errorf("XFF 提取不符：%s", got)
+func TestRateLimitTrustedProxy(t *testing.T) {
+	run := func(rl *RateLimiter, remote, xff string, trusted bool) int {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = remote
+		if xff != "" {
+			req.Header.Set("X-Forwarded-For", xff)
+		}
+		rec := httptest.NewRecorder()
+		c := core.NewContext(rec, req)
+		if trusted {
+			_, ipNet, _ := net.ParseCIDR("9.9.9.0/24")
+			c.SetTrustedProxies([]*net.IPNet{ipNet})
+		}
+		c.SetHandlers([]core.HandlerFunc{RateLimit(rl), func(c *core.Context) { c.Success("ok", nil) }})
+		c.Run()
+		return rec.Code
 	}
-	req.Header.Del("X-Forwarded-For")
-	req.Header.Set("X-Real-IP", "3.3.3.3")
-	if got := extractClientIP(c); got != "3.3.3.3" {
-		t.Errorf("X-Real-IP 提取不符：%s", got)
+
+	// 未信任代理：XFF 被忽略，按 RemoteAddr 限流
+	rl := NewRateLimiter(1, time.Second, nil)
+	if got := run(rl, "9.9.9.9:80", "1.1.1.1", false); got != http.StatusOK {
+		t.Errorf("未信任代理首次应放行：%d", got)
 	}
-	req.Header.Del("X-Real-IP")
-	if got := extractClientIP(c); got != "9.9.9.9" {
-		t.Errorf("RemoteAddr 提取不符：%s", got)
+	if got := run(rl, "9.9.9.9:80", "2.2.2.2", false); got != http.StatusTooManyRequests {
+		t.Errorf("未信任代理应仍按 RemoteAddr 限流：%d", got)
 	}
-	req.RemoteAddr = "no-port"
-	if got := extractClientIP(c); got != "no-port" {
-		t.Errorf("无端口 RemoteAddr 不符：%s", got)
+
+	// 信任代理：按 XFF 首个 IP 限流
+	rl2 := NewRateLimiter(1, time.Second, nil)
+	if got := run(rl2, "9.9.9.9:80", "1.1.1.1", true); got != http.StatusOK {
+		t.Errorf("信任代理首次应放行：%d", got)
+	}
+	if got := run(rl2, "9.9.9.9:80", "1.1.1.1", true); got != http.StatusTooManyRequests {
+		t.Errorf("信任代理同 XFF 应限流：%d", got)
+	}
+	if got := run(rl2, "9.9.9.9:80", "5.5.5.5", true); got != http.StatusOK {
+		t.Errorf("信任代理不同 XFF 应放行：%d", got)
 	}
 }

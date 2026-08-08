@@ -26,6 +26,7 @@ type Context struct {
 	values   map[string]any
 	route    string
 	group    string
+	trusted  []*net.IPNet
 	handlers []HandlerFunc
 	index    int
 	aborted  bool
@@ -132,21 +133,50 @@ func (c *Context) GetHeader(key string) string {
 	return c.request.Header.Get(key)
 }
 
+// SetTrustedProxies 设置可信代理网段（由服务层在进入处理器链前调用）。
+// 仅当对端地址位于可信网段时才信任 X-Forwarded-For / X-Real-IP。
+func (c *Context) SetTrustedProxies(proxies []*net.IPNet) {
+	c.trusted = append([]*net.IPNet(nil), proxies...)
+}
+
 // RemoteIP 提取客户端 IP。
-// 优先级：X-Forwarded-For → X-Real-IP → RemoteAddr。
+// 对端位于可信代理网段时优先 X-Forwarded-For → X-Real-IP，否则一律取 RemoteAddr，
+// 防止客户端伪造代理头污染限流、审计与日志。
 func (c *Context) RemoteIP() string {
-	if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
+	remote := c.remoteHost()
+	if c.isTrustedProxy(remote) {
+		if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			return strings.TrimSpace(parts[0])
+		}
+		if xri := c.GetHeader("X-Real-IP"); xri != "" {
+			return strings.TrimSpace(xri)
+		}
 	}
-	if xri := c.GetHeader("X-Real-IP"); xri != "" {
-		return strings.TrimSpace(xri)
-	}
+	return remote
+}
+
+// remoteHost 返回对端主机（去掉端口）。
+func (c *Context) remoteHost() string {
 	host, _, err := net.SplitHostPort(c.request.RemoteAddr)
 	if err != nil {
 		return c.request.RemoteAddr
 	}
 	return host
+}
+
+// isTrustedProxy 判断对端 IP 是否位于可信代理网段。
+func (c *Context) isTrustedProxy(ip string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, p := range c.trusted {
+		if p.Contains(parsed) {
+			return true
+		}
+	}
+	return false
 }
 
 // Set 保存请求级 KV。
@@ -256,6 +286,21 @@ func (c *Context) BindJSON(out any) error {
 	return decoder.Decode(out)
 }
 
+// Bind 按 Content-Type 自动分派绑定方式：
+// application/json → BindJSON；multipart/form-data 或 urlencoded → BindForm；
+// 其余（如 GET）→ BindQuery。
+func (c *Context) Bind(out any) error {
+	ct := strings.ToLower(c.request.Header.Get("Content-Type"))
+	switch {
+	case strings.Contains(ct, "application/json"):
+		return c.BindJSON(out)
+	case strings.Contains(ct, "multipart/form-data"), strings.Contains(ct, "application/x-www-form-urlencoded"):
+		return c.BindForm(out)
+	default:
+		return c.BindQuery(out)
+	}
+}
+
 // openFile 打开待服务文件（测试可替换以覆盖异常分支）。
 var openFile = os.Open
 
@@ -339,6 +384,7 @@ func (c *Context) Reset() {
 	c.values = nil
 	c.route = ""
 	c.group = ""
+	c.trusted = nil
 	c.handlers = nil
 	c.index = -1
 	c.aborted = false

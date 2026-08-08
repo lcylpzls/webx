@@ -151,6 +151,21 @@ func TestConfigGzipLevel(t *testing.T) {
 	}
 }
 
+func TestConfigTrustedProxies(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.TrustedProxies = []string{"10.0.0.0/8", "192.168.1.5"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("合法可信代理应通过：%v", err)
+	}
+	if len(cfg.trustedNets) != 2 {
+		t.Fatalf("可信代理解析数量不符：%d", len(cfg.trustedNets))
+	}
+	cfg.TrustedProxies = []string{"bad-cidr"}
+	if err := cfg.Validate(); err == nil {
+		t.Error("非法可信代理应报错")
+	}
+}
+
 func TestLoadConfigSuccess(t *testing.T) {
 	cert, key := writeTestCert(t)
 	path := filepath.Join(t.TempDir(), "config.toml")

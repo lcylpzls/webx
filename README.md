@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 当前状态：**核心实现完成**。各包语句覆盖率 100%，
-> 当前版本：v0.30.0（v1.0.0 定版评估中）。
+> 当前版本：v0.31.0（v1.0.0 定版评估中）。
 
 ## 技术栈
 
@@ -45,6 +45,8 @@
 - 🔐 浏览器安全基线：CSP、HSTS 全指令、COOP/CORP/COEP、Origin-Agent-Cluster、PNA；
 - 🐢 慢请求日志：`slow_request_threshold` 超阈值自动 Warn；
 - ⚡ 静态资源 ETag：可选弱 ETag，`If-None-Match` 命中返回 304；
+- 🕵️ 可信代理：`trusted_proxies` 配置，代理头防伪造（限流/审计/日志统一）；
+- 📊 运行时指标：goroutine、堆内存、GC 计数进入 `/metrics`；
 - 📊 标准化响应：`{code, msg, data, requestId, timestamp}`；
 - 🩺 健康检查：`/health`，路径可配置；
 - 🔍 探针分离：`/healthz` 存活 / `/readyz` 就绪（优雅关闭中就绪自动 503）；
@@ -87,6 +89,7 @@
 | 内置中间件 | Recovery、RequestID、BodyLimit、Timeout、CORS、Validation、RateLimit、Gzip、Metrics、AccessLog、Security |
 | 标准化响应 | `c.Success / c.Fail / c.JSONResponse / c.AbortWithStatusJSON` |
 | 参数绑定 | `c.BindJSON / c.BindForm / c.BindQuery` |
+| 自动绑定 | `c.Bind(out)`（按 Content-Type 自动分派 JSON/Form/Query） |
 | 文件上传 | `c.FormFile(name)` / `c.SaveUploadedFile(fh, dest)` |
 | Web 便捷方法 | `c.Redirect / c.Cookie / c.SetCookie / c.SetSecureCookie / c.File` |
 | errx 集成 | `webx.RespondError / StatusForError` |
@@ -94,7 +97,7 @@
 | 存活/就绪探针 | `RegisterLivenessCheck`（/healthz）/ `RegisterReadinessCheck`（/readyz） |
 | 静态/SPA | `ServeStaticDir / ServeStaticFS / ServeStatic*WithOptions（MaxAge/DisableIndex/EnableETag）/ EnableSPA` |
 | 反向代理 | `webx/proxy.Handler(target, opts...)` |
-| 代理选项 | `WithErrorHandler / WithTimeout / WithFlushInterval` |
+| 代理选项 | `WithErrorHandler / WithTimeout / WithFlushInterval / WithDirector / WithModifyResponse` |
 | 指标 | `Server.Metrics()`（状态码分布、协议维度、路由/分组级聚合、活跃请求/连接、限流/Panic） |
 | 路由/分组统计 | `Server.RouteStats()` / `Server.GroupStats()` |
 | 优雅关闭 | `Stop(ctx)` / 信号自动关闭 |

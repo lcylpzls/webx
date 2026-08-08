@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -35,7 +36,15 @@ func TestContextAccessors(t *testing.T) {
 		t.Errorf("未设置 requestId 时应为空：%s", got)
 	}
 
-	// X-Forwarded-For 优先
+	// 未配置可信代理时，代理头一律不信任
+	req.Header.Set("X-Forwarded-For", "10.0.0.1, 10.0.0.2")
+	if got := c.RemoteIP(); got != "192.168.1.1" {
+		t.Errorf("未信任代理时不应采用 XFF：%s", got)
+	}
+	req.Header.Del("X-Forwarded-For")
+
+	// 配置可信代理后，X-Forwarded-For 优先
+	c.SetTrustedProxies([]*net.IPNet{mustParseCIDR(t, "192.168.1.0/24")})
 	req.Header.Set("X-Forwarded-For", "10.0.0.1, 10.0.0.2")
 	if got := c.RemoteIP(); got != "10.0.0.1" {
 		t.Errorf("X-Forwarded-For 提取不符：%s", got)
@@ -51,6 +60,29 @@ func TestContextAccessors(t *testing.T) {
 	if got := c.RemoteIP(); got != "10.0.0.8" {
 		t.Errorf("RemoteAddr 无端口提取不符：%s", got)
 	}
+
+	// 对端不在可信网段时，代理头不信任
+	req.Header.Set("X-Forwarded-For", "10.0.0.1")
+	req.RemoteAddr = "203.0.113.5:80"
+	if got := c.RemoteIP(); got != "203.0.113.5" {
+		t.Errorf("非可信代理不应采用 XFF：%s", got)
+	}
+
+	// 对端地址不可解析时按原样返回
+	req.Header.Set("X-Forwarded-For", "10.0.0.1")
+	req.RemoteAddr = "no-port"
+	if got := c.RemoteIP(); got != "no-port" {
+		t.Errorf("非法对端地址应按原样返回：%s", got)
+	}
+}
+
+func mustParseCIDR(t *testing.T, cidr string) *net.IPNet {
+	t.Helper()
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ipNet
 }
 
 func TestContextValues(t *testing.T) {
@@ -466,6 +498,7 @@ func TestContextPoolReuse(t *testing.T) {
 	c.SetParams(map[string]string{"id": "1"})
 	c.SetRoute("/r")
 	c.SetGroup("/g")
+	c.SetTrustedProxies([]*net.IPNet{mustParseCIDR(t, "10.0.0.0/8")})
 	c.Status(http.StatusCreated)
 	c.SetMaxBodyBytes(5)
 	c.SetHandlers([]HandlerFunc{func(c *Context) {}})
@@ -476,8 +509,8 @@ func TestContextPoolReuse(t *testing.T) {
 	if c2.values != nil || c2.params != nil || c2.handlers != nil {
 		t.Error("Reset 未清空状态")
 	}
-	if c2.route != "" || c2.group != "" {
-		t.Error("Reset 未清空路由/分组信息")
+	if c2.route != "" || c2.group != "" || c2.trusted != nil {
+		t.Error("Reset 未清空路由/分组/可信代理信息")
 	}
 	if c2.StatusCode() != http.StatusOK || c2.maxBody != 0 || c2.IsAborted() {
 		t.Errorf("Reset 后默认状态不符：%d %d %v", c2.StatusCode(), c2.maxBody, c2.IsAborted())

@@ -2,6 +2,22 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.31.0] - 2026-08-08
+
+### 新增
+
+- 可信代理：`trusted_proxies` 配置（CIDR 或 IP），仅来自可信网段的请求
+  才采用 `X-Forwarded-For` / `X-Real-IP`；限流中间件统一复用
+  `Context.RemoteIP()`，防止伪造源 IP 污染限流、审计与日志；
+- Prometheus 端点增加运行时指标：`webx_goroutines`、
+  `webx_mem_heap_alloc_bytes`、`webx_gc_count_total`；
+- `Context.Bind`：按 Content-Type 自动分派 JSON / Form / Query；
+- proxy：`WithDirector`（改写上游请求）与 `WithModifyResponse`（改写上游响应）。
+
+### 变更
+
+- `RemoteIP()` 默认不再信任代理头（安全默认），需显式配置 `trusted_proxies`。
+
 ## [v0.30.0] - 2026-08-08
 
 ### 新增（现代浏览器安全基线补全）

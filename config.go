@@ -2,6 +2,7 @@ package webx
 
 import (
 	"crypto/tls"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -67,6 +68,9 @@ type Config struct {
 	AccessLogSampleRate int `toml:"access_log_sample_rate"`
 	// AccessLogRedact 访问日志 query 参数中需要脱敏的键。
 	AccessLogRedact []string `toml:"access_log_redact"`
+	// TrustedProxies 可信代理网段（CIDR 或 IP）；仅来自这些网段的请求
+	// 才信任 X-Forwarded-For / X-Real-IP，空列表表示不信任任何代理头。
+	TrustedProxies []string `toml:"trusted_proxies"`
 	// SlowRequestThreshold 慢请求日志阈值（0=关闭）。
 	SlowRequestThreshold time.Duration `toml:"slow_request_threshold"`
 
@@ -129,6 +133,9 @@ type Config struct {
 	GzipLevel int `toml:"gzip_level"`
 	// Debug 调试模式：Recovery 响应携带 panic 摘要（生产环境保持 false）。
 	Debug bool `toml:"debug"`
+
+	// trustedNets 是 TrustedProxies 解析后的网段（Validate 时填充）。
+	trustedNets []*net.IPNet
 }
 
 // isRegularFile 检查给定路径是否存在且为普通文件（非目录）。
@@ -231,6 +238,21 @@ func (c *Config) Validate() error {
 	}
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
+	}
+	if len(c.TrustedProxies) > 0 {
+		nets := make([]*net.IPNet, 0, len(c.TrustedProxies))
+		for _, entry := range c.TrustedProxies {
+			_, ipNet, err := net.ParseCIDR(entry)
+			if err != nil {
+				ip := net.ParseIP(entry)
+				if ip == nil {
+					return errx.Newf(errx.KindInvalid, CodeConfigInvalid, "可信代理网段非法：%s", entry)
+				}
+				_, ipNet, _ = net.ParseCIDR(entry + "/32")
+			}
+			nets = append(nets, ipNet)
+		}
+		c.trustedNets = nets
 	}
 	switch c.LogLevel {
 	case "debug", "info", "warn", "error":

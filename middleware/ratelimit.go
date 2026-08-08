@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -140,25 +139,10 @@ func (rl *RateLimiter) Cleanup(interval time.Duration) {
 	}
 }
 
-// extractClientIP 提取客户端 IP：X-Forwarded-For → X-Real-IP → RemoteAddr。
-func extractClientIP(c *core.Context) string {
-	if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
-		return strings.TrimSpace(strings.Split(xff, ",")[0])
-	}
-	if xri := c.GetHeader("X-Real-IP"); xri != "" {
-		return strings.TrimSpace(xri)
-	}
-	host, _, err := net.SplitHostPort(c.Request().RemoteAddr)
-	if err != nil {
-		return c.Request().RemoteAddr
-	}
-	return host
-}
-
 // RateLimit 返回 IP 令牌桶限流中间件，超限返回标准化 429。
 func RateLimit(rl *RateLimiter) core.HandlerFunc {
 	return func(c *core.Context) {
-		key := extractClientIP(c)
+		key := c.RemoteIP()
 		if rl.keyFunc != nil {
 			key = rl.keyFunc(c)
 		}

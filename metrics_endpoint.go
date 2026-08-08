@@ -3,6 +3,7 @@ package webx
 import (
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 
 	"github.com/lcylpzls/webx/internal/core"
@@ -45,6 +46,11 @@ func renderMetrics(m Metrics, routes []RouteStat, groups []GroupStat) string {
 	writeCounter(&b, "webx_panics_total", "Recovery 捕获的 panic 数", m.Panics)
 	writeGauge(&b, "webx_active_connections", "当前打开的连接数", m.ActiveConnections)
 	writeGauge(&b, "webx_requests_in_flight", "当前活跃请求数", m.RequestsInFlight)
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	writeGauge(&b, "webx_goroutines", "当前 goroutine 数", int64(runtime.NumGoroutine()))
+	writeGauge(&b, "webx_mem_heap_alloc_bytes", "堆内存已分配字节数", int64(mem.HeapAlloc))
+	writeCounter(&b, "webx_gc_count_total", "GC 累计次数", uint64(mem.NumGC))
 	for _, st := range routes {
 		writeLabeledCounter(&b, "webx_route_requests_total", "路由级请求数", "path", st.Path, st.Requests)
 		writeLabeledGauge(&b, "webx_route_errors5xx_total", "路由级 5xx 响应数", "path", st.Path, st.Errors5xx)

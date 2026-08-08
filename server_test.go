@@ -918,6 +918,62 @@ func TestServerCORSPNA(t *testing.T) {
 	_ = s.Stop(ctx)
 }
 
+func TestServerTrustedProxies(t *testing.T) {
+	registerIPRoute := func(s *Server) {
+		s.RegisterRoute(Route{
+			Method: "GET",
+			Path:   "/ip",
+			Handler: func(c *core.Context) {
+				c.Success("ok", c.RemoteIP())
+			},
+		})
+	}
+
+	// 未配置可信代理：XFF 被忽略，返回 RemoteAddr
+	cfg := validConfig(t)
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	registerIPRoute(s)
+	startServer(t, s)
+	client := testHTTPClient()
+	req, _ := http.NewRequest(http.MethodGet, "https://"+s.ListenerAddr()+"/ip", nil)
+	req.Header.Set("X-Forwarded-For", "203.0.113.9")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET 失败：%v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(body), "127.0.0.1") {
+		t.Errorf("未配置可信代理应返回 RemoteAddr：%s", body)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+
+	// 配置可信代理：XFF 生效
+	cfg2 := validConfig(t)
+	cfg2.TrustedProxies = []string{"127.0.0.1/32"}
+	s2 := newTestServer(t, cfg2)
+	s2.UseHttp2Listen("127.0.0.1:0")
+	registerIPRoute(s2)
+	startServer(t, s2)
+	req, _ = http.NewRequest(http.MethodGet, "https://"+s2.ListenerAddr()+"/ip", nil)
+	req.Header.Set("X-Forwarded-For", "203.0.113.9")
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatalf("GET 失败：%v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(body), "203.0.113.9") {
+		t.Errorf("配置可信代理后应采用 XFF：%s", body)
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s2.Stop(ctx)
+}
+
 func TestServerMiddlewareCombo(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareRecovery = true

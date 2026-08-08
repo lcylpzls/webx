@@ -43,6 +43,11 @@ access_log_sample_rate = 0     # 0=全部记录，N>0 平均每 N 条记 1 条
 access_log_redact = ["token", "password"] # query 脱敏键
 slow_request_threshold = "0s"  # >0 时对慢请求额外记录 Warn（如 "1s"）
 
+# --- 可信代理 ---
+# 仅来自这些网段的请求才信任 X-Forwarded-For / X-Real-IP；
+# 留空 = 不信任任何代理头（默认，防客户端伪造源 IP）。
+# trusted_proxies = ["10.0.0.0/8", "192.168.1.5"]
+
 # --- CORS（留空则使用默认值） ---
 cors_allowed_origins = ["*"]
 cors_allowed_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]

@@ -300,6 +300,55 @@ func TestBindQueryBadDefault(t *testing.T) {
 	}
 }
 
+func TestContextBindDispatch(t *testing.T) {
+	// JSON
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"webx"}`))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	c := NewContext(httptest.NewRecorder(), req)
+	var jm struct {
+		Name string `json:"name"`
+	}
+	if err := c.Bind(&jm); err != nil || jm.Name != "webx" {
+		t.Errorf("Bind JSON 不符：%v %+v", err, jm)
+	}
+
+	// 表单
+	req = httptest.NewRequest(http.MethodPost, "/", strings.NewReader("name=form"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	c = NewContext(httptest.NewRecorder(), req)
+	var fm struct {
+		Name string `form:"name"`
+	}
+	if err := c.Bind(&fm); err != nil || fm.Name != "form" {
+		t.Errorf("Bind 表单不符：%v %+v", err, fm)
+	}
+
+	// multipart
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	_ = mw.WriteField("name", "multipart")
+	_ = mw.Close()
+	req = httptest.NewRequest(http.MethodPost, "/", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	c = NewContext(httptest.NewRecorder(), req)
+	fm = struct {
+		Name string `form:"name"`
+	}{}
+	if err := c.Bind(&fm); err != nil || fm.Name != "multipart" {
+		t.Errorf("Bind multipart 不符：%v %+v", err, fm)
+	}
+
+	// 无 Content-Type → 查询参数
+	req = httptest.NewRequest(http.MethodGet, "/?name=query", nil)
+	c = NewContext(httptest.NewRecorder(), req)
+	var qm struct {
+		Name string `query:"name"`
+	}
+	if err := c.Bind(&qm); err != nil || qm.Name != "query" {
+		t.Errorf("Bind 查询不符：%v %+v", err, qm)
+	}
+}
+
 func TestFormFileAndSave(t *testing.T) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
