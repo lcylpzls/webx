@@ -46,7 +46,8 @@ func FuzzBindQuery(f *testing.F) {
 	f.Add("bad=%zz")
 
 	f.Fuzz(func(t *testing.T, raw string) {
-		req := httptest.NewRequest("GET", "/?"+raw, nil)
+		req := httptest.NewRequest("GET", "/", nil)
+		req.URL.RawQuery = raw // 直接注入原始 query，避免请求行解析 panic
 		c := NewContext(httptest.NewRecorder(), req)
 		var out struct {
 			Page   int      `query:"page"`
