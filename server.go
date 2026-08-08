@@ -50,6 +50,7 @@ type Server struct {
 
 	listeners     []net.Listener
 	quicListeners []*quic.Listener
+	http3Servers  []*http3.Server
 	listenersMu   sync.Mutex
 	httpServers   []*http.Server
 
@@ -292,6 +293,14 @@ func (s *Server) Start() error {
 	s.started = true
 	s.mu.Unlock()
 
+	// 启动失败时回收限流清理 goroutine，避免泄漏。
+	startedOK := false
+	defer func() {
+		if !startedOK {
+			s.cancelCleanup()
+		}
+	}()
+
 	if !s.http2Enabled && !s.http3Enabled && !s.unixEnabled {
 		return errx.New(errx.KindInvalid, CodeStartFailed, "至少需要启用一种监听方式（HTTP/2、HTTP/3 或 Unix Socket）")
 	}
@@ -379,11 +388,13 @@ func (s *Server) Start() error {
 			return err
 		}
 		s.addQUICListener(qln)
+		h3s := &http3.Server{Handler: s.router}
+		s.addHTTP3Server(h3s)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			s.logger.WithContext(ctx).Info("webx：HTTP/3 (QUIC) 服务已启动", logx.Fields(logx.String("地址", s.http3Addr)))
-			if err := serveHTTP3(ctx, s.router, qln); err != nil {
+			if err := serveHTTP3(ctx, h3s, qln); err != nil {
 				s.logger.WithContext(ctx).Error("webx：HTTP/3 服务异常退出", logx.Fields(logx.Any("error", err)))
 			}
 		}()
@@ -413,20 +424,22 @@ func (s *Server) Start() error {
 		}()
 	}
 
+	startedOK = true
 	go s.waitSignal(listenSignals())
 	wg.Wait()
 	return nil
 }
 
 // listenSignals 创建系统信号监听通道。
-func listenSignals() <-chan os.Signal {
+func listenSignals() chan os.Signal {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	return quit
 }
 
 // waitSignal 监听系统信号并执行优雅关闭。
-func (s *Server) waitSignal(quit <-chan os.Signal) {
+func (s *Server) waitSignal(quit chan os.Signal) {
+	defer signal.Stop(quit)
 	select {
 	case sig := <-quit:
 		s.logger.WithContext(s.signalCtx).Info("webx：收到系统信号，开始优雅关闭", logx.Fields(logx.String("信号", sig.String())))
@@ -463,6 +476,8 @@ func (s *Server) shutdownAll(ctx context.Context) error {
 	copy(listeners, s.listeners)
 	quicListeners := make([]*quic.Listener, len(s.quicListeners))
 	copy(quicListeners, s.quicListeners)
+	h3Servers := make([]*http3.Server, len(s.http3Servers))
+	copy(h3Servers, s.http3Servers)
 	s.listenersMu.Unlock()
 
 	unixPath := ""
@@ -472,6 +487,9 @@ func (s *Server) shutdownAll(ctx context.Context) error {
 	err := shutdownServers(ctx, s.logger, servers, listeners, s.config.ShutdownTimeout, unixPath, s.cleanupFuncs)
 	for _, qln := range quicListeners {
 		qln.Close()
+	}
+	for _, h3s := range h3Servers {
+		_ = h3s.Close()
 	}
 	if err != nil {
 		return errx.Wrap(err, errx.KindUnavailable, CodeShutdownFailed, "优雅关闭失败")
@@ -556,6 +574,13 @@ func (s *Server) addQUICListener(ln *quic.Listener) {
 	s.quicListeners = append(s.quicListeners, ln)
 }
 
+// addHTTP3Server 注册 HTTP/3 服务实例（关闭时用于终止活动连接）。
+func (s *Server) addHTTP3Server(srv *http3.Server) {
+	s.listenersMu.Lock()
+	defer s.listenersMu.Unlock()
+	s.http3Servers = append(s.http3Servers, srv)
+}
+
 // closeListeners 关闭已创建的监听器（启动失败回滚）。
 func (s *Server) closeListeners() {
 	s.listenersMu.Lock()
@@ -566,6 +591,18 @@ func (s *Server) closeListeners() {
 	for _, qln := range s.quicListeners {
 		qln.Close()
 	}
+	for _, h3s := range s.http3Servers {
+		_ = h3s.Close()
+	}
+}
+
+// cancelCleanup 执行全部清理函数（幂等，用于启动失败路径回收后台 goroutine）。
+func (s *Server) cancelCleanup() {
+	for _, fn := range s.cleanupFuncs {
+		if fn != nil {
+			fn()
+		}
+	}
 }
 
 // warnStarted 记录启动后修改配置的警告。
@@ -574,8 +611,7 @@ func (s *Server) warnStarted(action string) {
 }
 
 // serveHTTP3 在 QUIC Listener 上运行 HTTP/3 服务。
-func serveHTTP3(ctx context.Context, handler http.Handler, qln *quic.Listener) error {
-	h3s := &http3.Server{Handler: handler}
+func serveHTTP3(ctx context.Context, h3s *http3.Server, qln *quic.Listener) error {
 	for {
 		conn, err := qln.Accept(ctx)
 		if err != nil {

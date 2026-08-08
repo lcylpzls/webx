@@ -21,3 +21,9 @@
 - 标准化响应信封、健康检查、静态文件与 SPA 回退、优雅关闭；
 - 配置经 confx 从 TOML 加载，错误统一 errx，日志接入 logx；
 - 质量：三包语句覆盖率 100%、fuzz 三个目标、CI 三平台矩阵（待仓库推送后生效）。
+
+### 修复
+
+- 优雅关闭：HTTP/3 活动连接通过 `http3.Server.Close()` 终止，不再遗留连接 goroutine；
+- 信号监听注册在 waitSignal 退出时注销（`signal.Stop`），避免重复注册泄漏；
+- `Start()` 启动失败时回收限流清理 goroutine，避免后台 goroutine 泄漏。

@@ -143,10 +143,16 @@ srv := webx.NewServer(cfg)
 
 - `Server` 配置字段在 `Start()` 后不可变，变更方法仅记录 Warn 日志；
 - 配置修改与读取使用 `sync.Mutex`；关闭使用 `sync.Once`；
+- 优雅关闭会依次排空 HTTP/2/Unix 连接、关闭 QUIC 监听器并调用
+  `http3.Server.Close()` 终止活动 HTTP/3 连接，避免 goroutine 泄漏；
+- 启动失败会回收限流清理 goroutine 与信号监听注册；
 - Timeout 中间件通过包装 Writer 丢弃超时写入，不引入额外 goroutine，
   避免 Context 并发读写；
 - RateLimiter 使用互斥锁 + 令牌桶，定期清理过期桶；
 - 所有响应头/响应体写入均在 handler goroutine 内完成。
+
+> 注意：不要在请求 Handler 内调用 `Stop()`——`http.Server.Shutdown`
+> 会等待当前连接变为空闲，Handler 自身阻塞将导致关闭等待直到超时。
 
 ## 5. 与 ginx 的迁移关系
 

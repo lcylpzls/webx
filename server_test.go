@@ -150,6 +150,13 @@ func TestServerStartErrors(t *testing.T) {
 	if err := s.Start(); err == nil {
 		t.Error("非法 HTTP/2 地址应报错")
 	}
+	// 启动失败时回收限流清理 goroutine
+	s = NewServer(validConfig(t))
+	s.EnableRateLimit(RateLimitOptions{QPS: 10, Window: time.Second})
+	s.UseHttp2Listen("bad-addr")
+	if err := s.Start(); err == nil {
+		t.Error("限流场景下非法地址应启动失败")
+	}
 	// 路由注册失败（非法参数名）
 	s = NewServer(validConfig(t))
 	s.UseHttp2Listen("127.0.0.1:0")
