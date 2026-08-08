@@ -94,6 +94,7 @@ func benchClient() *http.Client {
 }
 
 // runBenchRequests 并行压测指定地址（预热后计时）。
+// 公平性约定：所有框架统一使用 HTTPS（webx 仅支持 HTTPS，不做明文对比）。
 func runBenchRequests(b *testing.B, base string, warmup int) {
 	b.Helper()
 	client := benchClient()

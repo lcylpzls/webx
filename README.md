@@ -83,7 +83,7 @@
 | 标准化 JSON 响应 | 148ns/op，1 alloc |
 | 端到端 HTTPS 请求（TLS+中间件+JSON） | 41µs/op，90 allocs |
 
-与 gin / echo / fasthttp 的横向对比见
+与 gin / echo / fasthttp 的横向对比（HTTPS、单核/多核）见
 [benchmarks/BENCHMARKS.md](benchmarks/BENCHMARKS.md)。
 
 ## API 速查
