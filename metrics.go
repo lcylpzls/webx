@@ -6,13 +6,21 @@ type Metrics struct {
 	Requests uint64
 	// Errors5xx 5xx 响应数（需启用 MiddlewareMetrics）。
 	Errors5xx uint64
+	// RateLimited 限流拒绝数（启用 EnableRateLimit 后统计）。
+	RateLimited uint64
+	// Panics Recovery 捕获的 panic 数（启用 MiddlewareRecovery 后统计）。
+	Panics uint64
 }
 
-// Metrics 返回运行指标快照；未启用 MiddlewareMetrics 时全为 0。
+// Metrics 返回运行指标快照；未启用对应能力时字段为 0。
 func (s *Server) Metrics() Metrics {
-	if s.metrics == nil {
-		return Metrics{}
+	m := Metrics{}
+	if s.metrics != nil {
+		m.Requests, m.Errors5xx = s.metrics.Snapshot()
+		m.Panics = s.metrics.Panics()
 	}
-	requests, errors5x := s.metrics.Snapshot()
-	return Metrics{Requests: requests, Errors5xx: errors5x}
+	if s.rateLimiter != nil {
+		m.RateLimited = s.rateLimiter.Rejected()
+	}
+	return m
 }

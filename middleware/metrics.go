@@ -10,6 +10,7 @@ import (
 type Metrics struct {
 	requests atomic.Uint64
 	errors5x atomic.Uint64
+	panics   atomic.Uint64
 }
 
 // NewMetrics 创建指标计数器。
@@ -31,4 +32,9 @@ func MetricsHandler(m *Metrics) core.HandlerFunc {
 // Snapshot 返回当前计数快照。
 func (m *Metrics) Snapshot() (requests, errors5x uint64) {
 	return m.requests.Load(), m.errors5x.Load()
+}
+
+// Panics 返回 Recovery 捕获的 panic 数量。
+func (m *Metrics) Panics() uint64 {
+	return m.panics.Load()
 }

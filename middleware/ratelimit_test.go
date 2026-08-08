@@ -17,6 +17,9 @@ func TestRateLimiterAllowAndLimit(t *testing.T) {
 	if rl.Allow("1.2.3.4") {
 		t.Error("超限请求应拒绝")
 	}
+	if got := rl.Rejected(); got != 1 {
+		t.Errorf("拒绝计数不符：%d", got)
+	}
 	if !rl.Allow("5.6.7.8") {
 		t.Error("不同 IP 应允许")
 	}

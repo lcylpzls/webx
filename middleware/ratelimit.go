@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lcylpzls/webx/internal/core"
@@ -17,6 +18,7 @@ type RateLimiter struct {
 	qps       int
 	window    time.Duration
 	whitelist []*net.IPNet
+	rejected  atomic.Uint64
 }
 
 type tokenBucket struct {
@@ -76,7 +78,13 @@ func (rl *RateLimiter) Allow(ip string) bool {
 		bucket.tokens--
 		return true
 	}
+	rl.rejected.Add(1)
 	return false
+}
+
+// Rejected 返回被拒绝的请求数。
+func (rl *RateLimiter) Rejected() uint64 {
+	return rl.rejected.Load()
 }
 
 // Cleanup 清理超过 window*10 未活动的桶。

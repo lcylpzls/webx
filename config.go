@@ -44,6 +44,10 @@ type Config struct {
 	AccessLogEnabled bool `toml:"access_log_enabled"`
 	// LogSuccessReq 访问日志是否记录成功请求（默认仅记录非 2xx）。
 	LogSuccessReq bool `toml:"log_success_req"`
+	// AccessLogSampleRate 访问日志采样率：0=全部记录，N>0 平均每 N 条记录 1 条。
+	AccessLogSampleRate int `toml:"access_log_sample_rate"`
+	// AccessLogRedact 访问日志 query 参数中需要脱敏的键。
+	AccessLogRedact []string `toml:"access_log_redact"`
 
 	// CORSAllowedOrigins CORS 允许的来源列表，为空使用默认值。
 	CORSAllowedOrigins []string `toml:"cors_allowed_origins"`
@@ -123,6 +127,9 @@ func (c *Config) Validate() error {
 	}
 	if c.MaxBodyBytes < 0 {
 		return errx.New(errx.KindInvalid, CodeConfigInvalid, "最大请求体字节数不能为负数")
+	}
+	if c.AccessLogSampleRate < 0 {
+		return errx.New(errx.KindInvalid, CodeConfigInvalid, "访问日志采样率不能为负数")
 	}
 	if c.MaxBodyBytes == 0 {
 		c.MaxBodyBytes = 10 * 1024 * 1024

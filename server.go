@@ -547,7 +547,8 @@ func callRouteGroupFn(fn func(*RouteGroup), rg *RouteGroup) (err error) {
 
 // registerBuiltinMiddleware 按配置注册内置中间件。
 func (s *Server) registerBuiltinMiddleware() {
-	s.mwManager.RegisterBuiltin("recovery", middleware.Recovery())
+	s.metrics = middleware.NewMetrics()
+	s.mwManager.RegisterBuiltin("recovery", middleware.RecoveryWithMetrics(s.metrics))
 	if !s.config.MiddlewareRecovery {
 		s.mwManager.Disable("recovery")
 	}
@@ -580,12 +581,15 @@ func (s *Server) registerBuiltinMiddleware() {
 	if !s.config.MiddlewareGzip {
 		s.mwManager.Disable("gzip")
 	}
-	s.metrics = middleware.NewMetrics()
 	s.mwManager.RegisterBuiltin("metrics", middleware.MetricsHandler(s.metrics))
 	if !s.config.MiddlewareMetrics {
 		s.mwManager.Disable("metrics")
 	}
-	s.mwManager.RegisterBuiltin("access_log", middleware.AccessLog(s.logger, s.config.LogSuccessReq))
+	s.mwManager.RegisterBuiltin("access_log", middleware.AccessLog(s.logger, middleware.AccessLogOptions{
+		LogSuccess: s.config.LogSuccessReq,
+		SampleRate: s.config.AccessLogSampleRate,
+		RedactKeys: s.config.AccessLogRedact,
+	}))
 	if !s.config.AccessLogEnabled {
 		s.mwManager.Disable("access_log")
 	}

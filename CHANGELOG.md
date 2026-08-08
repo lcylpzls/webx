@@ -2,7 +2,14 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
-## [Unreleased]
+## [v0.7.0] - 2026-08-08
+
+### 增强
+
+- Metrics 扩展：`RateLimited`（限流拒绝数）与 `Panics`（Recovery 捕获数）；
+- AccessLog 采样（`AccessLogSampleRate`）与 query 脱敏（`AccessLogRedact`）；
+- 新增真实请求级基准 `BenchmarkServerRequest`；
+- 新增组合场景测试：中间件全开、SSE Flush 透传（Timeout+Gzip）、HTTP/3 并发。
 
 ### 工程
 

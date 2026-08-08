@@ -46,3 +46,17 @@ func TestRecoveryNormal(t *testing.T) {
 		t.Error("正常请求不应有 recoveryError")
 	}
 }
+
+func TestRecoveryWithMetrics(t *testing.T) {
+	m := NewMetrics()
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetHandlers([]core.HandlerFunc{
+		RecoveryWithMetrics(m),
+		func(c *core.Context) { panic("boom") },
+	})
+	c.Run()
+	if got := m.Panics(); got != 1 {
+		t.Errorf("panic 计数不符：%d", got)
+	}
+}

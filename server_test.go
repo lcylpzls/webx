@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -24,7 +26,7 @@ import (
 )
 
 // newTestLogger 返回写入 io.Discard 的测试日志器。
-func newTestLogger(t *testing.T) logx.Logger {
+func newTestLogger(t testHelper) logx.Logger {
 	t.Helper()
 	l, err := logx.NewBuilder().EnableWriter(io.Discard, logx.InfoLevel).Build()
 	if err != nil {
@@ -493,6 +495,10 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 	if resp.StatusCode != http.StatusTooManyRequests {
 		t.Errorf("限流应 429：%d", resp.StatusCode)
 	}
+	m := s.Metrics()
+	if m.Panics < 1 || m.RateLimited < 1 {
+		t.Errorf("Metrics 扩展计数不符：%+v", m)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -565,6 +571,150 @@ func TestServerGzipAndMetrics(t *testing.T) {
 	m := s.Metrics()
 	if m.Requests < 3 || m.Errors5xx < 1 {
 		t.Errorf("Metrics 不符：%+v", m)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestServerMiddlewareCombo(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareRecovery = true
+	cfg.MiddlewareRequestID = true
+	cfg.MiddlewareTimeout = true
+	cfg.MiddlewareGzip = true
+	cfg.MiddlewareMetrics = true
+	cfg.AccessLogEnabled = true
+	cfg.LogSuccessReq = true
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/ok",
+		Handler: func(c *core.Context) {
+			_ = c.String(http.StatusOK, "组合测试")
+		},
+	})
+	startServer(t, s)
+	client := testHTTPClient()
+	base := "https://" + s.ListenerAddr()
+
+	req, _ := http.NewRequest(http.MethodGet, base+"/ok", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET 失败：%v", err)
+	}
+	if resp.Header.Get("X-Request-ID") == "" || resp.Header.Get("Content-Encoding") != "gzip" {
+		t.Fatalf("组合响应头不符：%v", resp.Header)
+	}
+	zr, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		t.Fatalf("响应体不是 gzip：%v", err)
+	}
+	got, _ := io.ReadAll(zr)
+	zr.Close()
+	resp.Body.Close()
+	if string(got) != "组合测试" {
+		t.Errorf("解压内容不符：%s", got)
+	}
+	if m := s.Metrics(); m.Requests < 1 {
+		t.Errorf("组合 Metrics 不符：%+v", m)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestServerSSEFlush(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareTimeout = true
+	cfg.MiddlewareGzip = true
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/sse",
+		Handler: func(c *core.Context) {
+			rc := http.NewResponseController(c.Writer())
+			_, _ = c.Writer().Write([]byte("a"))
+			_ = rc.Flush()
+			_, _ = c.Writer().Write([]byte("b"))
+			_ = rc.Flush()
+		},
+	})
+	startServer(t, s)
+	client := testHTTPClient()
+	req, _ := http.NewRequest(http.MethodGet, "https://"+s.ListenerAddr()+"/sse", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("SSE 请求失败：%v", err)
+	}
+	zr, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		t.Fatalf("响应体不是 gzip：%v", err)
+	}
+	got, _ := io.ReadAll(zr)
+	zr.Close()
+	resp.Body.Close()
+	if string(got) != "ab" {
+		t.Errorf("Flush 透传内容不符：%s", got)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestServerHTTP3Concurrent(t *testing.T) {
+	cfg := validConfig(t)
+	h3Addr := freeUDPAddr(t)
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp3Listen(h3Addr)
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/ping",
+		Handler: func(c *core.Context) {
+			c.Success("h3", nil)
+		},
+	})
+	startServer(t, s)
+
+	transport := &http3.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	defer transport.Close()
+	client := &http.Client{Transport: transport, Timeout: 15 * time.Second}
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 15)
+	for g := 0; g < 3; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 5; i++ {
+				resp, err := client.Get("https://" + h3Addr + "/ping")
+				if err != nil {
+					errCh <- err
+					return
+				}
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					errCh <- fmt.Errorf("状态码不符：%d", resp.StatusCode)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		t.Errorf("HTTP/3 并发请求失败：%v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

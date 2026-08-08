@@ -48,6 +48,7 @@ func TestConfigValidateErrors(t *testing.T) {
 		{"空闲超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, IdleTimeout: -1}, "空闲超时时间不能为负数"},
 		{"请求头负数", Config{TLSCertFile: cert, TLSKeyFile: key, MaxHeaderBytes: -1}, "最大请求头字节数不能为负数"},
 		{"请求体负数", Config{TLSCertFile: cert, TLSKeyFile: key, MaxBodyBytes: -1}, "最大请求体字节数不能为负数"},
+		{"采样率负数", Config{TLSCertFile: cert, TLSKeyFile: key, AccessLogSampleRate: -1}, "访问日志采样率不能为负数"},
 		{"日志级别非法", Config{TLSCertFile: cert, TLSKeyFile: key, LogLevel: "verbose"}, "日志级别无效"},
 	}
 	for _, tc := range cases {
@@ -99,6 +100,8 @@ middleware_recovery = true
 middleware_gzip = true
 middleware_metrics = true
 access_log_enabled = true
+access_log_sample_rate = 10
+access_log_redact = ["token"]
 `
 	if err := os.WriteFile(path, []byte(toml), 0o600); err != nil {
 		t.Fatal(err)
@@ -115,6 +118,9 @@ access_log_enabled = true
 	}
 	if !cfg.MiddlewareGzip || !cfg.MiddlewareMetrics {
 		t.Errorf("新增开关配置不符：%+v", cfg)
+	}
+	if cfg.AccessLogSampleRate != 10 || len(cfg.AccessLogRedact) != 1 || cfg.AccessLogRedact[0] != "token" {
+		t.Errorf("访问日志配置不符：%+v", cfg)
 	}
 }
 

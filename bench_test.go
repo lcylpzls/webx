@@ -1,10 +1,14 @@
 package webx
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/lcylpzls/webx/internal/core"
 )
@@ -55,5 +59,69 @@ func BenchmarkJSONResponse(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = c.JSON(http.StatusOK, resp)
+	}
+}
+
+func BenchmarkServerRequest(b *testing.B) {
+	cert, key := writeTestCert(b)
+	cfg := Config{
+		TLSCertFile:     cert,
+		TLSKeyFile:      key,
+		ShutdownTimeout: 5 * time.Second,
+	}
+	cfg.MiddlewareRequestID = true
+	cfg.MiddlewareRecovery = true
+	s := NewServer(cfg, newTestLogger(b))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/ping",
+		Handler: func(c *core.Context) {
+			c.Success("pong", nil)
+		},
+	})
+	errCh := make(chan error, 1)
+	go func() { errCh <- s.Start() }()
+	deadline := time.After(10 * time.Second)
+	for s.ListenerAddr() == "" {
+		select {
+		case err := <-errCh:
+			b.Fatalf("Start 失败：%v", err)
+		case <-deadline:
+			b.Fatal("启动超时")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.Stop(ctx)
+	}()
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			MaxIdleConns:    1,
+		},
+	}
+	url := "https://" + s.ListenerAddr() + "/ping"
+	// 预热并建立连接
+	resp, err := client.Get(url)
+	if err != nil {
+		b.Fatalf("预热请求失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		resp, err := client.Get(url)
+		if err != nil {
+			b.Fatalf("请求失败：%v", err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
 	}
 }

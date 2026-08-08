@@ -11,12 +11,19 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"testing"
 	"time"
 )
 
+// testHelper 抽象 testing.T/B 的公共方法，便于测试与基准共用证书生成。
+type testHelper interface {
+	Helper()
+	TempDir() string
+	Fatalf(format string, args ...any)
+	Cleanup(func())
+}
+
 // writeTestCert 生成自签名证书与私钥，返回文件路径。
-func writeTestCert(t *testing.T) (string, string) {
+func writeTestCert(t testHelper) (string, string) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
