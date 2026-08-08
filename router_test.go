@@ -156,6 +156,20 @@ func TestRouterSpecificityMethodDecision(t *testing.T) {
 	}
 }
 
+func TestRouterExactNoPrefixMatch(t *testing.T) {
+	rt := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
+	if err := rt.Handle("GET", "/api/users/:id", []core.HandlerFunc{noopCore}); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/api/users/42/extra", "/api/users/42/"} {
+		rec := httptest.NewRecorder()
+		rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("精确路由不应前缀匹配 %s：%d", path, rec.Code)
+		}
+	}
+}
+
 func TestRouterNotFoundAndRedirect(t *testing.T) {
 	rt := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
 	dir := t.TempDir()
@@ -175,6 +189,12 @@ func TestRouterNotFoundAndRedirect(t *testing.T) {
 	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/static/a.txt", nil))
 	if rec.Code != http.StatusOK || rec.Body.String() != "hello" {
 		t.Errorf("静态文件不符：%d %s", rec.Code, rec.Body.String())
+	}
+	// 子树模式精确命中（尾斜杠）
+	rec = httptest.NewRecorder()
+	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/static/", nil))
+	if rec.Code != http.StatusOK {
+		t.Errorf("子树模式尾斜杠应命中：%d", rec.Code)
 	}
 	// 尾斜杠重定向
 	rec = httptest.NewRecorder()

@@ -170,14 +170,9 @@ func (rt *Router) runFallback(w http.ResponseWriter, r *http.Request, h core.Han
 
 // match 返回与路径匹配的全部已注册模式。
 func (rt *Router) match(path string) []*routePattern {
-	var out []*routePattern
+	out := make([]*routePattern, 0, 2)
 	for _, p := range rt.patterns {
-		// 子树模式要求请求以 "/" 结尾或路径更长，避免与 ServeMux 的
-		// 尾斜杠重定向行为冲突。
-		if p.subtree && len(splitPath(path)) == len(p.segments) && !strings.HasSuffix(path, "/") {
-			continue
-		}
-		if matchSegments(p.segments, splitPath(path)) {
+		if matchPath(p, path) {
 			out = append(out, p)
 		}
 	}
@@ -341,55 +336,61 @@ func parsePattern(pattern string) ([]segment, error) {
 	return segs, nil
 }
 
-// splitPath 将请求路径拆分为段（保留尾斜杠语义）。
-func splitPath(path string) []string {
-	parts := strings.Split(path, "/")
-	segs := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		segs = append(segs, part)
-	}
-	return segs
-}
-
-// matchSegments 判断模式段与路径段是否匹配。
-// 支持：字面段、参数段（单段）、通配段（匹配剩余全部）、子树模式（前缀匹配）。
-func matchSegments(pattern []segment, path []string) bool {
-	if len(pattern) == 0 {
+// matchPath 判断模式是否匹配请求路径（按需分段，零分配）。
+// 语义与 ServeMux 对齐：
+//   - 精确模式：段数完全一致且无尾斜杠；
+//   - 子树模式（以 "/" 结尾）：路径至少还有尾斜杠或更多段；
+//   - 通配模式（{p...}）：前缀段匹配后剩余部分非空（含空段 "/"）。
+func matchPath(p *routePattern, path string) bool {
+	segs := p.segments
+	if len(segs) == 0 {
 		return true
 	}
-	// 通配段：匹配剩余全部路径
-	if pattern[len(pattern)-1].wildcard {
-		if len(path) < len(pattern)-1 {
+	idx := 0
+	last := len(segs) - 1
+	for i := 0; i < last; i++ {
+		seg, next := nextSegment(path, idx)
+		if !matchSegment(segs[i], seg) {
 			return false
 		}
-		for i := 0; i < len(pattern)-1; i++ {
-			if !matchSegment(pattern[i], path[i]) {
-				return false
-			}
+		if next < 0 {
+			// 后续仍有模式段，但路径已结束。
+			return false
 		}
-		return true
+		idx = next
 	}
-	// 子树模式：路径段数多于模式段数，且前缀匹配
-	if len(path) > len(pattern) {
-		for i := 0; i < len(pattern); i++ {
-			if !matchSegment(pattern[i], path[i]) {
-				return false
-			}
-		}
-		return true
+	if segs[last].wildcard {
+		// 通配段要求剩余部分非空（含尾斜杠）。
+		return idx < len(path) || (idx == len(path) && strings.HasSuffix(path, "/"))
 	}
-	if len(path) != len(pattern) {
+	seg, next := nextSegment(path, idx)
+	if !matchSegment(segs[last], seg) {
 		return false
 	}
-	for i := 0; i < len(pattern); i++ {
-		if !matchSegment(pattern[i], path[i]) {
-			return false
-		}
+	if p.subtree {
+		return next != -1
 	}
-	return true
+	// 精确模式：路径必须恰好结束。
+	return next == -1
+}
+
+// nextSegment 返回从 idx 开始的下一段及下一段起始位置。
+// 路径已结束时返回 ("", -1)。
+func nextSegment(path string, idx int) (string, int) {
+	for idx < len(path) && path[idx] == '/' {
+		idx++
+	}
+	if idx >= len(path) {
+		return "", -1
+	}
+	start := idx
+	for idx < len(path) && path[idx] != '/' {
+		idx++
+	}
+	if idx >= len(path) {
+		return path[start:idx], -1
+	}
+	return path[start:idx], idx + 1
 }
 
 // matchSegment 匹配单个段。
