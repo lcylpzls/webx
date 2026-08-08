@@ -620,6 +620,49 @@ func TestServerGzipAndMetrics(t *testing.T) {
 	if m.Requests < 3 || m.Errors5xx < 1 {
 		t.Errorf("Metrics 不符：%+v", m)
 	}
+	if m.Status2xx < 2 || m.Status5xx < 1 || m.Status4xx != 0 {
+		t.Errorf("状态码分布不符：%+v", m)
+	}
+	if m.HTTP1Requests < 3 {
+		t.Errorf("HTTP/1 请求计数不符：%+v", m)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestMetricsProtocolHTTP2(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareMetrics = true
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/ok",
+		Handler: func(c *core.Context) { c.Success("ok", nil) },
+	})
+	startServer(t, s)
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+			ForceAttemptHTTP2: true,
+		},
+	}
+	resp, err := client.Get("https://" + s.ListenerAddr() + "/ok")
+	if err != nil {
+		t.Fatalf("HTTP/2 请求失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.ProtoMajor != 2 {
+		t.Errorf("客户端应协商 HTTP/2：%s", resp.Proto)
+	}
+	m := s.Metrics()
+	if m.HTTP2Requests < 1 || m.Status2xx < 1 || m.HTTP1Requests != 0 {
+		t.Errorf("HTTP/2 指标不符：%+v", m)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -1009,6 +1052,7 @@ func TestServerMiddlewareOrder(t *testing.T) {
 func TestServerHTTP3(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareRequestID = true
+	cfg.MiddlewareMetrics = true
 	h3Addr := freeUDPAddr(t)
 	s := newTestServer(t, cfg)
 	s.UseHttp2Listen("127.0.0.1:0")
@@ -1029,6 +1073,10 @@ func TestServerHTTP3(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "h3") {
 		t.Errorf("HTTP/3 响应不符：%d %s", resp.StatusCode, body)
+	}
+	m := s.Metrics()
+	if m.HTTP3Requests < 1 || m.Status2xx < 1 || m.HTTP1Requests != 0 {
+		t.Errorf("HTTP/3 指标不符：%+v", m)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -43,6 +43,10 @@ cors_allowed_headers = ["Origin", "Content-Type", "Accept", "Authorization", "X-
 cors_max_age = "86400s"
 
 # --- 中间件开关 ---
+# 执行顺序可在代码中通过 SetMiddlewareOrder 自定义（config 不提供该字段）。
+# 默认顺序：request_id → recovery → timeout → cors → validation → security
+#           → gzip → rate_limit → metrics → access_log
+# 语义：靠前的中间件先进入请求处理，响应阶段按相反顺序收尾。
 middleware_request_id = true
 middleware_recovery = true
 middleware_timeout = true

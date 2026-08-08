@@ -2,6 +2,22 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.24.0] - 2026-08-08
+
+### 新增
+
+- Metrics 增加状态码分布：`Status1xx` ~ `Status5xx`；
+- Metrics 增加协议维度：HTTP/1.x、HTTP/2、HTTP/3 分别统计请求数与平均耗时
+  （`HTTP1Requests` / `HTTP2Requests` / `HTTP3Requests` 与
+  `AvgHTTP1RequestDurationMs` / `AvgHTTP2RequestDurationMs` / `AvgHTTP3RequestDurationMs`）；
+- 新增 `examples/order`：`SetMiddlewareOrder` 自定义中间件顺序示例。
+
+### 文档
+
+- README 补充 Windows Unix Socket 版本限制（build 1803 / 10.0.17134）；
+- `config.example.toml` 补充中间件默认顺序与 `SetMiddlewareOrder` 说明；
+- README 合并重复的功能清单，指标说明更新。
+
 ## [v0.23.0] - 2026-08-08
 
 ### 新增

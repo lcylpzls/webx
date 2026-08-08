@@ -11,12 +11,34 @@ type Metrics struct {
 	Requests uint64
 	// Errors5xx 5xx 响应数（需启用 MiddlewareMetrics）。
 	Errors5xx uint64
+	// Status1xx 1xx 响应数（需启用 MiddlewareMetrics）。
+	Status1xx uint64
+	// Status2xx 2xx 响应数（需启用 MiddlewareMetrics）。
+	Status2xx uint64
+	// Status3xx 3xx 响应数（需启用 MiddlewareMetrics）。
+	Status3xx uint64
+	// Status4xx 4xx 响应数（需启用 MiddlewareMetrics）。
+	Status4xx uint64
+	// Status5xx 5xx 响应数（需启用 MiddlewareMetrics）。
+	Status5xx uint64
 	// RateLimited 限流拒绝数（启用 EnableRateLimit 后统计）。
 	RateLimited uint64
 	// Panics Recovery 捕获的 panic 数（启用 MiddlewareRecovery 后统计）。
 	Panics uint64
 	// AvgRequestDurationMs 平均请求耗时（毫秒，需启用 MiddlewareMetrics）。
 	AvgRequestDurationMs uint64
+	// HTTP1Requests HTTP/1.x 请求数（需启用 MiddlewareMetrics）。
+	HTTP1Requests uint64
+	// HTTP2Requests HTTP/2 请求数（需启用 MiddlewareMetrics）。
+	HTTP2Requests uint64
+	// HTTP3Requests HTTP/3 请求数（需启用 MiddlewareMetrics）。
+	HTTP3Requests uint64
+	// AvgHTTP1RequestDurationMs HTTP/1.x 平均请求耗时（毫秒，需启用 MiddlewareMetrics）。
+	AvgHTTP1RequestDurationMs uint64
+	// AvgHTTP2RequestDurationMs HTTP/2 平均请求耗时（毫秒，需启用 MiddlewareMetrics）。
+	AvgHTTP2RequestDurationMs uint64
+	// AvgHTTP3RequestDurationMs HTTP/3 平均请求耗时（毫秒，需启用 MiddlewareMetrics）。
+	AvgHTTP3RequestDurationMs uint64
 	// ActiveConnections 当前打开的连接数。
 	ActiveConnections int64
 	// RequestsInFlight 当前活跃请求数（需启用 MiddlewareMetrics）。
@@ -33,6 +55,14 @@ func (s *Server) Metrics() Metrics {
 		if samples > 0 {
 			m.AvgRequestDurationMs = totalNs / samples / 1_000_000
 		}
+		m.Status1xx, m.Status2xx, m.Status3xx, m.Status4xx, m.Status5xx = s.metrics.StatusCodes()
+		ps := s.metrics.ProtocolStats()
+		m.HTTP1Requests = ps.HTTP1Requests
+		m.HTTP2Requests = ps.HTTP2Requests
+		m.HTTP3Requests = ps.HTTP3Requests
+		m.AvgHTTP1RequestDurationMs = ps.HTTP1AvgMs
+		m.AvgHTTP2RequestDurationMs = ps.HTTP2AvgMs
+		m.AvgHTTP3RequestDurationMs = ps.HTTP3AvgMs
 		m.RequestsInFlight = s.metrics.InFlight()
 	}
 	if s.rateLimiter != nil {

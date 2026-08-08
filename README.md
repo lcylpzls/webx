@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 当前状态：**核心实现完成**。各包语句覆盖率 100%，
-> 当前版本：v0.22.0（v1.0.0 定版评估中）。
+> 当前版本：v0.24.0（v1.0.0 定版评估中）。
 
 ## 技术栈
 
@@ -33,7 +33,9 @@
 
 - 🔒 强制 TLS：HTTP/2（TLS over TCP）+ HTTP/3（QUIC over UDP）+ Unix Socket 多通道同时监听；
 - 🔗 链式配置：路由、分组、中间件、限流、静态文件一键组装；
-- 🧱 内置中间件：Recovery / RequestID / Timeout / CORS / Validation / RateLimit；
+- 🗺️ 路由：`:id` / `*filepath` 参数语法、404/405 JSON、尾斜杠重定向；
+- 🧱 内置中间件：Recovery / RequestID / Timeout / CORS / Validation / RateLimit /
+  Gzip / Metrics / AccessLog / Security（顺序可配置）；
 - 📊 标准化响应：`{code, msg, data, requestId, timestamp}`；
 - 🩺 健康检查：`/health`，路径可配置；
 - 🪵 日志接入 logx；错误接入 errx；配置接入 confx（TOML）；
@@ -59,15 +61,6 @@
 | 标准化 JSON 响应 | 148ns/op，1 alloc |
 | 端到端 HTTPS 请求（TLS+中间件+JSON） | 41µs/op，90 allocs |
 
-## 功能清单
-
-- 多通道监听：HTTP/2（TLS）、HTTP/3（QUIC）、Unix Socket；
-- 路由：gin 风格 `:id`/`*filepath` 语法、404/405 JSON、尾斜杠重定向；
-- 中间件：Recovery / RequestID / Timeout / CORS / Validation / RateLimit /
-  Gzip / Metrics / AccessLog；
-- 标准化响应、健康检查、静态文件与 SPA、优雅关闭；
-- 配置 confx（TOML）、错误 errx、日志 logx（外部注入）。
-
 ## API 速查
 
 | 能力 | API |
@@ -83,9 +76,15 @@
 | 健康检查 | `RegisterHealthCheck`（/health 聚合输出） |
 | 静态/SPA | `ServeStaticDir / ServeStaticFS / ServeStatic*WithOptions / EnableSPA` |
 | 反向代理 | `webx/proxy.Handler(target, opts...)` |
-| 指标 | `Server.Metrics()`（Requests/Errors5xx/RateLimited/Panics/AvgDuration） |
+| 指标 | `Server.Metrics()`（状态码分布、HTTP/1·2·3 协议维度、活跃请求/连接、限流/Panic） |
 | 优雅关闭 | `Stop(ctx)` / 信号自动关闭 |
 | 证书热重载 | `SetCertificateLoader`（默认按文件 mtime 自动重载） |
+
+## 平台限制
+
+- Windows 上使用 Unix Socket 监听要求 Windows 10 build 1803（10.0.17134）
+  或更高版本；低于该版本时 `Start()` 会拒绝初始化并返回
+  `WEBX_START_FAILED`。
 
 ## License
 
