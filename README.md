@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 当前状态：**核心实现完成**。功能与 ginx 对等，三包语句覆盖率 100%，
-> 等待评审后发布 v0.1.0。
+> 当前版本：v0.5.0（v0.6.0 迭代中）。
 
 ## 技术栈
 
@@ -48,6 +48,24 @@
 - [docs/api-design.md](docs/api-design.md) — API 草案与待确认决策点
 - [docs/iteration-plan.md](docs/iteration-plan.md) — 迭代计划与质量门槛
 - [docs/decisions.md](docs/decisions.md) — 架构决策记录（ADR）
+- [docs/migration.md](docs/migration.md) — ginx 迁移指南
+
+## 性能数据（v0.4.0 基线）
+
+| 基准 | 结果 |
+| --- | --- |
+| 路由匹配+分发（50 条路由） | 1.5µs/op，6 allocs |
+| 中间件链（3 层） | 10.6ns/op，0 allocs |
+| 标准化 JSON 响应 | 148ns/op，1 alloc |
+
+## 功能清单
+
+- 多通道监听：HTTP/2（TLS）、HTTP/3（QUIC）、Unix Socket；
+- 路由：gin 风格 `:id`/`*filepath` 语法、404/405 JSON、尾斜杠重定向；
+- 中间件：Recovery / RequestID / Timeout / CORS / Validation / RateLimit /
+  Gzip / Metrics / AccessLog；
+- 标准化响应、健康检查、静态文件与 SPA、优雅关闭；
+- 配置 confx（TOML）、错误 errx、日志 logx（外部注入）。
 
 ## License
 

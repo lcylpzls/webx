@@ -2,6 +2,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/lcylpzls/logx"
 	"github.com/lcylpzls/webx"
 )
@@ -31,7 +33,7 @@ func main() {
 		}).
 		EnableRateLimit(webx.RateLimitOptions{
 			QPS:    200,
-			Window: 1,
+			Window: time.Second,
 		})
 	if err := s.Start(); err != nil {
 		panic(err)

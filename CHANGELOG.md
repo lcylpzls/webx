@@ -2,6 +2,17 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.6.0] - 2026-08-08
+
+### API 调整
+
+- `Server.Metrics()` 改为返回 `webx.Metrics` 结构体（`Requests`/`Errors5xx`）；
+- `RouteGroup` 新增 `HEAD`/`OPTIONS` 注册方法。
+
+### 文档
+
+- 新增 ginx → webx 迁移指南，README 增加功能清单与性能数据。
+
 ## [v0.5.0] - 2026-08-08
 
 ### 新增

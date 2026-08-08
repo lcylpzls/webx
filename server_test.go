@@ -140,8 +140,8 @@ func TestServerChainAPI(t *testing.T) {
 	if got := s.ListenerAddr(); got != "" {
 		t.Errorf("未启动时 ListenerAddr 应为空：%s", got)
 	}
-	if requests, errors5x := s.Metrics(); requests != 0 || errors5x != 0 {
-		t.Errorf("未启动时 Metrics 应为 0：%d %d", requests, errors5x)
+	if m := s.Metrics(); m.Requests != 0 || m.Errors5xx != 0 {
+		t.Errorf("未启动时 Metrics 应为 0：%+v", m)
 	}
 }
 
@@ -562,9 +562,9 @@ func TestServerGzipAndMetrics(t *testing.T) {
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("错误路由应 500：%d", resp.StatusCode)
 	}
-	requests, errors5x := s.Metrics()
-	if requests < 3 || errors5x < 1 {
-		t.Errorf("Metrics 不符：req=%d err5x=%d", requests, errors5x)
+	m := s.Metrics()
+	if m.Requests < 3 || m.Errors5xx < 1 {
+		t.Errorf("Metrics 不符：%+v", m)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

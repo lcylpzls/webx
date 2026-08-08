@@ -286,14 +286,6 @@ func (s *Server) ListenerAddr() string {
 	return ""
 }
 
-// Metrics 返回请求数与 5xx 错误数快照（需启用 MiddlewareMetrics）。
-func (s *Server) Metrics() (requests, errors5x uint64) {
-	if s.metrics == nil {
-		return 0, 0
-	}
-	return s.metrics.Snapshot()
-}
-
 // Start 启动服务：校验配置、装配中间件、注册路由、创建各通道监听器。
 // 调用后阻塞直到服务关闭或发生错误。
 func (s *Server) Start() error {

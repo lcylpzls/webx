@@ -51,6 +51,16 @@ func (rg *RouteGroup) PATCH(path string, handler HandlerFunc, mw ...HandlerFunc)
 	rg.register("PATCH", path, handler, mw...)
 }
 
+// HEAD 注册一条 HEAD 方法路由。
+func (rg *RouteGroup) HEAD(path string, handler HandlerFunc, mw ...HandlerFunc) {
+	rg.register("HEAD", path, handler, mw...)
+}
+
+// OPTIONS 注册一条 OPTIONS 方法路由。
+func (rg *RouteGroup) OPTIONS(path string, handler HandlerFunc, mw ...HandlerFunc) {
+	rg.register("OPTIONS", path, handler, mw...)
+}
+
 // register 追加一条路由，继承分组中间件。
 func (rg *RouteGroup) register(method, path string, handler HandlerFunc, mw ...HandlerFunc) {
 	rg.routes = append(rg.routes, Route{

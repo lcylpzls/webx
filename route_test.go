@@ -13,6 +13,8 @@ func TestRouteGroupMethods(t *testing.T) {
 	rg.PUT("/c", noopHandler)
 	rg.DELETE("/d", noopHandler)
 	rg.PATCH("/e", noopHandler)
+	rg.HEAD("/f", noopHandler)
+	rg.OPTIONS("/g", noopHandler)
 
 	routes := rg.flatten()
 	want := []struct {
@@ -20,6 +22,7 @@ func TestRouteGroupMethods(t *testing.T) {
 	}{
 		{"GET", "/api/a"}, {"POST", "/api/b"}, {"PUT", "/api/c"},
 		{"DELETE", "/api/d"}, {"PATCH", "/api/e"},
+		{"HEAD", "/api/f"}, {"OPTIONS", "/api/g"},
 	}
 	if len(routes) != len(want) {
 		t.Fatalf("路由数量不符：%d", len(routes))
