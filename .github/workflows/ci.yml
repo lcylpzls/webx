@@ -38,8 +38,7 @@ jobs:
       - name: Test
         run: go test -count=1 ./...
 
-      - name: Race detector (Linux)
-        if: runner.os == 'Linux'
+      - name: Race detector
         run: |
           set +e
           go test -race -count=1 ./... > race.log 2>&1

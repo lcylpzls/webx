@@ -92,6 +92,24 @@ func TestManagerAppendAndOrder(t *testing.T) {
 	}
 }
 
+func TestManagerSetOrder(t *testing.T) {
+	m := NewManager()
+	m.RegisterBuiltin("recovery", func(c *core.Context) { c.Next() })
+	m.RegisterBuiltin("request_id", func(c *core.Context) { c.Next() })
+	m.SetOrder("request_id", "recovery", "unknown")
+	chain := m.Build(context.Background())
+	if len(chain) != 2 {
+		t.Fatalf("链长度不符：%d", len(chain))
+	}
+	if !sameFunc(chain[0], m.builtins["request_id"]) || !sameFunc(chain[1], m.builtins["recovery"]) {
+		t.Error("自定义顺序未生效")
+	}
+	m.SetOrder()
+	if got := len(m.Build(context.Background())); got != 2 {
+		t.Errorf("空顺序应保持原样：%d", got)
+	}
+}
+
 // sameFunc 判断两个函数值是否指向同一函数。
 func sameFunc(a, b core.HandlerFunc) bool {
 	return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()

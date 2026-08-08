@@ -103,6 +103,25 @@ func (m *Manager) Append(handler ...core.HandlerFunc) {
 	m.extras = append(m.extras, handler...)
 }
 
+// SetOrder 设置内置中间件的执行顺序（未知键与空顺序忽略）。
+func (m *Manager) SetOrder(keys ...string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	known := make(map[string]bool, len(m.order))
+	for _, k := range m.order {
+		known[k] = true
+	}
+	order := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if known[k] {
+			order = append(order, k)
+		}
+	}
+	if len(order) > 0 {
+		m.order = order
+	}
+}
+
 // Build 构建最终执行的中间件链。
 // 返回顺序：内置（启用）→ 外部全局。
 func (m *Manager) Build(ctx context.Context) []core.HandlerFunc {

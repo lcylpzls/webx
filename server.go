@@ -71,6 +71,7 @@ type Server struct {
 	activeConns    atomic.Int64
 	connCtx        func(context.Context, net.Conn) context.Context
 	onShutdown     []func()
+	mwOrder        []MiddlewareType
 }
 
 // SNICertificate 是按 ServerName（SNI）指定的证书。
@@ -286,6 +287,18 @@ func (s *Server) RegisterOnShutdown(fn func()) *Server {
 	return s
 }
 
+// SetMiddlewareOrder 设置内置中间件执行顺序（默认顺序保持不变）。
+func (s *Server) SetMiddlewareOrder(order []MiddlewareType) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.logWarn("webx：服务已启动，不允许设置中间件顺序")
+		return s
+	}
+	s.mwOrder = append([]MiddlewareType(nil), order...)
+	return s
+}
+
 // SetSNICertificates 设置按 SNI 域名区分的多证书；未匹配域名回退到默认证书。
 func (s *Server) SetSNICertificates(certs []SNICertificate) *Server {
 	s.mu.Lock()
@@ -423,6 +436,13 @@ func (s *Server) Start() error {
 	s.startTime = time.Now()
 	s.signalCtx, s.signalCancel = context.WithCancel(context.Background())
 	s.registerBuiltinMiddleware()
+	if len(s.mwOrder) > 0 {
+		keys := make([]string, len(s.mwOrder))
+		for i, t := range s.mwOrder {
+			keys[i] = string(t)
+		}
+		s.mwManager.SetOrder(keys...)
+	}
 
 	noRoute := core.NoRouteHandler
 	if s.spa != nil {

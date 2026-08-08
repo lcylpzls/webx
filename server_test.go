@@ -972,6 +972,40 @@ func TestServerHooksStartedGuard(t *testing.T) {
 	}
 }
 
+func TestSetMiddlewareOrderStartedGuard(t *testing.T) {
+	s := &Server{started: true}
+	if got := s.SetMiddlewareOrder(nil); got != s {
+		t.Error("SetMiddlewareOrder 应返回自身")
+	}
+}
+
+func TestServerMiddlewareOrder(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareRequestID = true
+	cfg.MiddlewareRecovery = true
+	s := newTestServer(t, cfg)
+	s.SetMiddlewareOrder([]MiddlewareType{MiddlewareRequestID, MiddlewareRecovery})
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/ok",
+		Handler: func(c *core.Context) { c.Success("ok", nil) },
+	})
+	startServer(t, s)
+	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/ok")
+	if err != nil {
+		t.Fatalf("GET 失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("X-Request-ID") == "" {
+		t.Errorf("自定义顺序服务不符：%d %v", resp.StatusCode, resp.Header)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
 func TestServerHTTP3(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareRequestID = true
