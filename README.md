@@ -6,8 +6,8 @@
 [![Go Version](https://img.shields.io/badge/Go-%3E%3D1.26-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> 当前状态：**核心实现完成**。各包语句覆盖率 100%，
-> 当前版本：v0.32.0（v1.0.0 定版评估中）。
+> 当前状态：**v1.0.0 已发布，API 冻结**。各包语句覆盖率 100%，
+> 三平台 CI + race + fuzz + apidiff 全绿。
 
 ## 技术栈
 
@@ -68,11 +68,11 @@
 
 - [docs/README.md](docs/README.md) — 文档索引与阅读顺序
 - [docs/architecture.md](docs/architecture.md) — 架构设计
-- [docs/api-design.md](docs/api-design.md) — API 草案与待确认决策点
+- [docs/api-design.md](docs/api-design.md) — API 设计定稿（决策点已冻结）
 - [docs/iteration-plan.md](docs/iteration-plan.md) — 迭代计划与质量门槛
 - [docs/decisions.md](docs/decisions.md) — 架构决策记录（ADR）
 
-## 性能数据（v0.4.0 基线）
+## 性能数据（Benchmark 实测）
 
 | 基准 | 结果 |
 | --- | --- |

@@ -158,7 +158,9 @@ func RateLimit(rl *RateLimiter) core.HandlerFunc {
 			if retryAfter := rl.RetryAfter(key); retryAfter > 0 {
 				c.Header("Retry-After", strconv.FormatInt(int64(retryAfter.Seconds()), 10))
 			}
+			rl.mu.Lock()
 			message := rl.rejectMsg
+			rl.mu.Unlock()
 			if message == "" {
 				message = "请求过于频繁，请稍后重试"
 			}

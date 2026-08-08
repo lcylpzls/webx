@@ -95,7 +95,7 @@ func TestConcurrencyLimitMiddleware(t *testing.T) {
 func TestConcurrencyLimitCustomMessage(t *testing.T) {
 	l := NewConcurrencyLimiter(0)
 	l.SetRejectMessage("自定义繁忙文案")
-	if l.rejectMsg != "自定义繁忙文案" {
+	if got := l.rejectMsg.Load(); got == nil || *got != "自定义繁忙文案" {
 		t.Error("拒绝文案未保存")
 	}
 
