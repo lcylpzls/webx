@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/lcylpzls/webx/internal/core"
 )
@@ -17,6 +18,7 @@ type Router struct {
 	noRoute  core.HandlerFunc
 	noMethod core.HandlerFunc
 	maxBody  int64
+	paramBuf sync.Pool
 }
 
 // routeNode 是匹配树中的一个节点。
@@ -32,7 +34,8 @@ type routeNode struct {
 }
 
 // requestHandler 是带路由参数的最终处理器。
-type requestHandler func(http.ResponseWriter, *http.Request, map[string]string)
+// 参数以切片传入（路由层维护缓冲池，热路径零分配）。
+type requestHandler func(http.ResponseWriter, *http.Request, []core.Param)
 
 // segment 是路径模式中的一段。
 type segment struct {
@@ -43,10 +46,15 @@ type segment struct {
 
 // NewRouter 创建路由，并指定 404/405 兜底处理器。
 func NewRouter(noRoute, noMethod core.HandlerFunc) *Router {
-	return &Router{
+	rt := &Router{
 		noRoute:  noRoute,
 		noMethod: noMethod,
 	}
+	rt.paramBuf.New = func() any {
+		buf := make([]core.Param, 0, 8)
+		return &buf
+	}
+	return rt
 }
 
 // SetMaxBodyBytes 设置路由处理链中 BindJSON 的最大请求体字节数。
@@ -88,7 +96,7 @@ func (rt *Router) HandleStaticWithOptions(prefix string, fs http.FileSystem, opt
 	}
 	strip := strings.TrimSuffix(pattern, "/")
 	h := http.StripPrefix(strip, staticOptionsFileServer(fs, opts))
-	handler := func(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+	handler := func(w http.ResponseWriter, r *http.Request, _ []core.Param) {
 		h.ServeHTTP(w, r)
 	}
 	if err := rt.insert("GET", segs, handler, true); err != nil {
@@ -146,10 +154,16 @@ func (rt *Router) insert(method string, segs []segment, handler requestHandler, 
 
 // ServeHTTP 实现 http.Handler：树匹配 + 方法判定 + 分发。
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	node, params, ok := rt.lookup(r.URL.Path)
+	buf := rt.paramBuf.Get().(*[]core.Param)
+	params := (*buf)[:0]
+	defer func() {
+		*buf = params
+		rt.paramBuf.Put(buf)
+	}()
+	node, ok := rt.lookup(r.URL.Path, &params)
 	if !ok {
 		if !strings.HasSuffix(r.URL.Path, "/") {
-			if n, _, ok2 := rt.lookup(r.URL.Path + "/"); ok2 && n.subtree {
+			if n, ok2 := rt.lookup(r.URL.Path+"/", &params); ok2 && n.subtree {
 				w.Header().Set("Location", r.URL.Path+"/")
 				w.WriteHeader(http.StatusMovedPermanently)
 				return
@@ -176,14 +190,13 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler(w, r, params)
 }
 
-// lookup 在匹配树中查找路径对应的节点与参数。
-func (rt *Router) lookup(path string) (*routeNode, map[string]string, bool) {
+// lookup 在匹配树中查找路径对应的节点，并把沿途参数追加到 params。
+func (rt *Router) lookup(path string, params *[]core.Param) (*routeNode, bool) {
 	if rt.root == nil {
-		return nil, nil, false
+		return nil, false
 	}
 	cur := rt.root
 	idx := 0
-	var params map[string]string
 	var best *routeNode
 
 	for cur != nil {
@@ -194,16 +207,15 @@ func (rt *Router) lookup(path string) (*routeNode, map[string]string, bool) {
 		if idx >= len(path) {
 			if len(cur.handlers) > 0 {
 				if cur.subtree && strings.HasSuffix(path, "/") {
-					return cur, params, true
+					return cur, true
 				}
 				if !cur.subtree && !strings.HasSuffix(path, "/") {
-					return cur, params, true
+					return cur, true
 				}
 			}
 			if cur.wildChild != nil && strings.HasSuffix(path, "/") {
-				params = ensureParams(params)
-				params[cur.wildChild.param] = ""
-				return cur.wildChild, params, true
+				*params = append(*params, core.Param{Name: cur.wildChild.param})
+				return cur.wildChild, true
 			}
 			break
 		}
@@ -217,8 +229,7 @@ func (rt *Router) lookup(path string) (*routeNode, map[string]string, bool) {
 			continue
 		}
 		if cur.paramChild != nil {
-			params = ensureParams(params)
-			params[cur.paramChild.param] = seg
+			*params = append(*params, core.Param{Name: cur.paramChild.param, Value: seg})
 			cur = cur.paramChild
 			idx = next
 			if idx < 0 {
@@ -227,23 +238,15 @@ func (rt *Router) lookup(path string) (*routeNode, map[string]string, bool) {
 			continue
 		}
 		if cur.wildChild != nil {
-			params = ensureParams(params)
-			params[cur.wildChild.param] = path[idx:]
-			return cur.wildChild, params, true
+			*params = append(*params, core.Param{Name: cur.wildChild.param, Value: path[idx:]})
+			return cur.wildChild, true
 		}
 		break
 	}
 	if best != nil {
-		return best, params, true
+		return best, true
 	}
-	return nil, nil, false
-}
-
-func ensureParams(params map[string]string) map[string]string {
-	if params == nil {
-		return map[string]string{}
-	}
-	return params
+	return nil, false
 }
 
 // allowHeader 汇总节点方法，生成 Allow 响应头（GET 附带 HEAD）。
@@ -265,15 +268,11 @@ func allowHeader(node *routeNode) string {
 
 // wrapRequestHandler 将 webx 处理器链包装为带参数的最终处理器。
 func wrapRequestHandler(rt *Router, chain []core.HandlerFunc, params []string) requestHandler {
-	return func(w http.ResponseWriter, r *http.Request, matched map[string]string) {
+	return func(w http.ResponseWriter, r *http.Request, matched []core.Param) {
 		c := core.Acquire(w, r)
 		defer core.Release(c)
 		if len(params) > 0 {
-			values := make(map[string]string, len(params))
-			for _, name := range params {
-				values[name] = matched[name]
-			}
-			c.SetParams(values)
+			c.SetParams(matched)
 		}
 		if rt.maxBody > 0 {
 			c.SetMaxBodyBytes(rt.maxBody)

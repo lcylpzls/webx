@@ -6,6 +6,7 @@
 - CPU：AMD Ryzen 7000 系列（Zen 4，6 核 12 线程）
 - Go：1.26.5 windows/amd64
 - 日期：2026-08-08
+- webx 版本：P0 零分配改造后的 main 分支（v1.1.0 候选）
 - 命令：`go test -bench . -benchmem -benchtime=1s -count=3 -cpu=1,12 -run '^$' .`
 - 数据：单核（`-cpu=1`）与多核（`-cpu=12`）各跑 3 轮，取每组最优值
 
@@ -28,24 +29,25 @@
 
 | 框架 | ns/op | B/op | allocs/op |
 | --- | ---: | ---: | ---: |
-| net/http ServeMux（标准库参照） | 150.9 | 33 | 1 |
-| webx | 343.0 | 706 | 5 |
-| gin | 96.6 | 59 | 1 |
-| echo | 92.5 | 19 | 1 |
-| fasthttprouter | 288.7 | 56 | 3 |
+| net/http ServeMux（标准库参照） | 148.3 | 32 | 1 |
+| webx | 104.0 | 11 | **0** |
+| gin | 88.5 | 58 | 1 |
+| echo | 91.6 | 18 | 1 |
+| fasthttprouter | 209.6 | 56 | 3 |
 
 ### 多核（GOMAXPROCS=12）
 
 | 框架 | ns/op | B/op | allocs/op |
 | --- | ---: | ---: | ---: |
-| net/http ServeMux（标准库参照） | 147.6 | 32 | 1 |
-| webx | 350.6 | 707 | 5 |
-| gin | 84.7 | 58 | 1 |
-| echo | 90.7 | 18 | 1 |
-| fasthttprouter | 177.1 | 56 | 3 |
+| net/http ServeMux（标准库参照） | 147.8 | 31 | 1 |
+| webx | 103.3 | 12 | **0** |
+| gin | 88.4 | 58 | 1 |
+| echo | 89.4 | 18 | 1 |
+| fasthttprouter | 175.3 | 56 | 3 |
 
-说明：webx 每次分发包含上下文池获取/归还、路由参数 map 构建与中间件链
-装配，分配数（5 allocs）高于 gin/echo；单次分发约 0.34µs，仍在同数量级。
+说明：P0 零分配改造后（路由参数槽化、Context 池复用），webx 路由分发
+达到 **0 allocs/op**，耗时约 0.10µs，与 gin/echo 差距缩小到 15% 以内，
+并快于标准库 ServeMux 与 fasthttprouter。
 
 ## 二、端到端服务基准（HTTPS + keep-alive）
 
@@ -57,22 +59,22 @@ Handler 写入 `hello`；`-cpu=1` 时 RunParallel 单 worker（等效顺序压�
 
 | 框架 | ns/op | 约合 req/s | B/op | allocs/op |
 | --- | ---: | ---: | ---: | ---: |
-| webx | 37 019 | ≈ 27.0k | 5 554 | 66 |
-| gin | 35 995 | ≈ 27.8k | 5 522 | 65 |
-| echo | 36 039 | ≈ 27.7k | 5 498 | 66 |
-| fasthttp | 30 390 | ≈ 32.9k | 3 264 | 46 |
+| webx | 35 620 | ≈ 28.1k | 5 555 | 66 |
+| gin | 36 076 | ≈ 27.7k | 5 522 | 65 |
+| echo | 36 097 | ≈ 27.7k | 5 498 | 66 |
+| fasthttp | 30 037 | ≈ 33.3k | 3 264 | 46 |
 
 ### 多核（GOMAXPROCS=12，12 并发）
 
 | 框架 | ns/op | 约合 req/s | B/op | allocs/op |
 | --- | ---: | ---: | ---: | ---: |
-| webx | 9 439 | ≈ 106k | 5 769 | 66 |
-| gin | 8 954 | ≈ 112k | 5 740 | 66 |
-| echo | 9 540 | ≈ 105k | 5 759 | 67 |
-| fasthttp | 6 901 | ≈ 145k | 3 270 | 46 |
+| webx | 9 668 | ≈ 103k | 5 819 | 67 |
+| gin | 9 903 | ≈ 101k | 5 723 | 66 |
+| echo | 8 932 | ≈ 112k | 5 703 | 67 |
+| fasthttp | 6 978 | ≈ 143k | 3 270 | 46 |
 
-说明：单核下四者差距在 20% 以内；多核下 webx 与 gin/echo 基本持平，
-fasthttp 因零拷贝架构领先约 35%。
+说明：单核下 webx 已略快于 gin/echo；多核下与两者持平，
+fasthttp 因零拷贝架构领先约 35-45%。
 
 ## 注意事项
 

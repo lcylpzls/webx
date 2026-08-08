@@ -6,7 +6,7 @@
 [![Go Version](https://img.shields.io/badge/Go-%3E%3D1.26-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> 当前状态：**v1.0.0 已发布，API 冻结**。各包语句覆盖率 100%，
+> 当前状态：**v1.0.0 已发布，API 冻结；v1.1.0 零分配优化中**。各包语句覆盖率 100%，
 > 三平台 CI + race + fuzz + apidiff 全绿。
 
 ## 技术栈

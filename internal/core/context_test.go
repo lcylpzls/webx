@@ -117,9 +117,13 @@ func TestContextParams(t *testing.T) {
 	if got := c.Param("id"); got != "" {
 		t.Errorf("未设置参数时应为空：%s", got)
 	}
-	c.SetParams(map[string]string{"id": "7"})
+	c.SetParams([]Param{{Name: "id", Value: "7"}})
 	if got := c.Param("id"); got != "7" {
 		t.Errorf("Param 不符：%s", got)
+	}
+	c.SetParams([]Param{{Name: "id", Value: "7"}, {Name: "id", Value: "9"}})
+	if got := c.Param("id"); got != "9" {
+		t.Errorf("Param 应返回最后一次匹配值：%s", got)
 	}
 	if got := c.Param("missing"); got != "" {
 		t.Errorf("缺失参数应为空：%s", got)
@@ -162,6 +166,33 @@ func TestContextStatusAndHeader(t *testing.T) {
 	c.Header("X-Test", "yes")
 	if rec.Header().Get("X-Test") != "yes" {
 		t.Error("Header 设置不符")
+	}
+}
+
+func TestContextStringFastPath(t *testing.T) {
+	rec := httptest.NewRecorder()
+	c := NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if err := c.String(http.StatusOK, "hello"); err != nil {
+		t.Fatalf("String 失败：%v", err)
+	}
+	if rec.Body.String() != "hello" {
+		t.Errorf("无格式 String 不符：%s", rec.Body.String())
+	}
+
+	rec2 := httptest.NewRecorder()
+	c2 := NewContext(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
+	if err := c2.String(http.StatusOK, "%s", "格式化"); err != nil {
+		t.Fatalf("String 失败：%v", err)
+	}
+	if rec2.Body.String() != "格式化" {
+		t.Errorf("带参数 String 不符：%s", rec2.Body.String())
+	}
+
+	rec3 := httptest.NewRecorder()
+	c3 := NewContext(rec3, httptest.NewRequest(http.MethodGet, "/", nil))
+	_ = c3.String(http.StatusOK, "100%%") // 含 % 且无参数，走 Fprintf 分支
+	if rec3.Body.String() != "100%" {
+		t.Errorf("含 %% 无参数 String 不符：%s", rec3.Body.String())
 	}
 }
 
@@ -495,7 +526,7 @@ func TestContextResetWriteState(t *testing.T) {
 func TestContextPoolReuse(t *testing.T) {
 	c := Acquire(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	c.Set("k", "v")
-	c.SetParams(map[string]string{"id": "1"})
+	c.SetParams([]Param{{Name: "id", Value: "1"}})
 	c.SetRoute("/r")
 	c.SetGroup("/g")
 	c.SetTrustedProxies([]*net.IPNet{mustParseCIDR(t, "10.0.0.0/8")})

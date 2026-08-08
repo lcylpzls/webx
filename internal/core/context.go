@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -22,7 +23,7 @@ type HandlerFunc func(*Context)
 type Context struct {
 	writer   http.ResponseWriter
 	request  *http.Request
-	params   map[string]string
+	params   []Param
 	values   map[string]any
 	route    string
 	group    string
@@ -33,6 +34,12 @@ type Context struct {
 	status   int
 	wrote    bool
 	maxBody  int64
+}
+
+// Param 是单个路由参数（名称 + 值）。
+type Param struct {
+	Name  string
+	Value string
 }
 
 // ctxPool 是请求上下文的复用池。
@@ -91,16 +98,19 @@ func (c *Context) SetRequest(r *http.Request) {
 }
 
 // SetParams 设置路由参数（由路由层在进入处理器链前调用）。
-func (c *Context) SetParams(params map[string]string) {
+func (c *Context) SetParams(params []Param) {
 	c.params = params
 }
 
-// Param 返回路由参数值，不存在时返回空字符串。
+// Param 返回路由参数值；同名参数存在多个时返回最后一次匹配值。
 func (c *Context) Param(key string) string {
-	if c.params == nil {
-		return ""
+	value := ""
+	for _, p := range c.params {
+		if p.Name == key {
+			value = p.Value
+		}
 	}
-	return c.params[key]
+	return value
 }
 
 // SetRoute 记录当前请求匹配的路由模式（由路由层在进入处理器链前调用）。
@@ -263,17 +273,32 @@ func (c *Context) SetSecureCookie(cookie *http.Cookie) {
 
 // JSON 以 JSON 格式写入响应。
 func (c *Context) JSON(code int, data any) error {
-	c.Header("Content-Type", "application/json; charset=utf-8")
+	setContentType(c.writer, "application/json; charset=utf-8")
 	c.writeHeader(code)
 	return json.NewEncoder(c.writer).Encode(data)
 }
 
 // String 以纯文本格式写入响应。
 func (c *Context) String(code int, format string, args ...any) error {
-	c.Header("Content-Type", "text/plain; charset=utf-8")
+	setContentType(c.writer, "text/plain; charset=utf-8")
 	c.writeHeader(code)
+	if len(args) == 0 && !strings.ContainsRune(format, '%') {
+		_, err := io.WriteString(c.writer, format)
+		return err
+	}
 	_, err := fmt.Fprintf(c.writer, format, args...)
 	return err
+}
+
+// setContentType 直接写入规范化键 Content-Type，
+// 避免 textproto 每次调用 Set 时的键规范化分配（热路径零分配）。
+func setContentType(w http.ResponseWriter, value string) {
+	h := w.Header()
+	if len(h["Content-Type"]) == 0 {
+		h["Content-Type"] = []string{value}
+		return
+	}
+	h["Content-Type"][0] = value
 }
 
 // BindJSON 解析请求体 JSON 到 out。

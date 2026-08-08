@@ -14,6 +14,9 @@ import (
 // statPath 是可注入的文件状态查询函数（测试可替换以覆盖异常分支）。
 var statPath = os.Stat
 
+// newConfigManager 创建 confx 配置管理器（测试可替换以覆盖异常分支）。
+var newConfigManager = confx.NewConfigManager
+
 // Config 定义 webx Server 的全部配置项，通过 confx 从 TOML 文件加载。
 // 所有校验在 Validate() 中集中进行，失败返回 errx 结构化错误。
 type Config struct {
@@ -297,7 +300,11 @@ func (c *Config) Validate() error {
 // 文件不存在、TOML 非法、存在未声明字段或校验失败时返回 errx 错误。
 func LoadConfig(path string) (Config, error) {
 	var cfg Config
-	if err := confx.Load(path, &cfg); err != nil {
+	cm, err := newConfigManager(confx.Toml)
+	if err != nil {
+		return cfg, errx.Wrap(err, errx.KindUnavailable, CodeConfigLoadFailed, "创建配置管理器失败")
+	}
+	if err := cm.Load(path, &cfg); err != nil {
 		return cfg, errx.Wrap(err, errx.KindUnavailable, CodeConfigLoadFailed, "加载配置文件失败")
 	}
 	if err := cfg.Validate(); err != nil {

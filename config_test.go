@@ -2,12 +2,14 @@ package webx
 
 import (
 	"crypto/tls"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/lcylpzls/confx"
 	"github.com/lcylpzls/errx"
 )
 
@@ -281,6 +283,17 @@ func TestLoadConfigErrors(t *testing.T) {
 	_ = os.WriteFile(ok, []byte("tls_cert_file = "+quote(cert)+"\ntls_key_file = "+quote(key)+"\n"), 0o600)
 	if _, err := LoadConfig(ok); err != nil {
 		t.Errorf("合法配置加载失败：%v", err)
+	}
+}
+
+func TestLoadConfigManagerError(t *testing.T) {
+	orig := newConfigManager
+	newConfigManager = func(confx.ConfigType, ...confx.Option) (*confx.ConfigManager, error) {
+		return nil, errors.New("创建失败")
+	}
+	defer func() { newConfigManager = orig }()
+	if _, err := LoadConfig("任意路径"); err == nil {
+		t.Error("配置管理器创建失败应报错")
 	}
 }
 

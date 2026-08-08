@@ -62,6 +62,16 @@ func BenchmarkJSONResponse(b *testing.B) {
 	}
 }
 
+func BenchmarkSuccessResponse(b *testing.B) {
+	dw := &discardWriter{h: make(http.Header)}
+	c := core.NewContext(dw, httptest.NewRequest(http.MethodGet, "/", nil))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.Success("ok", nil)
+	}
+}
+
 func BenchmarkServerRequest(b *testing.B) {
 	cert, key := writeTestCert(b)
 	cfg := Config{

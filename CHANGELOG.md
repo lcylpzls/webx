@@ -2,6 +2,23 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v1.1.0] - 2026-08-08
+
+### 性能（P0 零分配核心）
+
+- 路由参数槽化：消除参数 map 分配，路由分发达到 **0 allocs/op**
+  （500 条路由约 0.10µs，改造前约 0.34µs / 5 allocs）；
+- 手写标准化响应信封编码：Success / Fail / JSONResponse 热路径
+  零反射、零 fmt（0 allocs/op）；
+- `Context.String` 无格式参数零分配快速路径；
+- Content-Type 免 textproto 规范化分配；
+- CI 增加分配数门禁：路由分发与标准化响应均要求 ≤1 allocs/op。
+
+### 依赖
+
+- confx 升级至 v0.3.0：适配 `ConfigManager` 统一入口
+  （`LoadConfig` 改用 `confx.NewConfigManager(confx.Toml).Load`）。
+
 ## [v1.0.0] - 2026-08-08
 
 ### 定版

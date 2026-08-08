@@ -167,3 +167,24 @@ jobs:
             echo "路由性能回退超过阈值（1000ns）"
             exit 1
           fi
+          allocs=$(grep 'BenchmarkRouterServeHTTP500' bench.log | awk -F'alloc/op' '{print $1}' | awk '{print $NF}')
+          if [ -z "$allocs" ]; then
+            echo "分配数解析失败"
+            exit 1
+          fi
+          echo "路由 500 条：${allocs} allocs/op"
+          if [ "$allocs" -gt 1 ]; then
+            echo "路由分配回退超过阈值（要求 ≤1 allocs/op）"
+            exit 1
+          fi
+          go test -bench '^BenchmarkSuccessResponse$' -benchmem -run '^$' . 2>&1 | tee resp-bench.log
+          respAllocs=$(grep 'BenchmarkSuccessResponse' resp-bench.log | awk -F'alloc/op' '{print $1}' | awk '{print $NF}')
+          if [ -z "$respAllocs" ]; then
+            echo "响应编码分配数解析失败"
+            exit 1
+          fi
+          echo "标准化响应：${respAllocs} allocs/op"
+          if [ "$respAllocs" -gt 1 ]; then
+            echo "标准化响应分配回退超过阈值（要求 ≤1 allocs/op）"
+            exit 1
+          fi
