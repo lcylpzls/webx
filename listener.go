@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/lcylpzls/errx"
@@ -14,18 +15,58 @@ import (
 var removePath = os.Remove
 var chmodPath = os.Chmod
 
-// createTLSListener 创建 TLS over TCP 监听器，支持 HTTP/2 与 HTTP/1.1。
-func createTLSListener(addr, certFile, keyFile string) (net.Listener, error) {
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+// certificateProvider 按需加载证书，文件变化（mtime）时自动重载，支持证书轮换。
+type certificateProvider struct {
+	certFile  string
+	keyFile   string
+	mu        sync.Mutex
+	cert      *tls.Certificate
+	mtimeCert time.Time
+	mtimeKey  time.Time
+}
+
+// newCertificateProvider 创建证书提供器。
+func newCertificateProvider(certFile, keyFile string) *certificateProvider {
+	return &certificateProvider{certFile: certFile, keyFile: keyFile}
+}
+
+// getCertificate 实现 tls.Config.GetCertificate：文件未变化时返回缓存证书。
+func (p *certificateProvider) getCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	infoCert, err := os.Stat(p.certFile)
 	if err != nil {
-		return nil, errx.Wrap(err, errx.KindUnavailable, CodeListenFailed, "TLS 证书加载失败")
+		return nil, err
 	}
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
-		NextProtos:   []string{"h2", "http/1.1"},
+	infoKey, err := os.Stat(p.keyFile)
+	if err != nil {
+		return nil, err
 	}
-	ln, err := tls.Listen("tcp", addr, tlsConfig)
+	if p.cert != nil && infoCert.ModTime().Equal(p.mtimeCert) && infoKey.ModTime().Equal(p.mtimeKey) {
+		return p.cert, nil
+	}
+	cert, err := tls.LoadX509KeyPair(p.certFile, p.keyFile)
+	if err != nil {
+		return nil, err
+	}
+	p.cert = &cert
+	p.mtimeCert = infoCert.ModTime()
+	p.mtimeKey = infoKey.ModTime()
+	return p.cert, nil
+}
+
+// buildTLSConfig 构建服务端 TLS 配置。
+func buildTLSConfig(getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), minVersion uint16, nextProtos []string) *tls.Config {
+	return &tls.Config{
+		GetCertificate: getCert,
+		MinVersion:     minVersion,
+		NextProtos:     nextProtos,
+	}
+}
+
+// createTLSListener 创建 TLS over TCP 监听器，支持 HTTP/2 与 HTTP/1.1。
+func createTLSListener(addr string, getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), minVersion uint16) (net.Listener, error) {
+	ln, err := tls.Listen("tcp", addr, buildTLSConfig(getCert, minVersion, []string{"h2", "http/1.1"}))
 	if err != nil {
 		return nil, errx.Wrap(err, errx.KindUnavailable, CodeListenFailed, "TLS 监听失败，地址 "+addr)
 	}
@@ -33,16 +74,11 @@ func createTLSListener(addr, certFile, keyFile string) (net.Listener, error) {
 }
 
 // createQUICListener 创建 QUIC over UDP 监听器，用于 HTTP/3。
-func createQUICListener(addr, certFile, keyFile string) (*quic.Listener, error) {
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, errx.Wrap(err, errx.KindUnavailable, CodeListenFailed, "QUIC 证书加载失败")
-	}
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		NextProtos:   []string{"h3"},
-	}
-	ln, err := quic.ListenAddr(addr, tlsConfig, &quic.Config{MaxIdleTimeout: 30 * time.Second})
+func createQUICListener(addr string, getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), minVersion uint16, maxIdle time.Duration, maxStreams int64) (*quic.Listener, error) {
+	ln, err := quic.ListenAddr(addr, buildTLSConfig(getCert, minVersion, []string{"h3"}), &quic.Config{
+		MaxIdleTimeout:     maxIdle,
+		MaxIncomingStreams: maxStreams,
+	})
 	if err != nil {
 		return nil, errx.Wrap(err, errx.KindUnavailable, CodeListenFailed, "QUIC 监听失败，地址 "+addr)
 	}

@@ -5,6 +5,7 @@ package webx
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -64,6 +65,7 @@ type Server struct {
 	unixEnabled    bool
 	unixSocketPath string
 	unixSocketPerm os.FileMode
+	certLoader     func(*tls.ClientHelloInfo) (*tls.Certificate, error)
 }
 
 // checkUnixSocket 是可注入的 Unix Socket 平台检查（测试可替换）。
@@ -225,6 +227,19 @@ func (s *Server) UseUnixSocketListen(path string, perm os.FileMode) *Server {
 		perm = 0660
 	}
 	s.unixSocketPerm = perm
+	return s
+}
+
+// SetCertificateLoader 设置自定义证书加载器（用于 SNI 多证书、KMS 等场景）。
+// 未设置时默认从 Config 的证书/私钥文件按需加载并缓存（文件变化自动重载）。
+func (s *Server) SetCertificateLoader(fn func(*tls.ClientHelloInfo) (*tls.Certificate, error)) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.logWarn("webx：服务已启动，不允许设置证书加载器")
+		return s
+	}
+	s.certLoader = fn
 	return s
 }
 
@@ -392,7 +407,8 @@ func (s *Server) Start() error {
 
 	var wg sync.WaitGroup
 	if s.http2Enabled {
-		ln, err := createTLSListener(s.http2Addr, s.config.TLSCertFile, s.config.TLSKeyFile)
+		getCert := s.buildGetCertificate()
+		ln, err := createTLSListener(s.http2Addr, getCert, s.config.MinTLSVersion)
 		if err != nil {
 			s.closeListeners()
 			return err
@@ -417,7 +433,9 @@ func (s *Server) Start() error {
 		}()
 	}
 	if s.http3Enabled {
-		qln, err := createQUICListener(s.http3Addr, s.config.TLSCertFile, s.config.TLSKeyFile)
+		getCert := s.buildGetCertificate()
+		qln, err := createQUICListener(s.http3Addr, getCert, s.config.MinTLSVersion,
+			s.config.QUICMaxIdleTimeout, s.config.QUICMaxIncomingStreams)
 		if err != nil {
 			s.closeListeners()
 			return err
@@ -464,6 +482,14 @@ func (s *Server) Start() error {
 	go s.waitSignal(listenSignals())
 	wg.Wait()
 	return nil
+}
+
+// buildGetCertificate 返回当前证书加载器；默认使用带 mtime 缓存的文件提供器。
+func (s *Server) buildGetCertificate() func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	if s.certLoader != nil {
+		return s.certLoader
+	}
+	return newCertificateProvider(s.config.TLSCertFile, s.config.TLSKeyFile).getCertificate
 }
 
 // listenSignals 创建系统信号监听通道。

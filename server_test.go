@@ -692,11 +692,11 @@ func TestServerHTTP3Concurrent(t *testing.T) {
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, 15)
-	for g := 0; g < 3; g++ {
+	for g := 0; g < 5; g++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < 5; i++ {
+			for i := 0; i < 10; i++ {
 				resp, err := client.Get("https://" + h3Addr + "/ping")
 				if err != nil {
 					errCh <- err
@@ -717,6 +717,41 @@ func TestServerHTTP3Concurrent(t *testing.T) {
 		t.Errorf("HTTP/3 并发请求失败：%v", err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestServerSetCertificateLoader(t *testing.T) {
+	cert, key := writeTestCert(t)
+	s := newTestServer(t, validConfig(t))
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.SetCertificateLoader(func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+		c, err := tls.LoadX509KeyPair(cert, key)
+		if err != nil {
+			return nil, err
+		}
+		return &c, nil
+	})
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/ping",
+		Handler: func(c *core.Context) { c.Success("pong", nil) },
+	})
+	startServer(t, s)
+	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/ping")
+	if err != nil {
+		t.Fatalf("GET 失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("自定义证书加载器服务不符：%d", resp.StatusCode)
+	}
+	// 启动后设置不生效（仅告警）
+	if got := s.SetCertificateLoader(nil); got != s {
+		t.Error("SetCertificateLoader 应返回自身")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = s.Stop(ctx)

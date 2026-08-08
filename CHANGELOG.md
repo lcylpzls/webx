@@ -2,6 +2,17 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.13.0] - 2026-08-08
+
+### 新增
+
+- TLS 配置化与证书热重载：`MinTLSVersion` 可配置；
+  `SetCertificateLoader` 支持自定义加载器（SNI/KMS），默认按文件 mtime 自动重载；
+- QUIC 参数配置化：`QUICMaxIdleTimeout`（默认 30s）、
+  `QUICMaxIncomingStreams`（默认 100）；
+- proxy 子包补充 Upgrade（WebSocket）透传测试；
+- HTTP/3 并发冒烟提升至 50 并发。
+
 ## [v0.12.0] - 2026-08-08
 
 ### 依赖

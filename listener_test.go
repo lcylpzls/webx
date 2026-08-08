@@ -1,15 +1,21 @@
 package webx
 
 import (
+	"crypto/tls"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
+
+func testGetCert(cert, key string) func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return newCertificateProvider(cert, key).getCertificate
+}
 
 func TestCreateTLSListener(t *testing.T) {
 	cert, key := writeTestCert(t)
-	ln, err := createTLSListener("127.0.0.1:0", cert, key)
+	ln, err := createTLSListener("127.0.0.1:0", testGetCert(cert, key), tls.VersionTLS12)
 	if err != nil {
 		t.Fatalf("TLS 监听失败：%v", err)
 	}
@@ -17,26 +23,78 @@ func TestCreateTLSListener(t *testing.T) {
 	if ln.Addr() == nil {
 		t.Error("监听地址为空")
 	}
-	if _, err := createTLSListener("127.0.0.1:0", "missing.pem", key); err == nil {
-		t.Error("证书缺失应报错")
-	}
-	if _, err := createTLSListener("bad-addr", cert, key); err == nil {
+	if _, err := createTLSListener("bad-addr", testGetCert(cert, key), tls.VersionTLS12); err == nil {
 		t.Error("非法地址应报错")
+	}
+	if _, err := testGetCert("missing.pem", key)(nil); err == nil {
+		t.Error("证书缺失时加载应报错")
 	}
 }
 
 func TestCreateQUICListener(t *testing.T) {
 	cert, key := writeTestCert(t)
-	qln, err := createQUICListener("127.0.0.1:0", cert, key)
+	qln, err := createQUICListener("127.0.0.1:0", testGetCert(cert, key), tls.VersionTLS13, 30*time.Second, 100)
 	if err != nil {
 		t.Fatalf("QUIC 监听失败：%v", err)
 	}
 	defer qln.Close()
-	if _, err := createQUICListener("127.0.0.1:0", "missing.pem", key); err == nil {
-		t.Error("证书缺失应报错")
-	}
-	if _, err := createQUICListener("bad-addr", cert, key); err == nil {
+	if _, err := createQUICListener("bad-addr", testGetCert(cert, key), tls.VersionTLS13, 30*time.Second, 100); err == nil {
 		t.Error("非法地址应报错")
+	}
+}
+
+func TestCertificateProviderReload(t *testing.T) {
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "cert.pem")
+	keyFile := filepath.Join(dir, "key.pem")
+	cert1, key1 := writeTestCert(t)
+	cert2, key2 := writeTestCert(t)
+	copyFile(t, cert1, certFile)
+	copyFile(t, key1, keyFile)
+
+	p := newCertificateProvider(certFile, keyFile)
+	first, err := p.getCertificate(nil)
+	if err != nil {
+		t.Fatalf("首次加载失败：%v", err)
+	}
+	cached, err := p.getCertificate(nil)
+	if err != nil {
+		t.Fatalf("缓存加载失败：%v", err)
+	}
+	if string(first.Certificate[0]) != string(cached.Certificate[0]) {
+		t.Error("缓存证书应一致")
+	}
+	// 覆盖证书文件（mtime 变化）→ 重载
+	time.Sleep(10 * time.Millisecond)
+	copyFile(t, cert2, certFile)
+	copyFile(t, key2, keyFile)
+	reloaded, err := p.getCertificate(nil)
+	if err != nil {
+		t.Fatalf("重载失败：%v", err)
+	}
+	if string(first.Certificate[0]) == string(reloaded.Certificate[0]) {
+		t.Error("证书文件变化后应重载为新证书")
+	}
+
+	// 私钥缺失 → Stat 错误
+	if _, err := newCertificateProvider(certFile, filepath.Join(dir, "no.key")).getCertificate(nil); err == nil {
+		t.Error("私钥缺失应报错")
+	}
+	// 证书与私钥不配对 → LoadX509KeyPair 错误
+	other, _ := writeTestCert(t)
+	if _, err := newCertificateProvider(certFile, other).getCertificate(nil); err == nil {
+		t.Error("证书私钥不配对应报错")
+	}
+}
+
+func copyFile(t *testing.T, src, dst string) {
+	t.Helper()
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dst, data, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

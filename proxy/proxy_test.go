@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lcylpzls/webx"
@@ -51,5 +52,32 @@ func TestHandlerWithOptions(t *testing.T) {
 	})(c)
 	if rec.Header().Get("X-Modified") != "1" {
 		t.Errorf("选项未生效：%v", rec.Header())
+	}
+}
+
+func TestHandlerUpgrade(t *testing.T) {
+	var hit atomic.Bool
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Upgrade") != "websocket" {
+			t.Error("上游未收到 Upgrade 头")
+			return
+		}
+		hit.Store(true)
+		hj := w.(http.Hijacker)
+		conn, _, _ := hj.Hijack()
+		defer conn.Close()
+		_, _ = conn.Write([]byte("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n"))
+	}))
+	defer target.Close()
+	tu, _ := url.Parse(target.URL)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "http://webx/ws", nil)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	c := webx.NewContext(rec, req)
+	Handler(tu)(c)
+	if !hit.Load() {
+		t.Error("Upgrade 请求未透传到上游")
 	}
 }

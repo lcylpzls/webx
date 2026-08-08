@@ -19,6 +19,8 @@ type Config struct {
 	TLSCertFile string `toml:"tls_cert_file"`
 	// TLSKeyFile TLS 私钥文件路径（PEM 格式），必填。
 	TLSKeyFile string `toml:"tls_key_file"`
+	// MinTLSVersion 最低 TLS 版本，0 表示默认 TLS 1.2（仅允许 TLS1.2/1.3）。
+	MinTLSVersion uint16 `toml:"min_tls_version"`
 
 	// ReadTimeout HTTP 读取超时时间。
 	ReadTimeout time.Duration `toml:"read_timeout"`
@@ -36,6 +38,10 @@ type Config struct {
 	MaxHeaderBytes int `toml:"max_header_bytes"`
 	// MaxBodyBytes BindJSON 的最大请求体字节数，0 表示默认 10MB。
 	MaxBodyBytes int64 `toml:"max_body_bytes"`
+	// QUICMaxIdleTimeout HTTP/3 空闲连接超时，0 表示默认 30s。
+	QUICMaxIdleTimeout time.Duration `toml:"quic_max_idle_timeout"`
+	// QUICMaxIncomingStreams HTTP/3 单连接最大入站流数，0 表示默认 100。
+	QUICMaxIncomingStreams int64 `toml:"quic_max_incoming_streams"`
 
 	// HealthPath 健康检查端点路径，默认为 "/health"。
 	HealthPath string `toml:"health_path"`
@@ -109,6 +115,14 @@ func (c *Config) Validate() error {
 	if _, err := tls.LoadX509KeyPair(c.TLSCertFile, c.TLSKeyFile); err != nil {
 		return errx.Wrap(err, errx.KindInvalid, CodeConfigInvalid, "TLS 证书加载失败")
 	}
+	if c.MinTLSVersion == 0 {
+		c.MinTLSVersion = tls.VersionTLS12
+	}
+	switch c.MinTLSVersion {
+	case tls.VersionTLS12, tls.VersionTLS13:
+	default:
+		return errx.Newf(errx.KindInvalid, CodeConfigInvalid, "最低 TLS 版本无效：%d，必须是 TLS1.2 或 TLS1.3", c.MinTLSVersion)
+	}
 	if c.ShutdownTimeout < 0 {
 		return errx.New(errx.KindInvalid, CodeConfigInvalid, "关闭超时时间不能为负数")
 	}
@@ -138,6 +152,18 @@ func (c *Config) Validate() error {
 	}
 	if c.MaxBodyBytes == 0 {
 		c.MaxBodyBytes = 10 * 1024 * 1024
+	}
+	if c.QUICMaxIdleTimeout < 0 {
+		return errx.New(errx.KindInvalid, CodeConfigInvalid, "QUIC 空闲超时不能为负数")
+	}
+	if c.QUICMaxIdleTimeout == 0 {
+		c.QUICMaxIdleTimeout = 30 * time.Second
+	}
+	if c.QUICMaxIncomingStreams < 0 {
+		return errx.New(errx.KindInvalid, CodeConfigInvalid, "QUIC 最大入站流数不能为负数")
+	}
+	if c.QUICMaxIncomingStreams == 0 {
+		c.QUICMaxIncomingStreams = 100
 	}
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
