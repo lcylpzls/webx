@@ -64,6 +64,10 @@ type Config struct {
 	MiddlewareRecovery bool `toml:"middleware_recovery"`
 	// MiddlewareValidation 是否启用 Validation 中间件。
 	MiddlewareValidation bool `toml:"middleware_validation"`
+	// MiddlewareGzip 是否启用响应压缩中间件。
+	MiddlewareGzip bool `toml:"middleware_gzip"`
+	// MiddlewareMetrics 是否启用请求/5xx 计数中间件。
+	MiddlewareMetrics bool `toml:"middleware_metrics"`
 }
 
 // isRegularFile 检查给定路径是否存在且为普通文件（非目录）。

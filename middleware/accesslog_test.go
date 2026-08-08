@@ -42,6 +42,9 @@ func TestAccessLogSuccessOnly(t *testing.T) {
 	if !strings.Contains(buf.String(), "访问日志") || !strings.Contains(buf.String(), "404") {
 		t.Errorf("失败请求应记录：%s", buf.String())
 	}
+	if !strings.Contains(buf.String(), "duration_ms") || !strings.Contains(buf.String(), "user_agent") {
+		t.Errorf("访问日志应包含增强字段：%s", buf.String())
+	}
 }
 
 func TestAccessLogLogAll(t *testing.T) {
@@ -61,5 +64,8 @@ func TestAccessLogLogAll(t *testing.T) {
 	c.Run()
 	if !strings.Contains(buf.String(), "/all") {
 		t.Errorf("successOnly=true 应记录全部请求：%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "duration_ms") {
+		t.Errorf("成功请求日志应包含 duration_ms：%s", buf.String())
 	}
 }

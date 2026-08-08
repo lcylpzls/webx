@@ -96,6 +96,8 @@ health_path = "/ready"
 log_level = "debug"
 middleware_request_id = true
 middleware_recovery = true
+middleware_gzip = true
+middleware_metrics = true
 access_log_enabled = true
 `
 	if err := os.WriteFile(path, []byte(toml), 0o600); err != nil {
@@ -110,6 +112,9 @@ access_log_enabled = true
 	}
 	if !cfg.MiddlewareRequestID || !cfg.MiddlewareRecovery || !cfg.AccessLogEnabled {
 		t.Errorf("开关配置不符：%+v", cfg)
+	}
+	if !cfg.MiddlewareGzip || !cfg.MiddlewareMetrics {
+		t.Errorf("新增开关配置不符：%+v", cfg)
 	}
 }
 

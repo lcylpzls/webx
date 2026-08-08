@@ -2,6 +2,18 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.5.0] - 2026-08-08
+
+### 新增
+
+- Gzip 响应压缩中间件（`Config.MiddlewareGzip`），按 Accept-Encoding 协商；
+- 请求/5xx 计数中间件（`Config.MiddlewareMetrics`）与 `Server.Metrics()`；
+- SPA embed 示例（examples/spa）。
+
+### 增强
+
+- AccessLog 增加 `duration_ms`、`user_agent`、`host`、`query` 字段。
+
 ## [v0.4.0] - 2026-08-08
 
 ### 性能

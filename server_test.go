@@ -1,6 +1,7 @@
 package webx
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -138,6 +139,9 @@ func TestServerChainAPI(t *testing.T) {
 	}
 	if got := s.ListenerAddr(); got != "" {
 		t.Errorf("未启动时 ListenerAddr 应为空：%s", got)
+	}
+	if requests, errors5x := s.Metrics(); requests != 0 || errors5x != 0 {
+		t.Errorf("未启动时 Metrics 应为 0：%d %d", requests, errors5x)
 	}
 }
 
@@ -495,6 +499,77 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 	if err := s.Stop(ctx); err != nil {
 		t.Fatalf("Stop 失败：%v", err)
 	}
+}
+
+func TestServerGzipAndMetrics(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareGzip = true
+	cfg.MiddlewareMetrics = true
+	cfg.MiddlewareRecovery = true
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/ok",
+		Handler: func(c *core.Context) {
+			_ = c.String(http.StatusOK, "你好 webx")
+		},
+	})
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/err",
+		Handler: func(c *core.Context) {
+			c.Fail(http.StatusInternalServerError, http.StatusInternalServerError, "内部错误")
+		},
+	})
+	startServer(t, s)
+	client := testHTTPClient()
+	base := "https://" + s.ListenerAddr()
+
+	// gzip 压缩
+	req, _ := http.NewRequest(http.MethodGet, base+"/ok", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET 失败：%v", err)
+	}
+	if resp.Header.Get("Content-Encoding") != "gzip" {
+		t.Fatalf("应返回 gzip：%v", resp.Header)
+	}
+	zr, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		t.Fatalf("响应体不是 gzip：%v", err)
+	}
+	got, _ := io.ReadAll(zr)
+	zr.Close()
+	resp.Body.Close()
+	if string(got) != "你好 webx" {
+		t.Errorf("解压内容不符：%s", got)
+	}
+
+	// 未协商 gzip → 明文
+	resp, _ = client.Get(base + "/ok")
+	plain, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(plain) != "你好 webx" {
+		t.Errorf("明文响应不符：%s", plain)
+	}
+
+	// 5xx 计数
+	resp, _ = client.Get(base + "/err")
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("错误路由应 500：%d", resp.StatusCode)
+	}
+	requests, errors5x := s.Metrics()
+	if requests < 3 || errors5x < 1 {
+		t.Errorf("Metrics 不符：req=%d err5x=%d", requests, errors5x)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
 }
 
 func TestServerHTTP3(t *testing.T) {

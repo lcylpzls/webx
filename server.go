@@ -40,6 +40,7 @@ type Server struct {
 	spa           *spaConfig
 	mwManager     *middleware.Manager
 	rateLimiter   *middleware.RateLimiter
+	metrics       *middleware.Metrics
 	router        *Router
 	startTime     time.Time
 	started       bool
@@ -283,6 +284,14 @@ func (s *Server) ListenerAddr() string {
 		return s.listeners[0].Addr().String()
 	}
 	return ""
+}
+
+// Metrics 返回请求数与 5xx 错误数快照（需启用 MiddlewareMetrics）。
+func (s *Server) Metrics() (requests, errors5x uint64) {
+	if s.metrics == nil {
+		return 0, 0
+	}
+	return s.metrics.Snapshot()
 }
 
 // Start 启动服务：校验配置、装配中间件、注册路由、创建各通道监听器。
@@ -574,6 +583,15 @@ func (s *Server) registerBuiltinMiddleware() {
 	s.mwManager.RegisterBuiltin("validation", middleware.Validation())
 	if !s.config.MiddlewareValidation {
 		s.mwManager.Disable("validation")
+	}
+	s.mwManager.RegisterBuiltin("gzip", middleware.Gzip())
+	if !s.config.MiddlewareGzip {
+		s.mwManager.Disable("gzip")
+	}
+	s.metrics = middleware.NewMetrics()
+	s.mwManager.RegisterBuiltin("metrics", middleware.MetricsHandler(s.metrics))
+	if !s.config.MiddlewareMetrics {
+		s.mwManager.Disable("metrics")
 	}
 	s.mwManager.RegisterBuiltin("access_log", middleware.AccessLog(s.logger, s.config.LogSuccessReq))
 	if !s.config.AccessLogEnabled {

@@ -32,13 +32,14 @@ func NewManager() *Manager {
 			"timeout",
 			"cors",
 			"validation",
+			"gzip",
 			"rate_limit",
+			"metrics",
 			"access_log",
 		},
 		extras: make([]core.HandlerFunc, 0),
 	}
 	m.disabled["rate_limit"] = true
-	m.disabled["access_log"] = true
 	return m
 }
 

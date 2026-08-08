@@ -18,6 +18,10 @@ const (
 	MiddlewareValidation MiddlewareType = "validation"
 	// MiddlewareRateLimit IP 令牌桶限流中间件。
 	MiddlewareRateLimit MiddlewareType = "rate_limit"
+	// MiddlewareGzip 响应压缩中间件。
+	MiddlewareGzip MiddlewareType = "gzip"
+	// MiddlewareMetrics 请求/5xx 计数中间件。
+	MiddlewareMetrics MiddlewareType = "metrics"
 	// MiddlewareAccessLog 访问日志中间件。
 	MiddlewareAccessLog MiddlewareType = "access_log"
 )

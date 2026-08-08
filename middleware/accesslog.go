@@ -23,7 +23,11 @@ func AccessLog(logger logx.Logger, successOnly bool) core.HandlerFunc {
 			logx.Int("status", status),
 			logx.String("requestId", c.RequestID()),
 			logx.String("ip", c.RemoteIP()),
+			logx.String("host", c.Request().Host),
+			logx.String("query", c.Request().URL.RawQuery),
+			logx.String("user_agent", c.GetHeader("User-Agent")),
 			logx.Any("duration", time.Since(start).String()),
+			logx.Int64("duration_ms", time.Since(start).Milliseconds()),
 		)
 		if status >= 400 {
 			logger.Warn("访问日志", fields)
