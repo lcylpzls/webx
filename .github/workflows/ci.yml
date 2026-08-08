@@ -113,11 +113,11 @@ jobs:
       - name: Install apidiff
         run: go install golang.org/x/exp/cmd/apidiff@latest
 
-      - name: Export v0.8.0 baseline API
+      - name: Export v0.20.0 baseline API
         run: |
           export PATH="$(go env GOPATH)/bin:$PATH"
-          git worktree add /tmp/webx-v0.8.0 v0.8.0
-          cd /tmp/webx-v0.8.0
+          git worktree add /tmp/webx-v0.20.0 v0.20.0
+          cd /tmp/webx-v0.20.0
           apidiff -w /tmp/webx-old.bin .
           apidiff -w /tmp/middleware-old.bin ./middleware
 
@@ -131,7 +131,7 @@ jobs:
             OUT=$(apidiff "/tmp/${pair}-old.bin" "/tmp/${pair}-new.bin")
             echo "$OUT"
             if echo "$OUT" | grep -q "Incompatible"; then
-              echo "检测到破坏性 API 变更（违反 v0.8.0 冻结基线）"
+              echo "检测到破坏性 API 变更（违反 v0.20.0 冻结基线）"
               exit 1
             fi
           done
