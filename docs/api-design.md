@@ -75,7 +75,7 @@ func (c *Context) AbortWithStatusJSON(httpStatus int, msg string, data any)
 func (c *Context) IsAborted() bool
 ```
 
-### 2.2 Server 链式 API（与 ginx 对齐）
+### 2.2 Server 链式 API
 
 ```go
 func NewServer(cfg Config, logger logx.Logger) *Server
@@ -128,7 +128,7 @@ type Config struct {
     TLSCertFile string        `toml:"tls_cert_file"`
     TLSKeyFile  string        `toml:"tls_key_file"`
     ReadTimeout time.Duration `toml:"read_timeout"`
-    // ... 其余字段与 ginx 对齐，全部带 toml tag
+    // ... 其余字段全部带 toml tag
 }
 
 func (c *Config) Validate() error
@@ -159,7 +159,7 @@ const (
 
 ## 4. 内置中间件
 
-与 ginx 完全对齐，顺序固定：
+内置顺序固定：
 
 `Recovery → RequestID → Timeout → CORS → Validation → RateLimit`
 
@@ -187,9 +187,9 @@ const (
 | D-2 | 路由写法 | 对外兼容 `:id`/`*filepath`，内部翻译为 `{id}`/`{path...}` | 对外直接要求 `{id}` |
 | D-3 | HTTP/3 默认 | 默认关闭，`UseHttp3Listen` 显式开启 | 只要配置了证书就自动开启 |
 | D-4 | 配置来源 | Config 直接构造 + `LoadConfig` TOML 都支持 | 仅 confx TOML |
-| D-5 | 日志抽象 | 直接用 logx.Logger（不另设接口） | 保留 ginx 式 Logger 接口 |
-| D-6 | 响应 code | 沿用 int（0=成功，HTTP 语义错误码），与 ginx 兼容 | 改为 errx.Code 字符串（更语义化，但破坏兼容） |
-| D-7 | AccessLog | 新增可选的请求日志中间件（ginx 没有） | 不新增，保持与 ginx 完全一致 |
+| D-5 | 日志抽象 | 直接用 logx.Logger（不另设接口） | 保留自定义 Logger 接口 |
+| D-6 | 响应 code | 沿用 int（0=成功，HTTP 语义错误码） | 改为 errx.Code 字符串（更语义化，但破坏兼容） |
+| D-7 | AccessLog | 新增可选的请求日志中间件 | 不新增 |
 
 > 我的建议：D-1/D-2/D-3/D-4/D-5/D-6 全部选方案 A；D-7 建议选 A
 > （服务级访问日志是生产刚需，logx 已具备完整能力）。

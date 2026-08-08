@@ -34,3 +34,16 @@ func TestRespondError(t *testing.T) {
 		t.Errorf("响应体应含错误码：%s", rec.Body.String())
 	}
 }
+
+func TestRespondErrorWithData(t *testing.T) {
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	RespondErrorWithData(c, errx.New(errx.KindNotFound, "USER_NOT_FOUND", "用户不存在"),
+		map[string]string{"hint": "检查参数"})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("状态码不符：%d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "hint") || !strings.Contains(rec.Body.String(), "检查参数") {
+		t.Errorf("响应体应含业务数据：%s", rec.Body.String())
+	}
+}

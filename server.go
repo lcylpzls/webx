@@ -664,10 +664,11 @@ func (s *Server) registerBuiltinMiddleware() {
 		s.mwManager.Disable("timeout")
 	}
 	corsCfg := middleware.CORSConfig{
-		AllowedOrigins: s.config.CORSAllowedOrigins,
-		AllowedMethods: s.config.CORSAllowedMethods,
-		AllowedHeaders: s.config.CORSAllowedHeaders,
-		MaxAge:         int(s.config.CORSMaxAge.Seconds()),
+		AllowedOrigins:   s.config.CORSAllowedOrigins,
+		AllowedMethods:   s.config.CORSAllowedMethods,
+		AllowedHeaders:   s.config.CORSAllowedHeaders,
+		MaxAge:           int(s.config.CORSMaxAge.Seconds()),
+		AllowCredentials: s.config.CORSAllowCredentials,
 	}
 	if len(corsCfg.AllowedOrigins) == 0 {
 		corsCfg = middleware.DefaultCORSConfig()

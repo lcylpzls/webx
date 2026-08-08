@@ -14,7 +14,7 @@ import (
 	"github.com/lcylpzls/logx"
 )
 
-// GracefulShutdown 监听系统信号并执行优雅关闭（公开 API，兼容 ginx 用法）。
+// GracefulShutdown 监听系统信号并执行优雅关闭。
 // 收到 SIGINT/SIGTERM 后调用 httpServer.Shutdown 排空请求。
 func GracefulShutdown(
 	ctx context.Context,

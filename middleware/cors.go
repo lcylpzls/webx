@@ -10,10 +10,11 @@ import (
 
 // CORSConfig 定义 CORS 中间件的配置参数。
 type CORSConfig struct {
-	AllowedOrigins []string
-	AllowedMethods []string
-	AllowedHeaders []string
-	MaxAge         int
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	MaxAge           int
+	AllowCredentials bool
 }
 
 // CORS 返回 CORS 跨域处理中间件。
@@ -43,6 +44,9 @@ func CORS(cfg CORSConfig) core.HandlerFunc {
 		}
 		if len(cfg.AllowedHeaders) > 0 {
 			c.Header("Access-Control-Allow-Headers", strings.Join(cfg.AllowedHeaders, ", "))
+		}
+		if cfg.AllowCredentials {
+			c.Header("Access-Control-Allow-Credentials", "true")
 		}
 		if cfg.MaxAge > 0 {
 			c.Header("Access-Control-Max-Age", strconv.Itoa(cfg.MaxAge))

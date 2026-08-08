@@ -14,7 +14,7 @@
 - **状态**：已定
 - **决策**：业务 Handler 签名 `func(*webx.Context)`，不导出任何第三方类型；
   中间件链语义（Next/Abort）与 gin 对齐，降低迁移成本。
-- **后果**：与 ginx 的 Handler 签名不兼容，属于新库而非 ginx v2。
+- **后果**：业务 Handler 使用自研 Context，不依赖任何第三方框架类型。
 
 ## ADR-003 依赖策略：仅 quic-go
 
@@ -35,7 +35,7 @@
 - **状态**：已定
 - **决策**：Server 内部直接使用 `logx.Logger`，不另设 Logger 接口；
   调用方可用 `WithLogger` 注入自定义 logx.Logger。
-- **后果**：webx 与 logx 版本绑定，但避免 ginx 中接口空转的问题。
+- **后果**：webx 与 logx 版本绑定，减少接口间接层。
 
 ## ADR-006 中间件语义与 gin 对齐
 
@@ -43,7 +43,7 @@
 - **决策**：Next/Abort/AbortWithStatusJSON 语义逐一对齐 gin，
   内置中间件顺序固定：Recovery → RequestID → Timeout → CORS →
   Validation → RateLimit。
-- **后果**：从 ginx 迁移中间件的心智成本最低。
+- **后果**：中间件迁移心智成本低（与主流框架语义一致）。
 
 ## ADR-007 质量门槛：100% 覆盖 + CI 全绿才可发版
 

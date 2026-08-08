@@ -137,6 +137,21 @@ func TestRouterHeadOnGetRoute(t *testing.T) {
 	}
 }
 
+func TestRouterAutoOptions(t *testing.T) {
+	rt := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
+	if err := rt.Handle("GET", "/api/x", []core.HandlerFunc{noopCore}); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodOptions, "/api/x", nil))
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("自动 OPTIONS 应 204：%d", rec.Code)
+	}
+	if rec.Header().Get("Allow") != "GET, HEAD" {
+		t.Errorf("Allow 头不符：%s", rec.Header().Get("Allow"))
+	}
+}
+
 func TestRouterSpecificityMethodDecision(t *testing.T) {
 	rt := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
 	dir := t.TempDir()

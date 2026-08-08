@@ -2,6 +2,19 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.20.0] - 2026-08-08
+
+### 新增
+
+- `Context.BindForm`：multipart/urlencoded 表单绑定（form tag，含大小限制）；
+- CORS `AllowCredentials` 支持（`CORSAllowCredentials`）；
+- `RespondErrorWithData`：errx 错误响应附带业务数据；
+- 未显式注册 OPTIONS 时按 Allow 自动响应 204。
+
+### 工程
+
+- 移除既有框架迁移指南及相关字样，webx 作为独立新项目定位。
+
 ## [v0.19.0] - 2026-08-08
 
 ### 新增
@@ -140,7 +153,7 @@
 
 ### 文档
 
-- 新增 ginx → webx 迁移指南，README 增加功能清单与性能数据。
+- README 增加功能清单与性能数据。
 
 ## [v0.5.0] - 2026-08-08
 
@@ -205,7 +218,7 @@
 
 ### 规划
 
-- 项目立项：基于标准库实现与 ginx 对等的 HTTP/HTTPS 服务组件库；
+- 项目立项：基于标准库实现工业级 HTTP/HTTPS 服务组件库；
 - 技术栈确定：net/http + logx + errx + confx + quic-go（唯一直接第三方依赖）；
 - 文档阶段：架构、API 草案、迭代计划、ADR 已就绪。
 

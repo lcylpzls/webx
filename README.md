@@ -1,13 +1,12 @@
 # webx
 
-**基于 Go 标准库的工业级 HTTP/HTTPS 服务组件库**，功能与
-[ginx](https://github.com/lcylpzls/ginx) 对等，但不再依赖 Gin：
+**基于 Go 标准库的工业级 HTTP/HTTPS 服务组件库**：
 路由、上下文、中间件链全部自研，传输层基于 `net/http`。
 
 [![Go Version](https://img.shields.io/badge/Go-%3E%3D1.26-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> 当前状态：**核心实现完成**。功能与 ginx 对等，三包语句覆盖率 100%，
+> 当前状态：**核心实现完成**。各包语句覆盖率 100%，
 > 当前版本：v0.5.0（v0.6.0 迭代中）。
 
 ## 技术栈
@@ -30,7 +29,7 @@
 - **简体中文**：日志、打印、注释、文档统一简体中文；
 - **工业级门槛**：语句覆盖率 100%、fuzz、race、三平台 CI、API 基线。
 
-## 功能清单（与 ginx 对等）
+## 功能清单
 
 - 🔒 强制 TLS：HTTP/2（TLS over TCP）+ HTTP/3（QUIC over UDP）+ Unix Socket 多通道同时监听；
 - 🔗 链式配置：路由、分组、中间件、限流、静态文件一键组装；
@@ -48,7 +47,6 @@
 - [docs/api-design.md](docs/api-design.md) — API 草案与待确认决策点
 - [docs/iteration-plan.md](docs/iteration-plan.md) — 迭代计划与质量门槛
 - [docs/decisions.md](docs/decisions.md) — 架构决策记录（ADR）
-- [docs/migration.md](docs/migration.md) — ginx 迁移指南
 
 ## 性能数据（v0.4.0 基线）
 

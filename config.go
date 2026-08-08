@@ -67,6 +67,8 @@ type Config struct {
 	CORSAllowedHeaders []string `toml:"cors_allowed_headers"`
 	// CORSMaxAge CORS 预检请求的缓存时间。
 	CORSMaxAge time.Duration `toml:"cors_max_age"`
+	// CORSAllowCredentials 是否允许携带凭据。
+	CORSAllowCredentials bool `toml:"cors_allow_credentials"`
 
 	// MiddlewareRequestID 是否启用 RequestID 中间件。
 	MiddlewareRequestID bool `toml:"middleware_request_id"`
@@ -110,7 +112,7 @@ func isRegularFile(path string) error {
 }
 
 // Validate 校验配置完整性并填充默认值。
-// 校验规则与 ginx 对齐：证书/私钥必填且可配对、超时非负、日志级别合法。
+// 校验规则：证书/私钥必填且可配对、超时非负、日志级别合法。
 func (c *Config) Validate() error {
 	if c.TLSCertFile == "" {
 		return errx.New(errx.KindInvalid, CodeConfigInvalid, "TLS 证书文件路径不能为空")

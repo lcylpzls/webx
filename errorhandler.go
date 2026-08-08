@@ -1,6 +1,10 @@
 package webx
 
-import "github.com/lcylpzls/errx"
+import (
+	"time"
+
+	"github.com/lcylpzls/errx"
+)
 
 // StatusForError 返回 errx 错误对应的 HTTP 状态码；非 errx 错误返回 500。
 func StatusForError(err error) int {
@@ -12,4 +16,16 @@ func StatusForError(err error) int {
 func RespondError(c *Context, err error) {
 	status := StatusForError(err)
 	c.Fail(status, status, err.Error())
+}
+
+// RespondErrorWithData 将 errx 错误映射为标准化错误响应，并附带业务数据。
+func RespondErrorWithData(c *Context, err error, data any) {
+	status := StatusForError(err)
+	_ = c.JSON(status, StandardizedResponse{
+		Code:      status,
+		Msg:       err.Error(),
+		Data:      data,
+		RequestID: c.RequestID(),
+		Timestamp: time.Now().UnixMilli(),
+	})
 }

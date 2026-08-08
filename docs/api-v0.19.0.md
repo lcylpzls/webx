@@ -18,7 +18,7 @@ const (
 	CodeInternalError      = core.CodeInternalError
 	CodeServiceUnavailable = core.CodeServiceUnavailable
 )
-    标准化响应业务码，与 ginx 保持一致。
+    标准化响应业务码。
 
 const (
 	// CodeConfigInvalid 配置校验失败。
@@ -57,12 +57,15 @@ func GracefulShutdown(
 	unixSocketPath string,
 	cleanupFuncs []func(),
 ) error
-    GracefulShutdown 监听系统信号并执行优雅关闭（公开 API，兼容 ginx 用法）。 收到 SIGINT/SIGTERM 后调用
-    httpServer.Shutdown 排空请求。
+    GracefulShutdown 监听系统信号并执行优雅关闭。 收到 SIGINT/SIGTERM 后调用 httpServer.Shutdown
+    排空请求。
 
 func RespondError(c *Context, err error)
     RespondError 将 errx 错误映射为标准化错误响应。 状态码由 Kind 映射（如 KindNotFound → 404），响应体为统一
     JSON 信封。
+
+func RespondErrorWithData(c *Context, err error, data any)
+    RespondErrorWithData 将 errx 错误映射为标准化错误响应，并附带业务数据。
 
 func StatusForError(err error) int
     StatusForError 返回 errx 错误对应的 HTTP 状态码；非 errx 错误返回 500。
@@ -123,6 +126,8 @@ type Config struct {
 	CORSAllowedHeaders []string `toml:"cors_allowed_headers"`
 	// CORSMaxAge CORS 预检请求的缓存时间。
 	CORSMaxAge time.Duration `toml:"cors_max_age"`
+	// CORSAllowCredentials 是否允许携带凭据。
+	CORSAllowCredentials bool `toml:"cors_allow_credentials"`
 
 	// MiddlewareRequestID 是否启用 RequestID 中间件。
 	MiddlewareRequestID bool `toml:"middleware_request_id"`
@@ -156,7 +161,7 @@ func LoadConfig(path string) (Config, error)
     LoadConfig 通过 confx 从 TOML 文件加载配置并校验。 文件不存在、TOML 非法、存在未声明字段或校验失败时返回 errx 错误。
 
 func (c *Config) Validate() error
-    Validate 校验配置完整性并填充默认值。 校验规则与 ginx 对齐：证书/私钥必填且可配对、超时非负、日志级别合法。
+    Validate 校验配置完整性并填充默认值。 校验规则：证书/私钥必填且可配对、超时非负、日志级别合法。
 
 type Context = core.Context
     Context 是单个请求的上下文。
@@ -470,10 +475,11 @@ type AccessLogOptions struct {
     AccessLogOptions 定义访问日志中间件的配置。
 
 type CORSConfig struct {
-	AllowedOrigins []string
-	AllowedMethods []string
-	AllowedHeaders []string
-	MaxAge         int
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	MaxAge           int
+	AllowCredentials bool
 }
     CORSConfig 定义 CORS 中间件的配置参数。
 

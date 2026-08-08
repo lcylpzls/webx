@@ -14,7 +14,7 @@ type (
 	StandardizedResponse = core.StandardizedResponse
 )
 
-// 标准化响应业务码，与 ginx 保持一致。
+// 标准化响应业务码。
 const (
 	CodeSuccess            = core.CodeSuccess
 	CodeBadRequest         = core.CodeBadRequest

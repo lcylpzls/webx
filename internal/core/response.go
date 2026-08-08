@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// 标准化响应业务码，与 ginx 保持一致。
+// 标准化响应业务码。
 const (
 	// CodeSuccess 表示请求成功。
 	CodeSuccess = 0

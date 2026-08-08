@@ -1,11 +1,11 @@
-<!-- v0.3.0 API 基线；生成方式：go doc -all . / ./middleware -->
+<!-- v0.3.0 API 基线；生成方式：go doc -all . / ./middleware / ./proxy / ./pprof -->
 
 ## 包 webx
 
 package webx // import "github.com/lcylpzls/webx"
 
-Package webx 提供基于 Go 标准库的工业级 HTTP/HTTPS 服务组件库。 路由基于
-http.ServeMux，上下文与中间件链自研，日志/错误/配置 分别接入 logx / errx / confx，HTTP/3 使用 quic-go。
+Package webx 提供基于 Go 标准库的工业级 HTTP/HTTPS 服务组件库。 路由基于自研 radix
+匹配树，上下文与中间件链自研，日志/错误/配置 分别接入 logx / errx / confx，HTTP/3 使用 quic-go。
 
 CONSTANTS
 
@@ -18,7 +18,7 @@ const (
 	CodeInternalError      = core.CodeInternalError
 	CodeServiceUnavailable = core.CodeServiceUnavailable
 )
-    标准化响应业务码，与 ginx 保持一致。
+    标准化响应业务码。
 
 const (
 	// CodeConfigInvalid 配置校验失败。
@@ -37,6 +37,15 @@ const (
     webx 错误码：统一使用 errx 结构化错误。
 
 
+VARIABLES
+
+var NoMethodHandler = core.NoMethodHandler
+    NoMethodHandler 405 兜底处理器。
+
+var NoRouteHandler = core.NoRouteHandler
+    NoRouteHandler 404 兜底处理器（嵌入自定义路由器时使用）。
+
+
 FUNCTIONS
 
 func GracefulShutdown(
@@ -48,8 +57,18 @@ func GracefulShutdown(
 	unixSocketPath string,
 	cleanupFuncs []func(),
 ) error
-    GracefulShutdown 监听系统信号并执行优雅关闭（公开 API，兼容 ginx 用法）。 收到 SIGINT/SIGTERM 后调用
-    httpServer.Shutdown 排空请求。
+    GracefulShutdown 监听系统信号并执行优雅关闭。 收到 SIGINT/SIGTERM 后调用 httpServer.Shutdown
+    排空请求。
+
+func RespondError(c *Context, err error)
+    RespondError 将 errx 错误映射为标准化错误响应。 状态码由 Kind 映射（如 KindNotFound → 404），响应体为统一
+    JSON 信封。
+
+func RespondErrorWithData(c *Context, err error, data any)
+    RespondErrorWithData 将 errx 错误映射为标准化错误响应，并附带业务数据。
+
+func StatusForError(err error) int
+    StatusForError 返回 errx 错误对应的 HTTP 状态码；非 errx 错误返回 500。
 
 
 TYPES
@@ -59,11 +78,15 @@ type Config struct {
 	TLSCertFile string `toml:"tls_cert_file"`
 	// TLSKeyFile TLS 私钥文件路径（PEM 格式），必填。
 	TLSKeyFile string `toml:"tls_key_file"`
+	// MinTLSVersion 最低 TLS 版本，0 表示默认 TLS 1.2（仅允许 TLS1.2/1.3）。
+	MinTLSVersion uint16 `toml:"min_tls_version"`
 
 	// ReadTimeout HTTP 读取超时时间。
 	ReadTimeout time.Duration `toml:"read_timeout"`
 	// WriteTimeout HTTP 写入超时时间。
 	WriteTimeout time.Duration `toml:"write_timeout"`
+	// ReadHeaderTimeout 请求头读取超时时间，0 表示默认 10s（Slowloris 防护）。
+	ReadHeaderTimeout time.Duration `toml:"read_header_timeout"`
 	// IdleTimeout HTTP 空闲连接超时时间。
 	IdleTimeout time.Duration `toml:"idle_timeout"`
 	// RequestTimeout 单个请求的超时时间，由 Timeout 中间件使用。
@@ -74,6 +97,12 @@ type Config struct {
 	MaxHeaderBytes int `toml:"max_header_bytes"`
 	// MaxBodyBytes BindJSON 的最大请求体字节数，0 表示默认 10MB。
 	MaxBodyBytes int64 `toml:"max_body_bytes"`
+	// QUICMaxIdleTimeout HTTP/3 空闲连接超时，0 表示默认 30s。
+	QUICMaxIdleTimeout time.Duration `toml:"quic_max_idle_timeout"`
+	// QUICMaxIncomingStreams HTTP/3 单连接最大入站流数，0 表示默认 100。
+	QUICMaxIncomingStreams int64 `toml:"quic_max_incoming_streams"`
+	// QUICDrainTimeout HTTP/3 关闭前等待活动连接排空的时间，0 表示不等待。
+	QUICDrainTimeout time.Duration `toml:"quic_drain_timeout"`
 
 	// HealthPath 健康检查端点路径，默认为 "/health"。
 	HealthPath string `toml:"health_path"`
@@ -84,6 +113,10 @@ type Config struct {
 	AccessLogEnabled bool `toml:"access_log_enabled"`
 	// LogSuccessReq 访问日志是否记录成功请求（默认仅记录非 2xx）。
 	LogSuccessReq bool `toml:"log_success_req"`
+	// AccessLogSampleRate 访问日志采样率：0=全部记录，N>0 平均每 N 条记录 1 条。
+	AccessLogSampleRate int `toml:"access_log_sample_rate"`
+	// AccessLogRedact 访问日志 query 参数中需要脱敏的键。
+	AccessLogRedact []string `toml:"access_log_redact"`
 
 	// CORSAllowedOrigins CORS 允许的来源列表，为空使用默认值。
 	CORSAllowedOrigins []string `toml:"cors_allowed_origins"`
@@ -93,6 +126,8 @@ type Config struct {
 	CORSAllowedHeaders []string `toml:"cors_allowed_headers"`
 	// CORSMaxAge CORS 预检请求的缓存时间。
 	CORSMaxAge time.Duration `toml:"cors_max_age"`
+	// CORSAllowCredentials 是否允许携带凭据。
+	CORSAllowCredentials bool `toml:"cors_allow_credentials"`
 
 	// MiddlewareRequestID 是否启用 RequestID 中间件。
 	MiddlewareRequestID bool `toml:"middleware_request_id"`
@@ -104,6 +139,20 @@ type Config struct {
 	MiddlewareRecovery bool `toml:"middleware_recovery"`
 	// MiddlewareValidation 是否启用 Validation 中间件。
 	MiddlewareValidation bool `toml:"middleware_validation"`
+	// MiddlewareGzip 是否启用响应压缩中间件。
+	MiddlewareGzip bool `toml:"middleware_gzip"`
+	// MiddlewareMetrics 是否启用请求/5xx 计数中间件。
+	MiddlewareMetrics bool `toml:"middleware_metrics"`
+	// MiddlewareSecurity 是否启用安全响应头中间件。
+	MiddlewareSecurity bool `toml:"middleware_security"`
+	// SecurityHSTSMaxAge HSTS 缓存秒数（0=不启用 HSTS）。
+	SecurityHSTSMaxAge int `toml:"security_hsts_max_age"`
+	// SecurityReferrerPolicy Referrer-Policy 取值（空=不设置）。
+	SecurityReferrerPolicy string `toml:"security_referrer_policy"`
+	// GzipMinSize 响应压缩最小字节数（0=默认 1024）。
+	GzipMinSize int `toml:"gzip_min_size"`
+	// Debug 调试模式：Recovery 响应携带 panic 摘要（生产环境保持 false）。
+	Debug bool `toml:"debug"`
 }
     Config 定义 webx Server 的全部配置项，通过 confx 从 TOML 文件加载。 所有校验在 Validate()
     中集中进行，失败返回 errx 结构化错误。
@@ -112,13 +161,35 @@ func LoadConfig(path string) (Config, error)
     LoadConfig 通过 confx 从 TOML 文件加载配置并校验。 文件不存在、TOML 非法、存在未声明字段或校验失败时返回 errx 错误。
 
 func (c *Config) Validate() error
-    Validate 校验配置完整性并填充默认值。 校验规则与 ginx 对齐：证书/私钥必填且可配对、超时非负、日志级别合法。
+    Validate 校验配置完整性并填充默认值。 校验规则：证书/私钥必填且可配对、超时非负、日志级别合法。
 
 type Context = core.Context
     Context 是单个请求的上下文。
 
+func NewContext(w http.ResponseWriter, r *http.Request) *Context
+    NewContext 创建请求上下文（用于在自定义路由器中嵌入 webx Handler）。
+
 type HandlerFunc = core.HandlerFunc
     HandlerFunc 是 webx 的业务处理器签名，不依赖任何第三方类型。
+
+type KeyFunc func(*Context) string
+    KeyFunc 定义限流维度的提取函数（默认按客户端 IP）。
+
+type Metrics struct {
+	// Requests 请求总数（需启用 MiddlewareMetrics）。
+	Requests uint64
+	// Errors5xx 5xx 响应数（需启用 MiddlewareMetrics）。
+	Errors5xx uint64
+	// RateLimited 限流拒绝数（启用 EnableRateLimit 后统计）。
+	RateLimited uint64
+	// Panics Recovery 捕获的 panic 数（启用 MiddlewareRecovery 后统计）。
+	Panics uint64
+	// AvgRequestDurationMs 平均请求耗时（毫秒，需启用 MiddlewareMetrics）。
+	AvgRequestDurationMs uint64
+	// ActiveConnections 当前打开的连接数。
+	ActiveConnections int64
+}
+    Metrics 是 webx 运行指标快照，可接入监控面板。
 
 type MiddlewareType string
     MiddlewareType 标识内置中间件的类型。
@@ -136,6 +207,12 @@ const (
 	MiddlewareValidation MiddlewareType = "validation"
 	// MiddlewareRateLimit IP 令牌桶限流中间件。
 	MiddlewareRateLimit MiddlewareType = "rate_limit"
+	// MiddlewareGzip 响应压缩中间件。
+	MiddlewareGzip MiddlewareType = "gzip"
+	// MiddlewareMetrics 请求/5xx 计数中间件。
+	MiddlewareMetrics MiddlewareType = "metrics"
+	// MiddlewareSecurity 安全响应头中间件。
+	MiddlewareSecurity MiddlewareType = "security"
 	// MiddlewareAccessLog 访问日志中间件。
 	MiddlewareAccessLog MiddlewareType = "access_log"
 )
@@ -148,6 +225,8 @@ type RateLimitOptions struct {
 	Whitelist []string
 	// CleanupInterval 过期桶清理间隔（可选，0 = 默认 5 分钟）。
 	CleanupInterval time.Duration
+	// KeyFunc 限流维度提取函数（可选，默认按客户端 IP）。
+	KeyFunc KeyFunc
 }
     RateLimitOptions 定义 IP 限流中间件的配置参数。
 
@@ -177,6 +256,12 @@ func (rg *RouteGroup) GET(path string, handler HandlerFunc, mw ...HandlerFunc)
 func (rg *RouteGroup) Group(relativePath string) *RouteGroup
     Group 创建子分组，继承父分组 prefix 与中间件。
 
+func (rg *RouteGroup) HEAD(path string, handler HandlerFunc, mw ...HandlerFunc)
+    HEAD 注册一条 HEAD 方法路由。
+
+func (rg *RouteGroup) OPTIONS(path string, handler HandlerFunc, mw ...HandlerFunc)
+    OPTIONS 注册一条 OPTIONS 方法路由。
+
 func (rg *RouteGroup) PATCH(path string, handler HandlerFunc, mw ...HandlerFunc)
     PATCH 注册一条 PATCH 方法路由。
 
@@ -192,25 +277,36 @@ func (rg *RouteGroup) Use(middleware ...HandlerFunc)
 type Router struct {
 	// Has unexported fields.
 }
-    Router 基于标准库 http.ServeMux 实现路由： 负责 gin 风格语法（:id / *filepath）到 ServeMux
-    模式（{id} / {path...}）的翻译， 以及 404/405 标准化 JSON 响应。路径匹配由内置轻量匹配器完成， 实际分发交给
-    ServeMux（保留其冲突检测与 PathValue 能力）。
+    Router 基于自研 radix 匹配树实现路由： 支持 gin 风格语法（:id / *filepath）、404/405 标准化 JSON
+    与尾斜杠重定向。 匹配与分发均由自身完成，不依赖 http.ServeMux。
 
 func NewRouter(noRoute, noMethod core.HandlerFunc) *Router
     NewRouter 创建路由，并指定 404/405 兜底处理器。
 
 func (rt *Router) Handle(method, path string, chain []core.HandlerFunc) error
-    Handle 注册一条路由（chain 为全局中间件 + 路由中间件 + 最终处理器的完整链）。 路径冲突或语法非法时返回错误。
+    Handle 注册一条路由（chain 为全局中间件 + 路由中间件 + 最终处理器的完整链）。
 
 func (rt *Router) HandleStatic(prefix string, fs http.FileSystem) error
-    HandleStatic 注册静态文件服务（支持子树路径）。 使用无方法模式注册，避免 ServeMux 中 GET 隐式匹配 HEAD 导致 "静态根
-    + 具体 GET 路由" 的冲突；方法判定由匹配器负责。
+    HandleStatic 注册静态文件服务（支持子树路径）。
+
+func (rt *Router) HandleStaticWithOptions(prefix string, fs http.FileSystem, opts StaticOptions) error
+    HandleStaticWithOptions 注册静态文件服务（含缓存头/目录索引选项）。
 
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request)
-    ServeHTTP 实现 http.Handler：先做 404/405 判定，再交给 ServeMux 分发。
+    ServeHTTP 实现 http.Handler：树匹配 + 方法判定 + 分发。
 
 func (rt *Router) SetMaxBodyBytes(n int64)
     SetMaxBodyBytes 设置路由处理链中 BindJSON 的最大请求体字节数。
+
+type SNICertificate struct {
+	// ServerName 客户端 SNI 主机名（如 "api.example.com"）。
+	ServerName string
+	// CertFile 该域名证书文件。
+	CertFile string
+	// KeyFile 该域名私钥文件。
+	KeyFile string
+}
+    SNICertificate 是按 ServerName（SNI）指定的证书。
 
 type Server struct {
 	// Has unexported fields.
@@ -239,8 +335,14 @@ func (s *Server) EnableSPA(filesys http.FileSystem, indexPath string) *Server
 func (s *Server) ListenerAddr() string
     ListenerAddr 返回第一个 Listener 的监听地址（port 0 动态端口时可用）。
 
+func (s *Server) Metrics() Metrics
+    Metrics 返回运行指标快照；未启用对应能力时字段为 0。
+
 func (s *Server) OverrideMiddleware(mt MiddlewareType, mw HandlerFunc) *Server
     OverrideMiddleware 使用自定义 Handler 覆盖指定类型的内置中间件。
+
+func (s *Server) RegisterHealthCheck(name string, fn func(context.Context) error) *Server
+    RegisterHealthCheck 注册自定义健康检查项，/health 会执行全部检查项。
 
 func (s *Server) RegisterRoute(r Route) *Server
     RegisterRoute 注册单条路由。
@@ -254,8 +356,21 @@ func (s *Server) RegisterRoutes(routes []Route) *Server
 func (s *Server) ServeStaticDir(prefix, root string) *Server
     ServeStaticDir 从本地目录提供静态文件。
 
+func (s *Server) ServeStaticDirWithOptions(prefix, root string, opts StaticOptions) *Server
+    ServeStaticDirWithOptions 从本地目录提供静态文件，并应用选项。
+
 func (s *Server) ServeStaticFS(prefix string, filesys http.FileSystem) *Server
     ServeStaticFS 从 http.FileSystem 提供静态文件，配合 embed 使用。
+
+func (s *Server) ServeStaticFSWithOptions(prefix string, filesys http.FileSystem, opts StaticOptions) *Server
+    ServeStaticFSWithOptions 从 http.FileSystem 提供静态文件，并应用选项。
+
+func (s *Server) SetCertificateLoader(fn func(*tls.ClientHelloInfo) (*tls.Certificate, error)) *Server
+    SetCertificateLoader 设置自定义证书加载器（用于 SNI 多证书、KMS 等场景）。 未设置时默认从 Config
+    的证书/私钥文件按需加载并缓存（文件变化自动重载）。
+
+func (s *Server) SetSNICertificates(certs []SNICertificate) *Server
+    SetSNICertificates 设置按 SNI 域名区分的多证书；未匹配域名回退到默认证书。
 
 func (s *Server) Start() error
     Start 启动服务：校验配置、装配中间件、注册路由、创建各通道监听器。 调用后阻塞直到服务关闭或发生错误。
@@ -282,6 +397,14 @@ func (s *Server) WithLogger(l logx.Logger) *Server
 type StandardizedResponse = core.StandardizedResponse
     StandardizedResponse 是统一的标准 JSON 响应体。
 
+type StaticOptions struct {
+	// MaxAge 设置 Cache-Control: max-age（0 表示不设置）。
+	MaxAge time.Duration
+	// DisableIndex 禁用目录索引：无 index.html 的目录返回 404。
+	DisableIndex bool
+}
+    StaticOptions 定义静态文件服务的选项。
+
 
 ## 包 webx/middleware
 
@@ -292,11 +415,24 @@ Recovery、RequestID、Timeout、CORS、Validation、RateLimit 与 AccessLog。
 
 FUNCTIONS
 
-func AccessLog(logger logx.Logger, successOnly bool) core.HandlerFunc
-    AccessLog 返回访问日志中间件。 successOnly 为 true 时记录全部请求；为 false 时仅记录非 2xx 请求。
+func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc
+    AccessLog 返回访问日志中间件。
 
 func CORS(cfg CORSConfig) core.HandlerFunc
     CORS 返回 CORS 跨域处理中间件。
+
+func Gzip() core.HandlerFunc
+    Gzip 返回响应压缩中间件：客户端 Accept-Encoding 含 gzip 时启用。
+
+func GzipWithOptions(opts GzipOptions) core.HandlerFunc
+    GzipWithOptions 返回带选项的响应压缩中间件。
+
+func Hooks(onRequest, onResponse func(*core.Context)) core.HandlerFunc
+    Hooks 返回请求钩子中间件：进入时调用 onRequest，处理结束后调用 onResponse。 可用于 OpenTelemetry
+    适配等观测场景；回调可传 nil。
+
+func MetricsHandler(m *Metrics) core.HandlerFunc
+    MetricsHandler 返回指标采集中间件。
 
 func RateLimit(rl *RateLimiter) core.HandlerFunc
     RateLimit 返回 IP 令牌桶限流中间件，超限返回标准化 429。
@@ -304,8 +440,20 @@ func RateLimit(rl *RateLimiter) core.HandlerFunc
 func Recovery() core.HandlerFunc
     Recovery 返回 Panic 捕获中间件，这是组件库中唯一调用 recover() 的位置。
 
+func RecoveryWith(logger logx.Logger, m *Metrics) core.HandlerFunc
+    RecoveryWith 返回 Panic 捕获中间件，统计 panic 数量并输出日志。
+
+func RecoveryWithMetrics(m *Metrics) core.HandlerFunc
+    RecoveryWithMetrics 返回 Panic 捕获中间件，并统计 panic 数量。
+
+func RecoveryWithOptions(logger logx.Logger, m *Metrics, debugMode bool) core.HandlerFunc
+    RecoveryWithOptions 返回 Panic 捕获中间件；debugMode 为 true 时响应携带 panic 摘要。
+
 func RequestID() core.HandlerFunc
     RequestID 返回请求 ID 生成中间件。 优先使用请求头 X-Request-ID，否则生成 UUID v4。
+
+func SecurityHeaders(opts SecurityHeadersOptions) core.HandlerFunc
+    SecurityHeaders 返回安全响应头中间件。
 
 func Timeout(timeout time.Duration) core.HandlerFunc
     Timeout 返回请求超时中间件。 向请求注入带超时的 Context；超时后丢弃 Handler 写入并返回 503。
@@ -316,16 +464,33 @@ func Validation() core.HandlerFunc
 
 TYPES
 
+type AccessLogOptions struct {
+	// LogSuccess 是否记录成功请求（默认仅记录非 2xx）。
+	LogSuccess bool
+	// SampleRate 采样率：0 表示记录全部；N>0 表示平均每 N 条记录 1 条。
+	SampleRate int
+	// RedactKeys query 参数中需要脱敏的键。
+	RedactKeys []string
+}
+    AccessLogOptions 定义访问日志中间件的配置。
+
 type CORSConfig struct {
-	AllowedOrigins []string
-	AllowedMethods []string
-	AllowedHeaders []string
-	MaxAge         int
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	MaxAge           int
+	AllowCredentials bool
 }
     CORSConfig 定义 CORS 中间件的配置参数。
 
 func DefaultCORSConfig() CORSConfig
     DefaultCORSConfig 返回常用 CORS 默认配置。
+
+type GzipOptions struct {
+	// MinSize 未显式写状态码时，小于该字节数的响应不压缩（0=默认 1024）。
+	MinSize int
+}
+    GzipOptions 定义响应压缩中间件的选项。
 
 type Manager struct {
 	// Has unexported fields.
@@ -359,6 +524,23 @@ func (m *Manager) Override(mt string, handler core.HandlerFunc)
 func (m *Manager) RegisterBuiltin(key string, handler core.HandlerFunc)
     RegisterBuiltin 注册一个内置中间件到管理器。
 
+type Metrics struct {
+	// Has unexported fields.
+}
+    Metrics 统计请求与 5xx 错误数量，供监控面板对接。
+
+func NewMetrics() *Metrics
+    NewMetrics 创建指标计数器。
+
+func (m *Metrics) Durations() (totalNs, samples uint64)
+    Durations 返回累计耗时（纳秒）与样本数。
+
+func (m *Metrics) Panics() uint64
+    Panics 返回 Recovery 捕获的 panic 数量。
+
+func (m *Metrics) Snapshot() (requests, errors5x uint64)
+    Snapshot 返回当前计数快照。
+
 type RateLimiter struct {
 	// Has unexported fields.
 }
@@ -372,4 +554,69 @@ func (rl *RateLimiter) Allow(ip string) bool
 
 func (rl *RateLimiter) Cleanup(interval time.Duration)
     Cleanup 清理超过 window*10 未活动的桶。
+
+func (rl *RateLimiter) Rejected() uint64
+    Rejected 返回被拒绝的请求数。
+
+func (rl *RateLimiter) SetKeyFunc(fn func(*core.Context) string)
+    SetKeyFunc 设置限流维度提取函数（默认按客户端 IP）。
+
+func (rl *RateLimiter) SetMaxBuckets(n int)
+    SetMaxBuckets 设置 IP 桶数量上限；达到上限后新 IP 直接拒绝。
+
+type SecurityHeadersOptions struct {
+	// ContentTypeNoSniff 设置 X-Content-Type-Options: nosniff。
+	ContentTypeNoSniff bool
+	// FrameDeny 设置 X-Frame-Options: DENY。
+	FrameDeny bool
+	// ReferrerPolicy 设置 Referrer-Policy（空则不设置）。
+	ReferrerPolicy string
+	// HSTSMaxAge 大于 0 时设置 Strict-Transport-Security。
+	HSTSMaxAge time.Duration
+}
+    SecurityHeadersOptions 定义安全响应头中间件的配置。
+
+
+## 包 webx/proxy
+
+package proxy // import "github.com/lcylpzls/webx/proxy"
+
+Package proxy 提供基于标准库 httputil.ReverseProxy 的上游代理封装。
+
+FUNCTIONS
+
+func DefaultErrorHandler(w http.ResponseWriter, r *http.Request, err error)
+    DefaultErrorHandler 输出统一 JSON 502 错误响应。
+
+func Handler(target *url.URL, opts ...Option) webx.HandlerFunc
+    Handler 返回反向代理处理器，将请求转发到 target。
+
+
+TYPES
+
+type Option func(*httputil.ReverseProxy)
+    Option 配置 ReverseProxy 的选项。
+
+func WithErrorHandler(fn func(http.ResponseWriter, *http.Request, error)) Option
+    WithErrorHandler 设置上游错误处理器。
+
+
+## 包 webx/pprof
+
+package pprof // import "github.com/lcylpzls/webx/pprof"
+
+Package pprof 注册标准库 net/http/pprof 处理器，便于线上性能诊断。
+
+FUNCTIONS
+
+func Register(s Registrar) *webx.Server
+    Register 注册 /debug/pprof 相关处理器。
+
+
+TYPES
+
+type Registrar interface {
+	RegisterRoute(webx.Route) *webx.Server
+}
+    Registrar 抽象路由注册能力（*webx.Server 满足）。
 

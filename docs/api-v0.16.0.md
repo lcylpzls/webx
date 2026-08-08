@@ -1,11 +1,11 @@
-<!-- v0.16.0 API 基线；生成方式：go doc -all . / ./middleware / ./proxy -->
+<!-- v0.16.0 API 基线；生成方式：go doc -all . / ./middleware / ./proxy / ./pprof -->
 
 ## 包 webx
 
 package webx // import "github.com/lcylpzls/webx"
 
-Package webx 提供基于 Go 标准库的工业级 HTTP/HTTPS 服务组件库。 路由基于
-http.ServeMux，上下文与中间件链自研，日志/错误/配置 分别接入 logx / errx / confx，HTTP/3 使用 quic-go。
+Package webx 提供基于 Go 标准库的工业级 HTTP/HTTPS 服务组件库。 路由基于自研 radix
+匹配树，上下文与中间件链自研，日志/错误/配置 分别接入 logx / errx / confx，HTTP/3 使用 quic-go。
 
 CONSTANTS
 
@@ -18,7 +18,7 @@ const (
 	CodeInternalError      = core.CodeInternalError
 	CodeServiceUnavailable = core.CodeServiceUnavailable
 )
-    标准化响应业务码，与 ginx 保持一致。
+    标准化响应业务码。
 
 const (
 	// CodeConfigInvalid 配置校验失败。
@@ -37,6 +37,15 @@ const (
     webx 错误码：统一使用 errx 结构化错误。
 
 
+VARIABLES
+
+var NoMethodHandler = core.NoMethodHandler
+    NoMethodHandler 405 兜底处理器。
+
+var NoRouteHandler = core.NoRouteHandler
+    NoRouteHandler 404 兜底处理器（嵌入自定义路由器时使用）。
+
+
 FUNCTIONS
 
 func GracefulShutdown(
@@ -48,12 +57,15 @@ func GracefulShutdown(
 	unixSocketPath string,
 	cleanupFuncs []func(),
 ) error
-    GracefulShutdown 监听系统信号并执行优雅关闭（公开 API，兼容 ginx 用法）。 收到 SIGINT/SIGTERM 后调用
-    httpServer.Shutdown 排空请求。
+    GracefulShutdown 监听系统信号并执行优雅关闭。 收到 SIGINT/SIGTERM 后调用 httpServer.Shutdown
+    排空请求。
 
 func RespondError(c *Context, err error)
     RespondError 将 errx 错误映射为标准化错误响应。 状态码由 Kind 映射（如 KindNotFound → 404），响应体为统一
     JSON 信封。
+
+func RespondErrorWithData(c *Context, err error, data any)
+    RespondErrorWithData 将 errx 错误映射为标准化错误响应，并附带业务数据。
 
 func StatusForError(err error) int
     StatusForError 返回 errx 错误对应的 HTTP 状态码；非 errx 错误返回 500。
@@ -114,6 +126,8 @@ type Config struct {
 	CORSAllowedHeaders []string `toml:"cors_allowed_headers"`
 	// CORSMaxAge CORS 预检请求的缓存时间。
 	CORSMaxAge time.Duration `toml:"cors_max_age"`
+	// CORSAllowCredentials 是否允许携带凭据。
+	CORSAllowCredentials bool `toml:"cors_allow_credentials"`
 
 	// MiddlewareRequestID 是否启用 RequestID 中间件。
 	MiddlewareRequestID bool `toml:"middleware_request_id"`
@@ -137,6 +151,8 @@ type Config struct {
 	SecurityReferrerPolicy string `toml:"security_referrer_policy"`
 	// GzipMinSize 响应压缩最小字节数（0=默认 1024）。
 	GzipMinSize int `toml:"gzip_min_size"`
+	// Debug 调试模式：Recovery 响应携带 panic 摘要（生产环境保持 false）。
+	Debug bool `toml:"debug"`
 }
     Config 定义 webx Server 的全部配置项，通过 confx 从 TOML 文件加载。 所有校验在 Validate()
     中集中进行，失败返回 errx 结构化错误。
@@ -145,7 +161,7 @@ func LoadConfig(path string) (Config, error)
     LoadConfig 通过 confx 从 TOML 文件加载配置并校验。 文件不存在、TOML 非法、存在未声明字段或校验失败时返回 errx 错误。
 
 func (c *Config) Validate() error
-    Validate 校验配置完整性并填充默认值。 校验规则与 ginx 对齐：证书/私钥必填且可配对、超时非负、日志级别合法。
+    Validate 校验配置完整性并填充默认值。 校验规则：证书/私钥必填且可配对、超时非负、日志级别合法。
 
 type Context = core.Context
     Context 是单个请求的上下文。
@@ -170,6 +186,8 @@ type Metrics struct {
 	Panics uint64
 	// AvgRequestDurationMs 平均请求耗时（毫秒，需启用 MiddlewareMetrics）。
 	AvgRequestDurationMs uint64
+	// ActiveConnections 当前打开的连接数。
+	ActiveConnections int64
 }
     Metrics 是 webx 运行指标快照，可接入监控面板。
 
@@ -259,25 +277,23 @@ func (rg *RouteGroup) Use(middleware ...HandlerFunc)
 type Router struct {
 	// Has unexported fields.
 }
-    Router 基于标准库 http.ServeMux 实现路由： 负责 gin 风格语法（:id / *filepath）到 ServeMux
-    模式（{id} / {path...}）的翻译， 以及 404/405 标准化 JSON 响应。路径匹配由内置轻量匹配器完成， 实际分发交给
-    ServeMux（保留其冲突检测与 PathValue 能力）。
+    Router 基于自研 radix 匹配树实现路由： 支持 gin 风格语法（:id / *filepath）、404/405 标准化 JSON
+    与尾斜杠重定向。 匹配与分发均由自身完成，不依赖 http.ServeMux。
 
 func NewRouter(noRoute, noMethod core.HandlerFunc) *Router
     NewRouter 创建路由，并指定 404/405 兜底处理器。
 
 func (rt *Router) Handle(method, path string, chain []core.HandlerFunc) error
-    Handle 注册一条路由（chain 为全局中间件 + 路由中间件 + 最终处理器的完整链）。 路径冲突或语法非法时返回错误。
+    Handle 注册一条路由（chain 为全局中间件 + 路由中间件 + 最终处理器的完整链）。
 
 func (rt *Router) HandleStatic(prefix string, fs http.FileSystem) error
-    HandleStatic 注册静态文件服务（支持子树路径）。 使用无方法模式注册，避免 ServeMux 中 GET 隐式匹配 HEAD 导致 "静态根
-    + 具体 GET 路由" 的冲突；方法判定由匹配器负责。
+    HandleStatic 注册静态文件服务（支持子树路径）。
 
 func (rt *Router) HandleStaticWithOptions(prefix string, fs http.FileSystem, opts StaticOptions) error
     HandleStaticWithOptions 注册静态文件服务（含缓存头/目录索引选项）。
 
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request)
-    ServeHTTP 实现 http.Handler：先做 404/405 判定，再交给 ServeMux 分发。
+    ServeHTTP 实现 http.Handler：树匹配 + 方法判定 + 分发。
 
 func (rt *Router) SetMaxBodyBytes(n int64)
     SetMaxBodyBytes 设置路由处理链中 BindJSON 的最大请求体字节数。
@@ -430,6 +446,9 @@ func RecoveryWith(logger logx.Logger, m *Metrics) core.HandlerFunc
 func RecoveryWithMetrics(m *Metrics) core.HandlerFunc
     RecoveryWithMetrics 返回 Panic 捕获中间件，并统计 panic 数量。
 
+func RecoveryWithOptions(logger logx.Logger, m *Metrics, debugMode bool) core.HandlerFunc
+    RecoveryWithOptions 返回 Panic 捕获中间件；debugMode 为 true 时响应携带 panic 摘要。
+
 func RequestID() core.HandlerFunc
     RequestID 返回请求 ID 生成中间件。 优先使用请求头 X-Request-ID，否则生成 UUID v4。
 
@@ -456,10 +475,11 @@ type AccessLogOptions struct {
     AccessLogOptions 定义访问日志中间件的配置。
 
 type CORSConfig struct {
-	AllowedOrigins []string
-	AllowedMethods []string
-	AllowedHeaders []string
-	MaxAge         int
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	MaxAge           int
+	AllowCredentials bool
 }
     CORSConfig 定义 CORS 中间件的配置参数。
 
@@ -565,6 +585,9 @@ Package proxy 提供基于标准库 httputil.ReverseProxy 的上游代理封装�
 
 FUNCTIONS
 
+func DefaultErrorHandler(w http.ResponseWriter, r *http.Request, err error)
+    DefaultErrorHandler 输出统一 JSON 502 错误响应。
+
 func Handler(target *url.URL, opts ...Option) webx.HandlerFunc
     Handler 返回反向代理处理器，将请求转发到 target。
 
@@ -573,4 +596,27 @@ TYPES
 
 type Option func(*httputil.ReverseProxy)
     Option 配置 ReverseProxy 的选项。
+
+func WithErrorHandler(fn func(http.ResponseWriter, *http.Request, error)) Option
+    WithErrorHandler 设置上游错误处理器。
+
+
+## 包 webx/pprof
+
+package pprof // import "github.com/lcylpzls/webx/pprof"
+
+Package pprof 注册标准库 net/http/pprof 处理器，便于线上性能诊断。
+
+FUNCTIONS
+
+func Register(s Registrar) *webx.Server
+    Register 注册 /debug/pprof 相关处理器。
+
+
+TYPES
+
+type Registrar interface {
+	RegisterRoute(webx.Route) *webx.Server
+}
+    Registrar 抽象路由注册能力（*webx.Server 满足）。
 

@@ -84,3 +84,19 @@ func TestCORSDisallowedAndNoOrigin(t *testing.T) {
 		t.Error("无 Origin 不应设置响应头")
 	}
 }
+
+func TestCORSAllowCredentials(t *testing.T) {
+	cfg := CORSConfig{
+		AllowedOrigins:   []string{"https://trusted.com"},
+		AllowCredentials: true,
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Origin", "https://trusted.com")
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, req)
+	c.SetHandlers([]core.HandlerFunc{CORS(cfg), func(c *core.Context) { c.Success("ok", nil) }})
+	c.Run()
+	if rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
+		t.Error("凭据头缺失")
+	}
+}

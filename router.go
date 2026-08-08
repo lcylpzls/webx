@@ -163,6 +163,12 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		handler, ok = node.handlers[http.MethodGet]
 	}
 	if !ok {
+		if r.Method == http.MethodOptions {
+			// 未显式注册 OPTIONS 时按 Allow 自动响应 204。
+			w.Header().Set("Allow", allowHeader(node))
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		w.Header().Set("Allow", allowHeader(node))
 		rt.runFallback(w, r, rt.noMethod)
 		return

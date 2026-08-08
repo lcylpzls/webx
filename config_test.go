@@ -129,6 +129,7 @@ security_hsts_max_age = 3600
 security_referrer_policy = "no-referrer"
 gzip_min_size = 2048
 debug = true
+cors_allow_credentials = true
 `
 	if err := os.WriteFile(path, []byte(toml), 0o600); err != nil {
 		t.Fatal(err)
@@ -164,6 +165,9 @@ debug = true
 	}
 	if !cfg.Debug {
 		t.Errorf("debug 配置加载不符：%+v", cfg)
+	}
+	if !cfg.CORSAllowCredentials {
+		t.Errorf("CORS 凭据配置加载不符：%+v", cfg)
 	}
 }
 

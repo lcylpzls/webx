@@ -1,4 +1,4 @@
-<!-- v0.7.0 API 基线；生成方式：go doc -all . / ./middleware / ./proxy / ./pprof -->
+<!-- v0.20.0 API 基线；生成方式：go doc -all . / ./middleware / ./proxy / ./pprof -->
 
 ## 包 webx
 
