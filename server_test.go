@@ -507,6 +507,54 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 	}
 }
 
+func TestServerRateLimitKeyFunc(t *testing.T) {
+	cfg := validConfig(t)
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.EnableRateLimit(RateLimitOptions{
+		QPS:     1,
+		Window:  time.Second,
+		KeyFunc: func(c *core.Context) string { return c.Query("user") },
+	})
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/rl",
+		Handler: func(c *core.Context) { c.Success("ok", nil) },
+	})
+	startServer(t, s)
+	client := testHTTPClient()
+	base := "https://" + s.ListenerAddr() + "/rl?user="
+
+	for i := 0; i < 2; i++ {
+		resp, err := client.Get(base + "a")
+		if err != nil {
+			t.Fatalf("GET 失败：%v", err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		want := http.StatusOK
+		if i == 1 {
+			want = http.StatusTooManyRequests
+		}
+		if resp.StatusCode != want {
+			t.Errorf("用户 a 第 %d 次状态不符：%d", i+1, resp.StatusCode)
+		}
+	}
+	resp, err := client.Get(base + "b")
+	if err != nil {
+		t.Fatalf("GET 失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("不同用户应放行：%d", resp.StatusCode)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
 func TestServerGzipAndMetrics(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareGzip = true

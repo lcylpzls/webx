@@ -2,6 +2,15 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.14.0] - 2026-08-08
+
+### 新增
+
+- `config.example.toml` 全字段参考配置；
+- 静态文件选项：`ServeStatic*WithOptions`（Cache-Control、禁用目录索引）；
+- 限流维度可配置：`RateLimitOptions.KeyFunc`（默认按 IP）；
+- README API 速查表。
+
 ## [v0.13.0] - 2026-08-08
 
 ### 新增

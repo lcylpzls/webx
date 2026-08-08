@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lcylpzls/webx/internal/core"
 )
@@ -268,6 +269,58 @@ func TestRouterStaticRootAndShortWildcard(t *testing.T) {
 	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/a", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("通配模式路径过短应 404：%d", rec.Code)
+	}
+}
+
+func TestRouterStaticOptions(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "index.html"), []byte("home"), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, "app.txt"), []byte("app"), 0o600)
+	_ = os.Mkdir(filepath.Join(dir, "sub"), 0o700)
+
+	// 缓存头
+	rt := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
+	if err := rt.HandleStaticWithOptions("/s", http.Dir(dir), StaticOptions{MaxAge: 60 * time.Second}); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/app.txt", nil))
+	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "max-age=60" {
+		t.Errorf("缓存头不符：%d %v", rec.Code, rec.Header())
+	}
+
+	// 禁用目录索引：无 index.html 的目录 404
+	rt2 := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
+	if err := rt2.HandleStaticWithOptions("/s2", http.Dir(dir), StaticOptions{DisableIndex: true}); err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	rt2.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s2/sub/", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("禁用索引目录应 404：%d", rec.Code)
+	}
+	// 有 index.html 的目录仍可访问
+	rec = httptest.NewRecorder()
+	rt2.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s2/", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "home" {
+		t.Errorf("index 目录应可访问：%d %s", rec.Code, rec.Body.String())
+	}
+	// 普通文件不受禁用索引影响
+	rec = httptest.NewRecorder()
+	rt2.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s2/app.txt", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "app" {
+		t.Errorf("普通文件应可访问：%d %s", rec.Code, rec.Body.String())
+	}
+
+	// 默认允许目录索引
+	rt3 := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
+	if err := rt3.HandleStaticWithOptions("/s3", http.Dir(dir), StaticOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	rt3.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s3/sub/", nil))
+	if rec.Code != http.StatusOK {
+		t.Errorf("默认应允许目录索引：%d", rec.Code)
 	}
 }
 

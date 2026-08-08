@@ -68,6 +68,25 @@
 - 标准化响应、健康检查、静态文件与 SPA、优雅关闭；
 - 配置 confx（TOML）、错误 errx、日志 logx（外部注入）。
 
+## API 速查
+
+| 能力 | API |
+| --- | --- |
+| 创建服务 | `webx.NewServer(cfg, logger)` |
+| 加载配置 | `webx.LoadConfig("config.toml")` |
+| 多通道监听 | `UseHttp2Listen / UseHttp3Listen / UseUnixSocketListen` |
+| 路由/分组 | `RegisterRoute / RegisterRouteGroup / RouteGroup.GET...` |
+| 中间件管理 | `UseGlobalMiddleware / OverrideMiddleware / Disable/EnableMiddleware` |
+| 内置中间件 | Recovery、RequestID、Timeout、CORS、Validation、RateLimit、Gzip、Metrics、AccessLog |
+| 标准化响应 | `c.Success / c.Fail / c.JSONResponse / c.AbortWithStatusJSON` |
+| errx 集成 | `webx.RespondError / StatusForError` |
+| 健康检查 | `RegisterHealthCheck`（/health 聚合输出） |
+| 静态/SPA | `ServeStaticDir / ServeStaticFS / ServeStatic*WithOptions / EnableSPA` |
+| 反向代理 | `webx/proxy.Handler(target, opts...)` |
+| 指标 | `Server.Metrics()`（Requests/Errors5xx/RateLimited/Panics/AvgDuration） |
+| 优雅关闭 | `Stop(ctx)` / 信号自动关闭 |
+| 证书热重载 | `SetCertificateLoader`（默认按文件 mtime 自动重载） |
+
 ## License
 
 MIT © [lcylpzls](https://github.com/lcylpzls)

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lcylpzls/webx/internal/core"
 )
@@ -127,5 +128,17 @@ func TestServeStaticDirAndFS(t *testing.T) {
 	}
 	if len(s.staticEntries) != 2 {
 		t.Errorf("静态条目数量不符：%d", len(s.staticEntries))
+	}
+	if got := s.ServeStaticDirWithOptions("/d2", dir, StaticOptions{MaxAge: 60 * time.Second, DisableIndex: true}); got != s {
+		t.Error("ServeStaticDirWithOptions 应返回自身")
+	}
+	if got := s.ServeStaticFSWithOptions("/fs2", http.Dir(dir), StaticOptions{MaxAge: 60 * time.Second}); got != s {
+		t.Error("ServeStaticFSWithOptions 应返回自身")
+	}
+	if len(s.staticEntries) != 4 {
+		t.Errorf("带选项静态条目数量不符：%d", len(s.staticEntries))
+	}
+	if s.staticEntries[2].opts.MaxAge != 60*time.Second || !s.staticEntries[2].opts.DisableIndex {
+		t.Errorf("选项未保存：%+v", s.staticEntries[2].opts)
 	}
 }

@@ -81,6 +81,11 @@ func (rt *Router) Handle(method, path string, chain []core.HandlerFunc) error {
 // 使用无方法模式注册，避免 ServeMux 中 GET 隐式匹配 HEAD 导致
 // "静态根 + 具体 GET 路由" 的冲突；方法判定由匹配器负责。
 func (rt *Router) HandleStatic(prefix string, fs http.FileSystem) error {
+	return rt.HandleStaticWithOptions(prefix, fs, StaticOptions{})
+}
+
+// HandleStaticWithOptions 注册静态文件服务（含缓存头/目录索引选项）。
+func (rt *Router) HandleStaticWithOptions(prefix string, fs http.FileSystem, opts StaticOptions) error {
 	pattern := prefix
 	if pattern == "" {
 		pattern = "/"
@@ -93,7 +98,7 @@ func (rt *Router) HandleStatic(prefix string, fs http.FileSystem) error {
 		return err
 	}
 	strip := strings.TrimSuffix(pattern, "/")
-	handler := http.StripPrefix(strip, http.FileServer(fs))
+	handler := http.StripPrefix(strip, staticOptionsFileServer(fs, opts))
 	p := &routePattern{
 		pattern:  pattern,
 		segments: segs,

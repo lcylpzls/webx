@@ -1,7 +1,10 @@
 package webx
 
 import (
+	"fmt"
 	"net/http"
+	"path"
+	"time"
 
 	"github.com/lcylpzls/webx/internal/core"
 )
@@ -10,6 +13,15 @@ import (
 type staticEntry struct {
 	prefix string
 	fs     http.FileSystem
+	opts   StaticOptions
+}
+
+// StaticOptions 定义静态文件服务的选项。
+type StaticOptions struct {
+	// MaxAge 设置 Cache-Control: max-age（0 表示不设置）。
+	MaxAge time.Duration
+	// DisableIndex 禁用目录索引：无 index.html 的目录返回 404。
+	DisableIndex bool
 }
 
 // spaConfig 缓存 SPA 回退配置。
@@ -25,14 +37,24 @@ func (s *Server) ServeStaticDir(prefix, root string) *Server {
 
 // ServeStaticFS 从 http.FileSystem 提供静态文件，配合 embed 使用。
 func (s *Server) ServeStaticFS(prefix string, filesys http.FileSystem) *Server {
+	return s.ServeStaticFSWithOptions(prefix, filesys, StaticOptions{})
+}
+
+// ServeStaticFSWithOptions 从 http.FileSystem 提供静态文件，并应用选项。
+func (s *Server) ServeStaticFSWithOptions(prefix string, filesys http.FileSystem, opts StaticOptions) *Server {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.started {
 		s.logWarn("webx：服务已启动，不允许修改配置")
 		return s
 	}
-	s.staticEntries = append(s.staticEntries, staticEntry{prefix: prefix, fs: filesys})
+	s.staticEntries = append(s.staticEntries, staticEntry{prefix: prefix, fs: filesys, opts: opts})
 	return s
+}
+
+// ServeStaticDirWithOptions 从本地目录提供静态文件，并应用选项。
+func (s *Server) ServeStaticDirWithOptions(prefix, root string, opts StaticOptions) *Server {
+	return s.ServeStaticFSWithOptions(prefix, http.Dir(root), opts)
 }
 
 // EnableSPA 启用 SPA 回退：未匹配路由的 GET/HEAD 请求先尝试文件，再回退 index。
@@ -80,4 +102,33 @@ func spaNoRoute(filesys http.FileSystem, indexPath string) core.HandlerFunc {
 		}
 		http.ServeContent(c.Writer(), c.Request(), indexPath, stat.ModTime(), file)
 	}
+}
+
+// staticOptionsFileServer 包装 http.FileServer，应用缓存头与目录索引选项。
+func staticOptionsFileServer(fs http.FileSystem, opts StaticOptions) http.Handler {
+	next := http.FileServer(fs)
+	if opts.MaxAge <= 0 && !opts.DisableIndex {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if opts.MaxAge > 0 {
+			w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", int64(opts.MaxAge.Seconds())))
+		}
+		if opts.DisableIndex {
+			if f, err := fs.Open(r.URL.Path); err == nil {
+				if info, statErr := f.Stat(); statErr == nil && info.IsDir() {
+					f.Close()
+					if idx, err := fs.Open(path.Join(r.URL.Path, "index.html")); err != nil {
+						http.NotFound(w, r)
+						return
+					} else {
+						idx.Close()
+					}
+				} else {
+					f.Close()
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }

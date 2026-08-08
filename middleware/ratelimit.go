@@ -20,6 +20,7 @@ type RateLimiter struct {
 	whitelist  []*net.IPNet
 	rejected   atomic.Uint64
 	maxBuckets int
+	keyFunc    func(*core.Context) string
 }
 
 type tokenBucket struct {
@@ -54,6 +55,13 @@ func NewRateLimiter(qps int, window time.Duration, whitelistCIDRs []string) *Rat
 func (rl *RateLimiter) SetMaxBuckets(n int) {
 	if n > 0 {
 		rl.maxBuckets = n
+	}
+}
+
+// SetKeyFunc 设置限流维度提取函数（默认按客户端 IP）。
+func (rl *RateLimiter) SetKeyFunc(fn func(*core.Context) string) {
+	if fn != nil {
+		rl.keyFunc = fn
 	}
 }
 
@@ -130,7 +138,11 @@ func extractClientIP(c *core.Context) string {
 // RateLimit 返回 IP 令牌桶限流中间件，超限返回标准化 429。
 func RateLimit(rl *RateLimiter) core.HandlerFunc {
 	return func(c *core.Context) {
-		if !rl.Allow(extractClientIP(c)) {
+		key := extractClientIP(c)
+		if rl.keyFunc != nil {
+			key = rl.keyFunc(c)
+		}
+		if !rl.Allow(key) {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, "请求过于频繁，请稍后重试", nil)
 			return
 		}

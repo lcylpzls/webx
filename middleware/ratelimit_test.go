@@ -109,6 +109,29 @@ func TestRateLimitMiddleware(t *testing.T) {
 	}
 }
 
+func TestRateLimitKeyFunc(t *testing.T) {
+	rl := NewRateLimiter(1, time.Second, nil)
+	rl.SetKeyFunc(func(c *core.Context) string { return c.Query("user") })
+	run := func(user string) int {
+		req := httptest.NewRequest(http.MethodGet, "/?user="+user, nil)
+		req.RemoteAddr = "1.1.1.1:80"
+		rec := httptest.NewRecorder()
+		c := core.NewContext(rec, req)
+		c.SetHandlers([]core.HandlerFunc{RateLimit(rl), func(c *core.Context) { c.Success("ok", nil) }})
+		c.Run()
+		return rec.Code
+	}
+	if got := run("a"); got != http.StatusOK {
+		t.Errorf("用户 a 首次应放行：%d", got)
+	}
+	if got := run("a"); got != http.StatusTooManyRequests {
+		t.Errorf("用户 a 再次应限流：%d", got)
+	}
+	if got := run("b"); got != http.StatusOK {
+		t.Errorf("不同用户同 IP 应放行：%d", got)
+	}
+}
+
 func TestExtractClientIP(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "9.9.9.9:80"

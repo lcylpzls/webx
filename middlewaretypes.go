@@ -5,6 +5,9 @@ import "time"
 // MiddlewareType 标识内置中间件的类型。
 type MiddlewareType string
 
+// KeyFunc 定义限流维度的提取函数（默认按客户端 IP）。
+type KeyFunc func(*Context) string
+
 const (
 	// MiddlewareRequestID 请求 ID 生成中间件。
 	MiddlewareRequestID MiddlewareType = "request_id"
@@ -36,4 +39,6 @@ type RateLimitOptions struct {
 	Whitelist []string
 	// CleanupInterval 过期桶清理间隔（可选，0 = 默认 5 分钟）。
 	CleanupInterval time.Duration
+	// KeyFunc 限流维度提取函数（可选，默认按客户端 IP）。
+	KeyFunc KeyFunc
 }

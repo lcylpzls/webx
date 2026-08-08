@@ -1,0 +1,46 @@
+# webx 参考配置：复制为 config.toml 并按需修改。
+
+# --- TLS（必填） ---
+tls_cert_file = "/etc/ssl/certs/server.crt"
+tls_key_file = "/etc/ssl/private/server.key"
+# 最低 TLS 版本：771=TLS1.2，772=TLS1.3（0=默认 TLS1.2）
+min_tls_version = 771
+
+# --- 超时 ---
+read_timeout = "0s"            # 0=不限制读取超时
+write_timeout = "0s"           # 0=不限制写入超时
+read_header_timeout = "10s"    # 请求头读取超时（Slowloris 防护，默认 10s）
+idle_timeout = "60s"           # 空闲连接超时（默认 60s）
+request_timeout = "30s"        # Timeout 中间件单请求超时
+shutdown_timeout = "30s"       # 优雅关闭最大等待
+max_header_bytes = 1048576     # 请求头最大字节数
+max_body_bytes = 10485760      # BindJSON 最大请求体（默认 10MB）
+
+# --- QUIC / HTTP/3 ---
+quic_max_idle_timeout = "30s"  # 空闲连接超时（默认 30s）
+quic_max_incoming_streams = 100 # 单连接最大入站流数（默认 100）
+
+# --- 健康检查 ---
+health_path = "/health"
+
+# --- 日志 ---
+log_level = "info"             # debug/info/warn/error
+access_log_enabled = true
+log_success_req = false        # true=记录成功请求
+access_log_sample_rate = 0     # 0=全部记录，N>0 平均每 N 条记 1 条
+access_log_redact = ["token", "password"] # query 脱敏键
+
+# --- CORS（留空则使用默认值） ---
+cors_allowed_origins = ["*"]
+cors_allowed_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+cors_allowed_headers = ["Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"]
+cors_max_age = "86400s"
+
+# --- 中间件开关 ---
+middleware_request_id = true
+middleware_recovery = true
+middleware_timeout = true
+middleware_cors = true
+middleware_validation = true
+middleware_gzip = true
+middleware_metrics = true

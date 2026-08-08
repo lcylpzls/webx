@@ -255,6 +255,11 @@ func (s *Server) EnableRateLimit(opts RateLimitOptions) *Server {
 		return s
 	}
 	rl := middleware.NewRateLimiter(opts.QPS, opts.Window, opts.Whitelist)
+	if opts.KeyFunc != nil {
+		rl.SetKeyFunc(func(c *core.Context) string {
+			return opts.KeyFunc(c)
+		})
+	}
 	s.rateLimiter = rl
 	s.mwManager.EnableRateLimit(middleware.RateLimit(rl))
 
@@ -375,7 +380,7 @@ func (s *Server) Start() error {
 	}
 
 	for _, entry := range s.staticEntries {
-		if err := s.router.HandleStatic(entry.prefix, entry.fs); err != nil {
+		if err := s.router.HandleStaticWithOptions(entry.prefix, entry.fs, entry.opts); err != nil {
 			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "静态文件路由注册失败")
 		}
 	}
