@@ -830,17 +830,21 @@ func (s *Server) registerBuiltinMiddleware() {
 		s.mwManager.Disable("timeout")
 	}
 	corsCfg := middleware.CORSConfig{
-		AllowedOrigins:   s.config.CORSAllowedOrigins,
-		AllowedMethods:   s.config.CORSAllowedMethods,
-		AllowedHeaders:   s.config.CORSAllowedHeaders,
-		ExposeHeaders:    s.config.CORSExposeHeaders,
-		MaxAge:           int(s.config.CORSMaxAge.Seconds()),
-		AllowCredentials: s.config.CORSAllowCredentials,
+		AllowedOrigins:      s.config.CORSAllowedOrigins,
+		AllowedMethods:      s.config.CORSAllowedMethods,
+		AllowedHeaders:      s.config.CORSAllowedHeaders,
+		ExposeHeaders:       s.config.CORSExposeHeaders,
+		MaxAge:              int(s.config.CORSMaxAge.Seconds()),
+		AllowCredentials:    s.config.CORSAllowCredentials,
+		AllowPrivateNetwork: s.config.CORSAllowPrivateNetwork,
 	}
 	if len(corsCfg.AllowedOrigins) == 0 {
 		corsCfg = middleware.DefaultCORSConfig()
 		if len(s.config.CORSExposeHeaders) > 0 {
 			corsCfg.ExposeHeaders = s.config.CORSExposeHeaders
+		}
+		if s.config.CORSAllowPrivateNetwork {
+			corsCfg.AllowPrivateNetwork = true
 		}
 	}
 	s.mwManager.RegisterBuiltin("cors", middleware.CORS(corsCfg))
@@ -852,14 +856,19 @@ func (s *Server) registerBuiltinMiddleware() {
 		s.mwManager.Disable("validation")
 	}
 	s.mwManager.RegisterBuiltin("security", middleware.SecurityHeaders(middleware.SecurityHeadersOptions{
-		ContentTypeNoSniff:        true,
-		FrameDeny:                 true,
-		ReferrerPolicy:            s.config.SecurityReferrerPolicy,
-		HSTSMaxAge:                time.Duration(s.config.SecurityHSTSMaxAge) * time.Second,
-		PermissionsPolicy:         s.config.SecurityPermissionsPolicy,
-		CrossOriginOpenerPolicy:   s.config.SecurityCrossOriginOpenerPolicy,
-		CrossOriginResourcePolicy: s.config.SecurityCrossOriginResourcePolicy,
-		CrossOriginEmbedderPolicy: s.config.SecurityCrossOriginEmbedderPolicy,
+		ContentTypeNoSniff:              true,
+		FrameDeny:                       true,
+		ReferrerPolicy:                  s.config.SecurityReferrerPolicy,
+		HSTSMaxAge:                      time.Duration(s.config.SecurityHSTSMaxAge) * time.Second,
+		HSTSIncludeSubDomains:           s.config.SecurityHSTSIncludeSubDomains,
+		HSTSPreload:                     s.config.SecurityHSTSPreload,
+		PermissionsPolicy:               s.config.SecurityPermissionsPolicy,
+		CrossOriginOpenerPolicy:         s.config.SecurityCrossOriginOpenerPolicy,
+		CrossOriginResourcePolicy:       s.config.SecurityCrossOriginResourcePolicy,
+		CrossOriginEmbedderPolicy:       s.config.SecurityCrossOriginEmbedderPolicy,
+		ContentSecurityPolicy:           s.config.SecurityContentSecurityPolicy,
+		ContentSecurityPolicyReportOnly: s.config.SecurityContentSecurityPolicyReportOnly,
+		OriginAgentCluster:              s.config.SecurityOriginAgentCluster,
 	}))
 	if !s.config.MiddlewareSecurity {
 		s.mwManager.Disable("security")

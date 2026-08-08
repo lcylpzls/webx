@@ -127,3 +127,22 @@ func TestCORSExposeHeaders(t *testing.T) {
 		t.Errorf("空 ExposeHeaders 不应设置响应头：%s", got)
 	}
 }
+
+func TestCORSAllowPrivateNetwork(t *testing.T) {
+	cfg := CORSConfig{AllowPrivateNetwork: true}
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetHandlers([]core.HandlerFunc{CORS(cfg), func(c *core.Context) { c.Success("ok", nil) }})
+	c.Run()
+	if got := rec.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
+		t.Errorf("内网预检头缺失：%s", got)
+	}
+
+	rec = httptest.NewRecorder()
+	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetHandlers([]core.HandlerFunc{CORS(DefaultCORSConfig()), func(c *core.Context) { c.Success("ok", nil) }})
+	c.Run()
+	if got := rec.Header().Get("Access-Control-Allow-Private-Network"); got != "" {
+		t.Errorf("默认不应输出内网预检头：%s", got)
+	}
+}

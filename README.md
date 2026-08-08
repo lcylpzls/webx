@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 当前状态：**核心实现完成**。各包语句覆盖率 100%，
-> 当前版本：v0.29.0（v1.0.0 定版评估中）。
+> 当前版本：v0.30.0（v1.0.0 定版评估中）。
 
 ## 技术栈
 
@@ -42,6 +42,7 @@
 - 📤 文件上传：`FormFile` / `SaveUploadedFile`（沿用请求体大小限制）；
 - 📏 全局请求体限制：`max_body_bytes` 超限直接 413；
 - 🛡️ 并发限制：`SetMaxConcurrentRequests` 超限返回 503 + Retry-After（防雪崩）；
+- 🔐 浏览器安全基线：CSP、HSTS 全指令、COOP/CORP/COEP、Origin-Agent-Cluster、PNA；
 - 🐢 慢请求日志：`slow_request_threshold` 超阈值自动 Warn；
 - ⚡ 静态资源 ETag：可选弱 ETag，`If-None-Match` 命中返回 304；
 - 📊 标准化响应：`{code, msg, data, requestId, timestamp}`；
@@ -87,7 +88,7 @@
 | 标准化响应 | `c.Success / c.Fail / c.JSONResponse / c.AbortWithStatusJSON` |
 | 参数绑定 | `c.BindJSON / c.BindForm / c.BindQuery` |
 | 文件上传 | `c.FormFile(name)` / `c.SaveUploadedFile(fh, dest)` |
-| Web 便捷方法 | `c.Redirect / c.Cookie / c.SetCookie / c.File` |
+| Web 便捷方法 | `c.Redirect / c.Cookie / c.SetCookie / c.SetSecureCookie / c.File` |
 | errx 集成 | `webx.RespondError / StatusForError` |
 | 健康检查 | `RegisterHealthCheck`（/health 聚合输出） |
 | 存活/就绪探针 | `RegisterLivenessCheck`（/healthz）/ `RegisterReadinessCheck`（/readyz） |
@@ -98,6 +99,15 @@
 | 路由/分组统计 | `Server.RouteStats()` / `Server.GroupStats()` |
 | 优雅关闭 | `Stop(ctx)` / 信号自动关闭 |
 | 证书热重载 | `SetCertificateLoader`（默认按文件 mtime 自动重载） |
+
+## 浏览器安全基线
+
+- 已覆盖：`X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`、
+  `Strict-Transport-Security`（max-age + includeSubDomains + preload）、
+  `Permissions-Policy`、`Cross-Origin-Opener-Policy`、`Cross-Origin-Resource-Policy`、
+  `Cross-Origin-Embedder-Policy`、`Content-Security-Policy`（含 Report-Only）、
+  `Origin-Agent-Cluster`、CORS Private Network Access；
+- 刻意不提供：`X-XSS-Protection` 与 `Expect-CT`（已被现代浏览器废弃）。
 
 ## 平台限制
 

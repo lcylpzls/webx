@@ -173,6 +173,32 @@ func TestContextCookie(t *testing.T) {
 	}
 }
 
+func TestContextSetSecureCookie(t *testing.T) {
+	rec := httptest.NewRecorder()
+	c := NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetSecureCookie(&http.Cookie{Name: "sid", Value: "abc"})
+	raw := rec.Header().Get("Set-Cookie")
+	if !strings.Contains(raw, "Secure") || !strings.Contains(raw, "HttpOnly") ||
+		!strings.Contains(raw, "SameSite=Lax") {
+		t.Errorf("安全属性未补齐：%s", raw)
+	}
+
+	rec = httptest.NewRecorder()
+	c = NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetSecureCookie(&http.Cookie{
+		Name:     "custom",
+		Value:    "x",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	})
+	raw = rec.Header().Get("Set-Cookie")
+	if !strings.Contains(raw, "SameSite=Strict") || !strings.Contains(raw, "Secure") ||
+		!strings.Contains(raw, "HttpOnly") {
+		t.Errorf("显式属性不应被覆盖：%s", raw)
+	}
+}
+
 func TestContextFile(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "a.txt")

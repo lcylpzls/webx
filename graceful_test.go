@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/lcylpzls/logx"
 )
 
 func TestGracefulShutdownSignal(t *testing.T) {
@@ -51,6 +53,61 @@ func TestGracefulShutdownPublic(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("GracefulShutdown 未返回")
+	}
+}
+
+var errForceClose = errors.New("强制关闭失败")
+
+// runBlockedServer 启动一个带阻塞 Handler 的服务并触发关闭。
+func runBlockedServer(t *testing.T, logger logx.Logger, closeFn func(*http.Server) error) error {
+	t.Helper()
+	blocked := make(chan struct{})
+	release := make(chan struct{})
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(blocked)
+		<-release
+	})}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = srv.Serve(ln) }()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = http.Get("http://" + ln.Addr().String() + "/")
+	}()
+	<-blocked
+
+	origClose := closeServer
+	if closeFn != nil {
+		closeServer = closeFn
+	}
+	err = shutdownServers(context.Background(), logger, []*http.Server{srv}, []net.Listener{ln}, 30*time.Millisecond, "", nil)
+	closeServer = origClose
+	close(release)
+	<-done
+	return err
+}
+
+func TestShutdownServersForceClose(t *testing.T) {
+	logger := newTestLogger(t)
+	defer logger.Close()
+
+	start := time.Now()
+	if err := runBlockedServer(t, logger, nil); err == nil {
+		t.Fatal("关闭超时应返回错误")
+	} else if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("强制关闭未生效：%v", elapsed)
+	}
+
+	if err := runBlockedServer(t, logger, func(*http.Server) error { return errForceClose }); !errors.Is(err, errForceClose) {
+		t.Errorf("强制关闭错误未合并：%v", err)
+	}
+
+	if err := runBlockedServer(t, logger, func(*http.Server) error { return http.ErrServerClosed }); errors.Is(err, errForceClose) {
+		t.Errorf("ErrServerClosed 不应合并：%v", err)
 	}
 }
 

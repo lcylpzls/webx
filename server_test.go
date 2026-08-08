@@ -854,6 +854,9 @@ func TestServerSecurityHeaders(t *testing.T) {
 	cfg.SecurityReferrerPolicy = "no-referrer"
 	cfg.SecurityCrossOriginResourcePolicy = "same-origin"
 	cfg.SecurityCrossOriginEmbedderPolicy = "require-corp"
+	cfg.SecurityContentSecurityPolicy = "default-src 'self'"
+	cfg.SecurityHSTSIncludeSubDomains = true
+	cfg.SecurityOriginAgentCluster = true
 	s := newTestServer(t, cfg)
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.RegisterRoute(Route{
@@ -871,11 +874,45 @@ func TestServerSecurityHeaders(t *testing.T) {
 	if resp.Header.Get("X-Content-Type-Options") != "nosniff" ||
 		resp.Header.Get("X-Frame-Options") != "DENY" ||
 		resp.Header.Get("Referrer-Policy") != "no-referrer" ||
-		resp.Header.Get("Strict-Transport-Security") != "max-age=3600" ||
+		resp.Header.Get("Strict-Transport-Security") != "max-age=3600; includeSubDomains" ||
 		resp.Header.Get("Cross-Origin-Resource-Policy") != "same-origin" ||
-		resp.Header.Get("Cross-Origin-Embedder-Policy") != "require-corp" {
+		resp.Header.Get("Cross-Origin-Embedder-Policy") != "require-corp" ||
+		resp.Header.Get("Content-Security-Policy") != "default-src 'self'" ||
+		resp.Header.Get("Origin-Agent-Cluster") != "?1" {
 		t.Errorf("安全头缺失：%v", resp.Header)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestServerCORSPNA(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareCORS = true
+	cfg.CORSAllowPrivateNetwork = true
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/ok",
+		Handler: func(c *core.Context) { c.Success("ok", nil) },
+	})
+	startServer(t, s)
+	req, err := http.NewRequest(http.MethodGet, "https://"+s.ListenerAddr()+"/ok", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Origin", "https://a.com")
+	resp, err := testHTTPClient().Do(req)
+	if err != nil {
+		t.Fatalf("GET 失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if got := resp.Header.Get("Access-Control-Allow-Private-Network"); got != "true" {
+		t.Errorf("内网预检头缺失：%s", got)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = s.Stop(ctx)
@@ -1616,8 +1653,9 @@ func TestRegisterBuiltinMiddlewareDefaults(t *testing.T) {
 
 func TestRegisterBuiltinMiddlewareCORSExposeOverride(t *testing.T) {
 	s := newTestServer(t, Config{
-		MiddlewareCORS:    true,
-		CORSExposeHeaders: []string{"X-Trace-ID"},
+		MiddlewareCORS:          true,
+		CORSExposeHeaders:       []string{"X-Trace-ID"},
+		CORSAllowPrivateNetwork: true,
 	})
 	s.registerBuiltinMiddleware()
 	chain := s.mwManager.Build(context.Background())
@@ -1627,6 +1665,9 @@ func TestRegisterBuiltinMiddlewareCORSExposeOverride(t *testing.T) {
 	c.Run()
 	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "X-Trace-ID" {
 		t.Errorf("默认 CORS 未保留自定义 ExposeHeaders：%s", got)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
+		t.Errorf("默认 CORS 未保留内网预检开关：%s", got)
 	}
 }
 

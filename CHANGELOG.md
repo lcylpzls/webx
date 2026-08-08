@@ -2,6 +2,28 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.30.0] - 2026-08-08
+
+### 新增（现代浏览器安全基线补全）
+
+- `Content-Security-Policy` 与 `Content-Security-Policy-Report-Only`
+  （`security_content_security_policy` / `security_content_security_policy_report_only`）；
+- HSTS 指令升级：`security_hsts_include_subdomains`、`security_hsts_preload`；
+- `Origin-Agent-Cluster: ?1`（`security_origin_agent_cluster`，站点隔离）；
+- CORS 内网预检：`cors_allow_private_network` 输出
+  `Access-Control-Allow-Private-Network: true`；
+- `Context.SetSecureCookie`：自动补齐 Secure + HttpOnly + SameSite=Lax。
+
+### 新增（其他）
+
+- 绑定默认值：`form` / `query` tag 支持 `,default=xxx` 修饰；
+- 优雅关闭强制兜底：`Shutdown` 超时后调用 `srv.Close()` 强制断开残余连接并合并错误；
+- `FuzzBindQuery` 模糊目标并接入 CI。
+
+### 说明
+
+- 刻意不提供已废弃的 `X-XSS-Protection` 与 `Expect-CT`（现代浏览器已移除/忽略）。
+
 ## [v0.29.0] - 2026-08-08
 
 ### 新增

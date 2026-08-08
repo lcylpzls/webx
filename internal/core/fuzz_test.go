@@ -39,3 +39,20 @@ func FuzzBindForm(f *testing.F) {
 		_ = c.BindForm(&out)
 	})
 }
+
+func FuzzBindQuery(f *testing.F) {
+	f.Add("page=1&limit=10&active=true&tags=a&tags=b")
+	f.Add("page=x&active=x")
+	f.Add("bad=%zz")
+
+	f.Fuzz(func(t *testing.T, raw string) {
+		req := httptest.NewRequest("GET", "/?"+raw, nil)
+		c := NewContext(httptest.NewRecorder(), req)
+		var out struct {
+			Page   int      `query:"page"`
+			Active bool     `query:"active"`
+			Tags   []string `query:"tags"`
+		}
+		_ = c.BindQuery(&out)
+	})
+}

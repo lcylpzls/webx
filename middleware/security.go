@@ -25,6 +25,16 @@ type SecurityHeadersOptions struct {
 	CrossOriginResourcePolicy string
 	// CrossOriginEmbedderPolicy 设置 Cross-Origin-Embedder-Policy（空则不设置）。
 	CrossOriginEmbedderPolicy string
+	// ContentSecurityPolicy 设置 Content-Security-Policy（空则不设置）。
+	ContentSecurityPolicy string
+	// ContentSecurityPolicyReportOnly 设置 Content-Security-Policy-Report-Only（空则不设置）。
+	ContentSecurityPolicyReportOnly string
+	// HSTSIncludeSubDomains HSTS 指令附加 includeSubDomains。
+	HSTSIncludeSubDomains bool
+	// HSTSPreload HSTS 指令附加 preload。
+	HSTSPreload bool
+	// OriginAgentCluster 设置 Origin-Agent-Cluster: ?1（站点隔离）。
+	OriginAgentCluster bool
 }
 
 // SecurityHeaders 返回安全响应头中间件。
@@ -40,8 +50,14 @@ func SecurityHeaders(opts SecurityHeadersOptions) core.HandlerFunc {
 			c.Header("Referrer-Policy", opts.ReferrerPolicy)
 		}
 		if opts.HSTSMaxAge > 0 {
-			c.Header("Strict-Transport-Security",
-				fmt.Sprintf("max-age=%d", int64(opts.HSTSMaxAge.Seconds())))
+			hsts := fmt.Sprintf("max-age=%d", int64(opts.HSTSMaxAge.Seconds()))
+			if opts.HSTSIncludeSubDomains {
+				hsts += "; includeSubDomains"
+			}
+			if opts.HSTSPreload {
+				hsts += "; preload"
+			}
+			c.Header("Strict-Transport-Security", hsts)
 		}
 		if opts.PermissionsPolicy != "" {
 			c.Header("Permissions-Policy", opts.PermissionsPolicy)
@@ -54,6 +70,15 @@ func SecurityHeaders(opts SecurityHeadersOptions) core.HandlerFunc {
 		}
 		if opts.CrossOriginEmbedderPolicy != "" {
 			c.Header("Cross-Origin-Embedder-Policy", opts.CrossOriginEmbedderPolicy)
+		}
+		if opts.ContentSecurityPolicy != "" {
+			c.Header("Content-Security-Policy", opts.ContentSecurityPolicy)
+		}
+		if opts.ContentSecurityPolicyReportOnly != "" {
+			c.Header("Content-Security-Policy-Report-Only", opts.ContentSecurityPolicyReportOnly)
+		}
+		if opts.OriginAgentCluster {
+			c.Header("Origin-Agent-Cluster", "?1")
 		}
 		c.Next()
 	}

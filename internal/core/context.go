@@ -216,6 +216,21 @@ func (c *Context) SetCookie(cookie *http.Cookie) {
 	http.SetCookie(c.writer, cookie)
 }
 
+// SetSecureCookie 写入 Cookie 并补齐安全属性：
+// 未显式设置时强制 Secure、HttpOnly 与 SameSite=Lax。
+func (c *Context) SetSecureCookie(cookie *http.Cookie) {
+	if !cookie.Secure {
+		cookie.Secure = true
+	}
+	if !cookie.HttpOnly {
+		cookie.HttpOnly = true
+	}
+	if cookie.SameSite == 0 { // 未显式设置时补齐 SameSite=Lax（DefaultMode 保持不输出）
+		cookie.SameSite = http.SameSiteLaxMode
+	}
+	http.SetCookie(c.writer, cookie)
+}
+
 // JSON 以 JSON 格式写入响应。
 func (c *Context) JSON(code int, data any) error {
 	c.Header("Content-Type", "application/json; charset=utf-8")

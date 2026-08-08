@@ -82,6 +82,8 @@ type Config struct {
 	CORSMaxAge time.Duration `toml:"cors_max_age"`
 	// CORSAllowCredentials 是否允许携带凭据。
 	CORSAllowCredentials bool `toml:"cors_allow_credentials"`
+	// CORSAllowPrivateNetwork 是否允许内网（Private Network Access）预检。
+	CORSAllowPrivateNetwork bool `toml:"cors_allow_private_network"`
 
 	// MiddlewareRequestID 是否启用 RequestID 中间件。
 	MiddlewareRequestID bool `toml:"middleware_request_id"`
@@ -111,6 +113,16 @@ type Config struct {
 	SecurityCrossOriginResourcePolicy string `toml:"security_cross_origin_resource_policy"`
 	// SecurityCrossOriginEmbedderPolicy Cross-Origin-Embedder-Policy 取值（空=不设置）。
 	SecurityCrossOriginEmbedderPolicy string `toml:"security_cross_origin_embedder_policy"`
+	// SecurityContentSecurityPolicy Content-Security-Policy 取值（空=不设置）。
+	SecurityContentSecurityPolicy string `toml:"security_content_security_policy"`
+	// SecurityContentSecurityPolicyReportOnly Content-Security-Policy-Report-Only 取值（空=不设置）。
+	SecurityContentSecurityPolicyReportOnly string `toml:"security_content_security_policy_report_only"`
+	// SecurityHSTSIncludeSubDomains HSTS 指令附加 includeSubDomains。
+	SecurityHSTSIncludeSubDomains bool `toml:"security_hsts_include_subdomains"`
+	// SecurityHSTSPreload HSTS 指令附加 preload。
+	SecurityHSTSPreload bool `toml:"security_hsts_preload"`
+	// SecurityOriginAgentCluster 是否输出 Origin-Agent-Cluster: ?1。
+	SecurityOriginAgentCluster bool `toml:"security_origin_agent_cluster"`
 	// GzipMinSize 响应压缩最小字节数（0=默认 1024）。
 	GzipMinSize int `toml:"gzip_min_size"`
 	// GzipLevel 响应压缩级别（0=标准库默认，1-9 对应 BestSpeed-BestCompression）。

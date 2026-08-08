@@ -16,6 +16,8 @@ type CORSConfig struct {
 	ExposeHeaders    []string
 	MaxAge           int
 	AllowCredentials bool
+	// AllowPrivateNetwork 预检响应输出 Access-Control-Allow-Private-Network: true。
+	AllowPrivateNetwork bool
 }
 
 // CORS 返回 CORS 跨域处理中间件。
@@ -51,6 +53,9 @@ func CORS(cfg CORSConfig) core.HandlerFunc {
 		}
 		if cfg.AllowCredentials {
 			c.Header("Access-Control-Allow-Credentials", "true")
+		}
+		if cfg.AllowPrivateNetwork {
+			c.Header("Access-Control-Allow-Private-Network", "true")
 		}
 		if cfg.MaxAge > 0 {
 			c.Header("Access-Control-Max-Age", strconv.Itoa(cfg.MaxAge))

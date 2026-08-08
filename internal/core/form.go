@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 // openMultipartFile 打开上传文件（测试可替换以覆盖异常分支）。
@@ -107,9 +108,24 @@ func bindValues(out any, values url.Values, tagName string) error {
 		if tag == "" || tag == "-" {
 			continue
 		}
+		defaultValue := ""
+		if idx := strings.IndexByte(tag, ','); idx >= 0 {
+			rest := tag[idx+1:]
+			tag = tag[:idx]
+			if strings.HasPrefix(rest, "default=") {
+				defaultValue = rest[len("default="):]
+			}
+			if tag == "" || tag == "-" {
+				continue
+			}
+		}
 		vals, ok := values[tag]
 		if !ok || len(vals) == 0 {
-			continue
+			if defaultValue != "" {
+				vals = []string{defaultValue}
+			} else {
+				continue
+			}
 		}
 		field := rv.Field(i)
 		switch field.Kind() {

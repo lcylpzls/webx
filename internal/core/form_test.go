@@ -234,6 +234,72 @@ func TestBindQueryUnexportedField(t *testing.T) {
 	}
 }
 
+type defaultQueryModel struct {
+	Page  int      `query:"page,default=10"`
+	Limit uint     `query:"limit,default=20"`
+	Name  string   `query:"name,default=匿名"`
+	On    bool     `query:"on,default=true"`
+	Tags  []string `query:"tags,default=a"`
+	Weird string   `query:",default=x"`
+	Dash  string   `query:"-,default=x"`
+}
+
+func TestBindQueryDefaults(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?page=3&name=webx", nil)
+	c := NewContext(httptest.NewRecorder(), req)
+	var m defaultQueryModel
+	if err := c.BindQuery(&m); err != nil {
+		t.Fatalf("BindQuery 失败：%v", err)
+	}
+	if m.Page != 3 || m.Limit != 20 || m.Name != "webx" || !m.On {
+		t.Errorf("默认值填充不符：%+v", m)
+	}
+	if len(m.Tags) != 1 || m.Tags[0] != "a" || m.Weird != "" || m.Dash != "" {
+		t.Errorf("默认切片/忽略字段不符：%+v", m)
+	}
+}
+
+type defaultFormModel struct {
+	Age int `form:"age,default=18"`
+}
+
+func TestBindFormDefaults(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	c := NewContext(httptest.NewRecorder(), req)
+	var m defaultFormModel
+	if err := c.BindForm(&m); err != nil {
+		t.Fatalf("BindForm 失败：%v", err)
+	}
+	if m.Age != 18 {
+		t.Errorf("表单默认值未填充：%d", m.Age)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/", strings.NewReader("age=30"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	c = NewContext(httptest.NewRecorder(), req)
+	m = defaultFormModel{}
+	if err := c.BindForm(&m); err != nil {
+		t.Fatalf("BindForm 失败：%v", err)
+	}
+	if m.Age != 30 {
+		t.Errorf("显式值应覆盖默认值：%d", m.Age)
+	}
+}
+
+type defaultBadModel struct {
+	X int `query:"x,default=abc"`
+}
+
+func TestBindQueryBadDefault(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	c := NewContext(httptest.NewRecorder(), req)
+	var m defaultBadModel
+	if err := c.BindQuery(&m); err == nil {
+		t.Error("非法默认值应报错")
+	}
+}
+
 func TestFormFileAndSave(t *testing.T) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)

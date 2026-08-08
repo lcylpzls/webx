@@ -14,6 +14,11 @@ import (
 	"github.com/lcylpzls/logx"
 )
 
+// closeServer 强制关闭服务（测试可替换以覆盖异常分支）。
+var closeServer = func(srv *http.Server) error {
+	return srv.Close()
+}
+
 // GracefulShutdown 监听系统信号并执行优雅关闭。
 // 收到 SIGINT/SIGTERM 后调用 httpServer.Shutdown 排空请求。
 func GracefulShutdown(
@@ -73,6 +78,10 @@ func shutdownServers(
 		shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 		if shutdownErr := srv.Shutdown(shutdownCtx); shutdownErr != nil {
 			err = errors.Join(err, shutdownErr)
+			// 超时未排空：强制关闭残余连接，保证关闭彻底。
+			if closeErr := closeServer(srv); closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) {
+				err = errors.Join(err, closeErr)
+			}
 		}
 		cancel()
 	}

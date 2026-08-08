@@ -49,6 +49,7 @@ cors_allowed_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
 cors_allowed_headers = ["Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"]
 cors_expose_headers = ["X-Request-ID"]  # 允许浏览器读取的响应头
 cors_max_age = "86400s"
+cors_allow_private_network = false      # true=允许内网预检（Private Network Access）
 
 # --- 响应压缩 ---
 gzip_min_size = 1024             # 小于该字节数的响应不压缩
@@ -61,6 +62,11 @@ security_permissions_policy = ""             # 如 "camera=()"
 security_cross_origin_opener_policy = ""     # 如 "same-origin"
 security_cross_origin_resource_policy = ""   # 如 "same-origin"
 security_cross_origin_embedder_policy = ""   # 如 "require-corp"
+security_content_security_policy = ""        # 如 "default-src 'self'"
+security_content_security_policy_report_only = "" # 只报告不拦截（灰度用）
+security_hsts_include_subdomains = false     # HSTS 附加 includeSubDomains
+security_hsts_preload = false                # HSTS 附加 preload（需先满足提交条件）
+security_origin_agent_cluster = false        # true=输出 Origin-Agent-Cluster: ?1
 
 # --- 中间件开关 ---
 # 执行顺序可在代码中通过 SetMiddlewareOrder 自定义（config 不提供该字段）。
