@@ -13,12 +13,13 @@ import (
 
 // RateLimiter 实现基于 IP 的令牌桶限流。
 type RateLimiter struct {
-	mu        sync.Mutex
-	buckets   map[string]*tokenBucket
-	qps       int
-	window    time.Duration
-	whitelist []*net.IPNet
-	rejected  atomic.Uint64
+	mu         sync.Mutex
+	buckets    map[string]*tokenBucket
+	qps        int
+	window     time.Duration
+	whitelist  []*net.IPNet
+	rejected   atomic.Uint64
+	maxBuckets int
 }
 
 type tokenBucket struct {
@@ -29,9 +30,10 @@ type tokenBucket struct {
 // NewRateLimiter 创建 IP 限流器。
 func NewRateLimiter(qps int, window time.Duration, whitelistCIDRs []string) *RateLimiter {
 	rl := &RateLimiter{
-		buckets: make(map[string]*tokenBucket),
-		qps:     qps,
-		window:  window,
+		buckets:    make(map[string]*tokenBucket),
+		qps:        qps,
+		window:     window,
+		maxBuckets: 100000,
 	}
 	for _, cidr := range whitelistCIDRs {
 		_, ipNet, err := net.ParseCIDR(cidr)
@@ -46,6 +48,13 @@ func NewRateLimiter(qps int, window time.Duration, whitelistCIDRs []string) *Rat
 		}
 	}
 	return rl
+}
+
+// SetMaxBuckets 设置 IP 桶数量上限；达到上限后新 IP 直接拒绝。
+func (rl *RateLimiter) SetMaxBuckets(n int) {
+	if n > 0 {
+		rl.maxBuckets = n
+	}
 }
 
 // Allow 检查指定 IP 是否被允许通过。
@@ -65,6 +74,10 @@ func (rl *RateLimiter) Allow(ip string) bool {
 	now := time.Now()
 	bucket, exists := rl.buckets[ip]
 	if !exists {
+		if len(rl.buckets) >= rl.maxBuckets {
+			rl.rejected.Add(1)
+			return false
+		}
 		bucket = &tokenBucket{tokens: float64(rl.qps), lastTime: now}
 		rl.buckets[ip] = bucket
 	}

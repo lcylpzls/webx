@@ -1,11 +1,13 @@
 package middleware
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/lcylpzls/logx"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
@@ -58,5 +60,31 @@ func TestRecoveryWithMetrics(t *testing.T) {
 	c.Run()
 	if got := m.Panics(); got != 1 {
 		t.Errorf("panic 计数不符：%d", got)
+	}
+}
+
+func TestRecoveryWithLogger(t *testing.T) {
+	var buf bytes.Buffer
+	logger, err := logx.NewBuilder().EnableWriter(&buf, logx.ErrorLevel).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer logger.Close()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Request-ID", "req-1")
+	c := core.NewContext(rec, req)
+	c.Set("requestId", "req-1")
+	c.SetHandlers([]core.HandlerFunc{
+		RecoveryWith(logger, nil),
+		func(c *core.Context) { panic("boom") },
+	})
+	c.Run()
+	if !strings.Contains(buf.String(), "请求处理发生 panic") || !strings.Contains(buf.String(), "boom") {
+		t.Errorf("panic 日志缺失：%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "req-1") || !strings.Contains(buf.String(), "goroutine") {
+		t.Errorf("panic 日志应含 requestId 与调用栈：%s", buf.String())
 	}
 }

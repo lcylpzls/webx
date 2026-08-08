@@ -2,11 +2,20 @@ package middleware
 
 import (
 	"compress/gzip"
+	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/lcylpzls/webx/internal/core"
 )
+
+// gzipPool 复用 gzip.Writer，降低每请求分配。
+var gzipPool = sync.Pool{
+	New: func() any {
+		return gzip.NewWriter(io.Discard)
+	},
+}
 
 // Gzip 返回响应压缩中间件：客户端 Accept-Encoding 含 gzip 时启用。
 func Gzip() core.HandlerFunc {
@@ -18,11 +27,13 @@ func Gzip() core.HandlerFunc {
 		orig := c.Writer()
 		c.Header("Content-Encoding", "gzip")
 		c.Header("Vary", "Accept-Encoding")
-		gz := gzip.NewWriter(orig)
+		gz := gzipPool.Get().(*gzip.Writer)
+		gz.Reset(orig)
 		c.SetWriter(&gzipWriter{ResponseWriter: orig, gz: gz})
 
 		c.Next()
 		_ = gz.Close()
+		gzipPool.Put(gz)
 		c.SetWriter(orig)
 	}
 }

@@ -283,6 +283,9 @@ func (s *Server) ListenerAddr() string {
 	if len(s.listeners) > 0 {
 		return s.listeners[0].Addr().String()
 	}
+	if len(s.quicListeners) > 0 {
+		return s.quicListeners[0].Addr().String()
+	}
 	return ""
 }
 
@@ -380,11 +383,12 @@ func (s *Server) Start() error {
 		}
 		s.addListener(ln)
 		srv := &http.Server{
-			Handler:        s.router,
-			ReadTimeout:    s.config.ReadTimeout,
-			WriteTimeout:   s.config.WriteTimeout,
-			IdleTimeout:    s.config.IdleTimeout,
-			MaxHeaderBytes: s.config.MaxHeaderBytes,
+			Handler:           s.router,
+			ReadTimeout:       s.config.ReadTimeout,
+			WriteTimeout:      s.config.WriteTimeout,
+			ReadHeaderTimeout: s.config.ReadHeaderTimeout,
+			IdleTimeout:       s.config.IdleTimeout,
+			MaxHeaderBytes:    s.config.MaxHeaderBytes,
 		}
 		s.addHTTPServer(srv)
 		wg.Add(1)
@@ -422,11 +426,12 @@ func (s *Server) Start() error {
 		}
 		s.addListener(ln)
 		srv := &http.Server{
-			Handler:        s.router,
-			ReadTimeout:    s.config.ReadTimeout,
-			WriteTimeout:   s.config.WriteTimeout,
-			IdleTimeout:    s.config.IdleTimeout,
-			MaxHeaderBytes: s.config.MaxHeaderBytes,
+			Handler:           s.router,
+			ReadTimeout:       s.config.ReadTimeout,
+			WriteTimeout:      s.config.WriteTimeout,
+			ReadHeaderTimeout: s.config.ReadHeaderTimeout,
+			IdleTimeout:       s.config.IdleTimeout,
+			MaxHeaderBytes:    s.config.MaxHeaderBytes,
 		}
 		s.addHTTPServer(srv)
 		wg.Add(1)
@@ -548,7 +553,7 @@ func callRouteGroupFn(fn func(*RouteGroup), rg *RouteGroup) (err error) {
 // registerBuiltinMiddleware 按配置注册内置中间件。
 func (s *Server) registerBuiltinMiddleware() {
 	s.metrics = middleware.NewMetrics()
-	s.mwManager.RegisterBuiltin("recovery", middleware.RecoveryWithMetrics(s.metrics))
+	s.mwManager.RegisterBuiltin("recovery", middleware.RecoveryWith(s.logger, s.metrics))
 	if !s.config.MiddlewareRecovery {
 		s.mwManager.Disable("recovery")
 	}

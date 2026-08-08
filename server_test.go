@@ -754,6 +754,24 @@ func TestServerHTTP3(t *testing.T) {
 	}
 }
 
+func TestServerHTTP3OnlyListenerAddr(t *testing.T) {
+	cfg := validConfig(t)
+	s := newTestServer(t, cfg)
+	s.UseHttp3Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/ping",
+		Handler: func(c *core.Context) { c.Success("h3", nil) },
+	})
+	startServer(t, s)
+	if addr := s.ListenerAddr(); addr == "" {
+		t.Error("HTTP/3-only 时 ListenerAddr 不应为空")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
 func TestServerUnixSocket(t *testing.T) {
 	if err := unixSocketSupported(); err != nil {
 		t.Skipf("当前平台不支持 Unix Socket：%v", err)

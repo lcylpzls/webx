@@ -36,6 +36,24 @@ func TestRateLimiterTokenCap(t *testing.T) {
 	}
 }
 
+func TestRateLimiterMaxBuckets(t *testing.T) {
+	rl := NewRateLimiter(10, time.Second, nil)
+	rl.SetMaxBuckets(1)
+	if !rl.Allow("1.1.1.1") {
+		t.Fatal("首个 IP 应允许")
+	}
+	if rl.Allow("2.2.2.2") {
+		t.Error("超出桶上限应拒绝")
+	}
+	if got := rl.Rejected(); got != 1 {
+		t.Errorf("拒绝计数不符：%d", got)
+	}
+	rl.SetMaxBuckets(0) // 无效值不生效
+	if rl.Allow("3.3.3.3") {
+		t.Error("无效上限设置后应保持原上限（新 IP 拒绝）")
+	}
+}
+
 func TestRateLimiterWhitelist(t *testing.T) {
 	rl := NewRateLimiter(0, time.Second, []string{"10.0.0.0/8", "192.168.1.5", "bad-cidr"})
 	if !rl.Allow("10.1.2.3") {

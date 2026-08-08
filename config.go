@@ -24,6 +24,8 @@ type Config struct {
 	ReadTimeout time.Duration `toml:"read_timeout"`
 	// WriteTimeout HTTP 写入超时时间。
 	WriteTimeout time.Duration `toml:"write_timeout"`
+	// ReadHeaderTimeout 请求头读取超时时间，0 表示默认 10s（Slowloris 防护）。
+	ReadHeaderTimeout time.Duration `toml:"read_header_timeout"`
 	// IdleTimeout HTTP 空闲连接超时时间。
 	IdleTimeout time.Duration `toml:"idle_timeout"`
 	// RequestTimeout 单个请求的超时时间，由 Timeout 中间件使用。
@@ -119,6 +121,9 @@ func (c *Config) Validate() error {
 	if c.WriteTimeout < 0 {
 		return errx.New(errx.KindInvalid, CodeConfigInvalid, "写入超时时间不能为负数")
 	}
+	if c.ReadHeaderTimeout < 0 {
+		return errx.New(errx.KindInvalid, CodeConfigInvalid, "请求头读取超时时间不能为负数")
+	}
 	if c.IdleTimeout < 0 {
 		return errx.New(errx.KindInvalid, CodeConfigInvalid, "空闲超时时间不能为负数")
 	}
@@ -144,6 +149,12 @@ func (c *Config) Validate() error {
 	}
 	if c.HealthPath == "" {
 		c.HealthPath = "/health"
+	}
+	if c.ReadHeaderTimeout == 0 {
+		c.ReadHeaderTimeout = 10 * time.Second
+	}
+	if c.IdleTimeout == 0 {
+		c.IdleTimeout = 60 * time.Second
 	}
 	if len(c.CORSAllowedOrigins) == 0 {
 		c.CORSAllowedOrigins = []string{"*"}

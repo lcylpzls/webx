@@ -25,6 +25,9 @@ func TestConfigValidateSuccessWithDefaults(t *testing.T) {
 	if cfg.MaxBodyBytes != 10*1024*1024 {
 		t.Errorf("MaxBodyBytes 默认值不符：%d", cfg.MaxBodyBytes)
 	}
+	if cfg.ReadHeaderTimeout != 10*time.Second || cfg.IdleTimeout != 60*time.Second {
+		t.Errorf("超时默认值不符：%+v", cfg)
+	}
 }
 
 func TestConfigValidateErrors(t *testing.T) {
@@ -45,6 +48,7 @@ func TestConfigValidateErrors(t *testing.T) {
 		{"请求超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, RequestTimeout: -1}, "请求超时时间不能为负数"},
 		{"读取超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, ReadTimeout: -1}, "读取超时时间不能为负数"},
 		{"写入超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, WriteTimeout: -1}, "写入超时时间不能为负数"},
+		{"读头超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, ReadHeaderTimeout: -1}, "请求头读取超时时间不能为负数"},
 		{"空闲超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, IdleTimeout: -1}, "空闲超时时间不能为负数"},
 		{"请求头负数", Config{TLSCertFile: cert, TLSKeyFile: key, MaxHeaderBytes: -1}, "最大请求头字节数不能为负数"},
 		{"请求体负数", Config{TLSCertFile: cert, TLSKeyFile: key, MaxBodyBytes: -1}, "最大请求体字节数不能为负数"},
@@ -92,6 +96,7 @@ func TestLoadConfigSuccess(t *testing.T) {
 tls_cert_file = ` + quote(cert) + `
 tls_key_file = ` + quote(key) + `
 read_timeout = "5s"
+read_header_timeout = "8s"
 request_timeout = "3s"
 health_path = "/ready"
 log_level = "debug"
@@ -112,6 +117,9 @@ access_log_redact = ["token"]
 	}
 	if cfg.HealthPath != "/ready" || cfg.LogLevel != "debug" || cfg.ReadTimeout != 5*time.Second {
 		t.Errorf("配置加载不符：%+v", cfg)
+	}
+	if cfg.ReadHeaderTimeout != 8*time.Second {
+		t.Errorf("读头超时加载不符：%+v", cfg)
 	}
 	if !cfg.MiddlewareRequestID || !cfg.MiddlewareRecovery || !cfg.AccessLogEnabled {
 		t.Errorf("开关配置不符：%+v", cfg)

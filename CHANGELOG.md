@@ -2,7 +2,16 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
-## [Unreleased]
+## [v0.9.0] - 2026-08-08
+
+### 增强
+
+- Slowloris 防护：`Config.ReadHeaderTimeout` 默认 10s、`IdleTimeout` 默认 60s；
+- Recovery 中间件支持注入 logger，panic 输出 requestId 与调用栈；
+- 限流器增加 IP 桶数量上限（`SetMaxBuckets`，默认 10 万）；
+- `ListenerAddr()` 支持 HTTP/3-only 动态端口；
+- Metrics 增加平均请求耗时（`AvgRequestDurationMs`）；
+- gzip.Writer 池化复用，降低压缩路径分配。
 
 ### 工程
 
