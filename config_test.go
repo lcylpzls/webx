@@ -32,6 +32,9 @@ func TestConfigValidateSuccessWithDefaults(t *testing.T) {
 	if cfg.MinTLSVersion != tls.VersionTLS12 || cfg.QUICMaxIdleTimeout != 30*time.Second || cfg.QUICMaxIncomingStreams != 100 {
 		t.Errorf("TLS/QUIC 默认值不符：%+v", cfg)
 	}
+	if cfg.QUICDrainTimeout != 0 {
+		t.Errorf("QUIC 排空默认值不符：%+v", cfg)
+	}
 }
 
 func TestConfigValidateErrors(t *testing.T) {
@@ -56,6 +59,7 @@ func TestConfigValidateErrors(t *testing.T) {
 		{"TLS 版本无效", Config{TLSCertFile: cert, TLSKeyFile: key, MinTLSVersion: 0x0301}, "最低 TLS 版本无效"},
 		{"QUIC 空闲负数", Config{TLSCertFile: cert, TLSKeyFile: key, QUICMaxIdleTimeout: -1}, "QUIC 空闲超时不能为负数"},
 		{"QUIC 流数负数", Config{TLSCertFile: cert, TLSKeyFile: key, QUICMaxIncomingStreams: -1}, "QUIC 最大入站流数不能为负数"},
+		{"QUIC 排空负数", Config{TLSCertFile: cert, TLSKeyFile: key, QUICDrainTimeout: -1}, "QUIC 排空超时不能为负数"},
 		{"空闲超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, IdleTimeout: -1}, "空闲超时时间不能为负数"},
 		{"请求头负数", Config{TLSCertFile: cert, TLSKeyFile: key, MaxHeaderBytes: -1}, "最大请求头字节数不能为负数"},
 		{"请求体负数", Config{TLSCertFile: cert, TLSKeyFile: key, MaxBodyBytes: -1}, "最大请求体字节数不能为负数"},
@@ -117,6 +121,7 @@ access_log_redact = ["token"]
 min_tls_version = 771
 quic_max_idle_timeout = "45s"
 quic_max_incoming_streams = 200
+quic_drain_timeout = "5s"
 `
 	if err := os.WriteFile(path, []byte(toml), 0o600); err != nil {
 		t.Fatal(err)
@@ -142,6 +147,9 @@ quic_max_incoming_streams = 200
 	}
 	if cfg.MinTLSVersion != tls.VersionTLS12 || cfg.QUICMaxIdleTimeout != 45*time.Second || cfg.QUICMaxIncomingStreams != 200 {
 		t.Errorf("TLS/QUIC 配置加载不符：%+v", cfg)
+	}
+	if cfg.QUICDrainTimeout != 5*time.Second {
+		t.Errorf("QUIC 排空加载不符：%+v", cfg)
 	}
 }
 

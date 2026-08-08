@@ -66,6 +66,17 @@ type Server struct {
 	unixSocketPath string
 	unixSocketPerm os.FileMode
 	certLoader     func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+	sniCerts       []SNICertificate
+}
+
+// SNICertificate 是按 ServerName（SNI）指定的证书。
+type SNICertificate struct {
+	// ServerName 客户端 SNI 主机名（如 "api.example.com"）。
+	ServerName string
+	// CertFile 该域名证书文件。
+	CertFile string
+	// KeyFile 该域名私钥文件。
+	KeyFile string
 }
 
 // checkUnixSocket 是可注入的 Unix Socket 平台检查（测试可替换）。
@@ -240,6 +251,24 @@ func (s *Server) SetCertificateLoader(fn func(*tls.ClientHelloInfo) (*tls.Certif
 		return s
 	}
 	s.certLoader = fn
+	return s
+}
+
+// SetSNICertificates 设置按 SNI 域名区分的多证书；未匹配域名回退到默认证书。
+func (s *Server) SetSNICertificates(certs []SNICertificate) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.logWarn("webx：服务已启动，不允许设置 SNI 证书")
+		return s
+	}
+	valid := make([]SNICertificate, 0, len(certs))
+	for _, c := range certs {
+		if c.ServerName != "" && c.CertFile != "" && c.KeyFile != "" {
+			valid = append(valid, c)
+		}
+	}
+	s.sniCerts = valid
 	return s
 }
 
@@ -494,7 +523,22 @@ func (s *Server) buildGetCertificate() func(*tls.ClientHelloInfo) (*tls.Certific
 	if s.certLoader != nil {
 		return s.certLoader
 	}
-	return newCertificateProvider(s.config.TLSCertFile, s.config.TLSKeyFile).getCertificate
+	defaultCert := newCertificateProvider(s.config.TLSCertFile, s.config.TLSKeyFile)
+	if len(s.sniCerts) == 0 {
+		return defaultCert.getCertificate
+	}
+	providers := make(map[string]*certificateProvider, len(s.sniCerts))
+	for _, c := range s.sniCerts {
+		providers[c.ServerName] = newCertificateProvider(c.CertFile, c.KeyFile)
+	}
+	return func(chi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		if chi != nil {
+			if p, ok := providers[chi.ServerName]; ok {
+				return p.getCertificate(chi)
+			}
+		}
+		return defaultCert.getCertificate(chi)
+	}
 }
 
 // listenSignals 创建系统信号监听通道。
@@ -554,6 +598,9 @@ func (s *Server) shutdownAll(ctx context.Context) error {
 	err := shutdownServers(ctx, s.logger, servers, listeners, s.config.ShutdownTimeout, unixPath, s.cleanupFuncs)
 	for _, qln := range quicListeners {
 		qln.Close()
+	}
+	if s.config.QUICDrainTimeout > 0 {
+		time.Sleep(s.config.QUICDrainTimeout)
 	}
 	for _, h3s := range h3Servers {
 		_ = h3s.Close()

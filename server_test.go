@@ -805,6 +805,71 @@ func TestServerSetCertificateLoader(t *testing.T) {
 	_ = s.Stop(ctx)
 }
 
+func TestServerSNICertificates(t *testing.T) {
+	certA, keyA := writeTestCert(t)
+	certB, keyB := writeTestCert(t)
+	cfg := validConfig(t)
+	s := newTestServer(t, cfg)
+	s.SetSNICertificates([]SNICertificate{
+		{ServerName: "a.example.com", CertFile: certA, KeyFile: keyA},
+		{ServerName: "b.example.com", CertFile: certB, KeyFile: keyB},
+		{ServerName: "", CertFile: certA, KeyFile: keyA}, // 非法条目被过滤
+	})
+	if len(s.sniCerts) != 2 {
+		t.Fatalf("SNI 条目过滤不符：%d", len(s.sniCerts))
+	}
+	getCert := s.buildGetCertificate()
+	ca, err := getCert(&tls.ClientHelloInfo{ServerName: "a.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cb, err := getCert(&tls.ClientHelloInfo{ServerName: "b.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(ca.Certificate[0]) == string(cb.Certificate[0]) {
+		t.Error("不同 SNI 应返回不同证书")
+	}
+	defCert := newCertificateProvider(cfg.TLSCertFile, cfg.TLSKeyFile)
+	// 未匹配 SNI 回退默认证书
+	fallback, err := getCert(&tls.ClientHelloInfo{ServerName: "unknown.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaultLoaded, err := defCert.getCertificate(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(fallback.Certificate[0]) != string(defaultLoaded.Certificate[0]) {
+		t.Error("未匹配 SNI 应回退默认证书")
+	}
+}
+
+func TestServerQUICDrain(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.QUICDrainTimeout = 10 * time.Millisecond
+	s := newTestServer(t, cfg)
+	s.UseHttp3Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/ping",
+		Handler: func(c *core.Context) { c.Success("h3", nil) },
+	})
+	startServer(t, s)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.Stop(ctx); err != nil {
+		t.Fatalf("带排空的 Stop 失败：%v", err)
+	}
+}
+
+func TestSetSNIStartedGuard(t *testing.T) {
+	s := &Server{started: true}
+	if got := s.SetSNICertificates(nil); got != s {
+		t.Error("SetSNICertificates 应返回自身")
+	}
+}
+
 func TestServerHTTP3(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareRequestID = true

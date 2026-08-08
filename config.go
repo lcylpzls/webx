@@ -42,6 +42,8 @@ type Config struct {
 	QUICMaxIdleTimeout time.Duration `toml:"quic_max_idle_timeout"`
 	// QUICMaxIncomingStreams HTTP/3 单连接最大入站流数，0 表示默认 100。
 	QUICMaxIncomingStreams int64 `toml:"quic_max_incoming_streams"`
+	// QUICDrainTimeout HTTP/3 关闭前等待活动连接排空的时间，0 表示不等待。
+	QUICDrainTimeout time.Duration `toml:"quic_drain_timeout"`
 
 	// HealthPath 健康检查端点路径，默认为 "/health"。
 	HealthPath string `toml:"health_path"`
@@ -164,6 +166,9 @@ func (c *Config) Validate() error {
 	}
 	if c.QUICMaxIncomingStreams == 0 {
 		c.QUICMaxIncomingStreams = 100
+	}
+	if c.QUICDrainTimeout < 0 {
+		return errx.New(errx.KindInvalid, CodeConfigInvalid, "QUIC 排空超时不能为负数")
 	}
 	if c.LogLevel == "" {
 		c.LogLevel = "info"

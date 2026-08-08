@@ -2,6 +2,16 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.15.0] - 2026-08-08
+
+### 新增
+
+- SNI 多证书：`SetSNICertificates` 按域名选择证书，未匹配回退默认证书；
+- 请求钩子中间件 `middleware.Hooks`（OnRequest/OnResponse，可作 OTel 适配点）；
+- 大路由基准：100/500 条路由；
+- CI 新增 Benchmark 任务；
+- HTTP/3 排空：`QUICDrainTimeout` 配置关闭前等待时间。
+
 ## [v0.14.0] - 2026-08-08
 
 ### 新增

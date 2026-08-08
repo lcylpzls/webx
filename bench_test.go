@@ -125,3 +125,27 @@ func BenchmarkServerRequest(b *testing.B) {
 		resp.Body.Close()
 	}
 }
+
+func BenchmarkRouterServeHTTP100(b *testing.B) {
+	benchRouter(b, 100)
+}
+
+func BenchmarkRouterServeHTTP500(b *testing.B) {
+	benchRouter(b, 500)
+}
+
+func benchRouter(b *testing.B, n int) {
+	rt := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
+	for i := 0; i < n; i++ {
+		if err := rt.Handle("GET", fmt.Sprintf("/api/v1/resource/%d/:id", i), []core.HandlerFunc{noopCore}); err != nil {
+			b.Fatal(err)
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/resource/%d/42", n-1), nil)
+	dw := &discardWriter{h: make(http.Header)}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rt.ServeHTTP(dw, req)
+	}
+}
