@@ -103,6 +103,8 @@ webx 对外接受框架风格路由语法：`:id`（单段参数）与 `*filepat
 - **HTTP/2**：标准库 `http.Server` + `tls.Config{NextProtos: ["h2","http/1.1"]}`；
 - **HTTP/3**：quic-go 的 `http3.Server`，UDP 监听，与 TCP 同端口不冲突；
 - **Unix Socket**：`net.Listen("unix", path)`，含残留文件清理与权限设置；
+  Windows 要求 build 1803（10.0.17134）以上（AF_UNIX 双工通信），
+  `Start()` 会先做版本检测，不达标拒绝初始化；
 - **优雅关闭**：信号捕获（SIGINT/SIGTERM）+ `Stop(ctx)`，逐一 Shutdown
   所有 `http.Server` 与 `http3.Server`，最后执行清理函数；
 - **启动失败回滚**：任一通道监听失败时，关闭已创建的监听器并返回 errx 错误。
