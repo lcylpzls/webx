@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -136,6 +137,25 @@ func TestRateLimitMiddleware(t *testing.T) {
 	c.Run()
 	if got := rec.Header().Get("Retry-After"); got != "1" {
 		t.Errorf("Retry-After 头不符：%s", got)
+	}
+}
+
+func TestRateLimitCustomMessage(t *testing.T) {
+	rl := NewRateLimiter(1, time.Second, nil)
+	rl.SetRejectMessage("自定义限流文案")
+	run := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "1.1.1.1:1234"
+		rec := httptest.NewRecorder()
+		c := core.NewContext(rec, req)
+		c.SetHandlers([]core.HandlerFunc{RateLimit(rl), func(c *core.Context) { c.Success("ok", nil) }})
+		c.Run()
+		return rec
+	}
+	run()
+	rec := run()
+	if rec.Code != http.StatusTooManyRequests || !strings.Contains(rec.Body.String(), "自定义限流文案") {
+		t.Errorf("自定义文案未生效：%d %s", rec.Code, rec.Body.String())
 	}
 }
 

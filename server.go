@@ -80,6 +80,8 @@ type Server struct {
 	requestIDOpts   RequestIDOptions
 	metricsPath     string
 	maxConcurrent   int
+	errorMessages   map[string]string
+	errMessages     map[string]string
 }
 
 // SNICertificate 是按 ServerName（SNI）指定的证书。
@@ -363,6 +365,31 @@ func (s *Server) SetMaxConcurrentRequests(n int) *Server {
 	return s
 }
 
+// SetErrorMessages 覆盖内置错误响应文案（启动前调用）。
+// 与 Config.ErrorMessages 合并，此处设置优先。
+func (s *Server) SetErrorMessages(messages map[string]string) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.warnStarted("设置错误文案")
+		return s
+	}
+	s.errorMessages = messages
+	return s
+}
+
+// mergeErrorMessages 合并配置与流式设置的错误文案（流式优先）。
+func (s *Server) mergeErrorMessages() map[string]string {
+	out := make(map[string]string, len(s.config.ErrorMessages)+len(s.errorMessages))
+	for k, v := range s.config.ErrorMessages {
+		out[k] = v
+	}
+	for k, v := range s.errorMessages {
+		out[k] = v
+	}
+	return out
+}
+
 // EnableRateLimit 启用 IP 限流中间件。
 func (s *Server) EnableRateLimit(opts RateLimitOptions) *Server {
 	s.mu.Lock()
@@ -506,6 +533,10 @@ func (s *Server) Start() error {
 		return err
 	}
 	s.trustedProxies = s.config.trustedNets
+	s.errMessages = s.mergeErrorMessages()
+	if s.rateLimiter != nil {
+		s.rateLimiter.SetRejectMessage(s.errMessages[ErrorMessageRateLimited])
+	}
 	if s.unixEnabled {
 		if err := checkUnixSocket(); err != nil {
 			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "Unix Socket 平台检查失败")
@@ -525,8 +556,14 @@ func (s *Server) Start() error {
 	noRoute := core.NoRouteHandler
 	if s.spa != nil {
 		noRoute = spaNoRoute(s.spa.fs, s.spa.indexPath)
+	} else if msg := s.errMessages[ErrorMessageNotFound]; msg != "" {
+		noRoute = func(c *core.Context) { c.JSONResponse(http.StatusNotFound, msg, nil) }
 	}
-	s.router = NewRouter(noRoute, core.NoMethodHandler)
+	noMethod := core.NoMethodHandler
+	if msg := s.errMessages[ErrorMessageMethodNotAllowed]; msg != "" {
+		noMethod = func(c *core.Context) { c.JSONResponse(http.StatusMethodNotAllowed, msg, nil) }
+	}
+	s.router = NewRouter(noRoute, noMethod)
 	s.router.SetMaxBodyBytes(s.config.MaxBodyBytes)
 
 	ctx := context.Background()
@@ -819,16 +856,21 @@ func (s *Server) registerBuiltinMiddleware() {
 	if !s.config.MiddlewareRequestID {
 		s.mwManager.Disable("request_id")
 	}
-	s.mwManager.RegisterBuiltin("body_limit", middleware.BodyLimit(s.config.MaxBodyBytes))
+	s.mwManager.RegisterBuiltin("body_limit", middleware.BodyLimitWithOptions(s.config.MaxBodyBytes, middleware.BodyLimitOptions{
+		Message: s.errMessages[ErrorMessageBodyTooLarge],
+	}))
 	if s.config.MaxBodyBytes <= 0 {
 		s.mwManager.Disable("body_limit")
 	}
 	s.concurrencyLimiter = middleware.NewConcurrencyLimiter(s.maxConcurrent)
+	s.concurrencyLimiter.SetRejectMessage(s.errMessages[ErrorMessageTooBusy])
 	s.mwManager.RegisterBuiltin("concurrency_limit", middleware.ConcurrencyLimit(s.concurrencyLimiter))
 	if s.maxConcurrent <= 0 {
 		s.mwManager.Disable("concurrency_limit")
 	}
-	s.mwManager.RegisterBuiltin("timeout", middleware.Timeout(s.config.RequestTimeout))
+	s.mwManager.RegisterBuiltin("timeout", middleware.TimeoutWithOptions(s.config.RequestTimeout, middleware.TimeoutOptions{
+		Message: s.errMessages[ErrorMessageTimeout],
+	}))
 	if !s.config.MiddlewareTimeout {
 		s.mwManager.Disable("timeout")
 	}
@@ -892,6 +934,7 @@ func (s *Server) registerBuiltinMiddleware() {
 		SampleRate:    s.config.AccessLogSampleRate,
 		RedactKeys:    s.config.AccessLogRedact,
 		SlowThreshold: s.config.SlowRequestThreshold,
+		HeaderKeys:    s.config.AccessLogHeaders,
 	}))
 	if !s.config.AccessLogEnabled {
 		s.mwManager.Disable("access_log")

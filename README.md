@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 当前状态：**核心实现完成**。各包语句覆盖率 100%，
-> 当前版本：v0.31.0（v1.0.0 定版评估中）。
+> 当前版本：v0.32.0（v1.0.0 定版评估中）。
 
 ## 技术栈
 
@@ -21,6 +21,13 @@
 | [google/uuid](https://github.com/google/uuid) | UUID v7 请求 ID | 标准实现，`uuid.Must` 稳定生成 |
 
 > 第三方直接依赖：`quic-go`（HTTP/3）与 `google/uuid`（UUID v7），其余全部自研。
+
+## 快速开始
+
+1. 复制 `config.example.toml` 为 `config.toml`，填入 TLS 证书路径并按需修改；
+2. 从 [examples/basic](examples/basic) 起步体验最小服务；
+3. 生产部署直接参考 [examples/production](examples/production)：
+   探针、可信代理、限流、并发限制、指标端点、上传与优雅关闭全配置模板。
 
 ## 设计原则
 
@@ -47,6 +54,8 @@
 - ⚡ 静态资源 ETag：可选弱 ETag，`If-None-Match` 命中返回 304；
 - 🕵️ 可信代理：`trusted_proxies` 配置，代理头防伪造（限流/审计/日志统一）；
 - 📊 运行时指标：goroutine、堆内存、GC 计数进入 `/metrics`；
+- ✏️ 错误文案可定制：`error_messages` 覆盖内置 404/405/413/429/503；
+- 📋 AccessLog 请求头白名单：`access_log_headers` + 复用脱敏；
 - 📊 标准化响应：`{code, msg, data, requestId, timestamp}`；
 - 🩺 健康检查：`/health`，路径可配置；
 - 🔍 探针分离：`/healthz` 存活 / `/readyz` 就绪（优雅关闭中就绪自动 503）；
@@ -90,6 +99,7 @@
 | 标准化响应 | `c.Success / c.Fail / c.JSONResponse / c.AbortWithStatusJSON` |
 | 参数绑定 | `c.BindJSON / c.BindForm / c.BindQuery` |
 | 自动绑定 | `c.Bind(out)`（按 Content-Type 自动分派 JSON/Form/Query） |
+| 嵌套绑定 | `form` / `query` tag 支持嵌套结构体与结构体指针 |
 | 文件上传 | `c.FormFile(name)` / `c.SaveUploadedFile(fh, dest)` |
 | Web 便捷方法 | `c.Redirect / c.Cookie / c.SetCookie / c.SetSecureCookie / c.File` |
 | errx 集成 | `webx.RespondError / StatusForError` |

@@ -2,6 +2,22 @@ package webx
 
 import "github.com/lcylpzls/errx"
 
+// 内置错误响应文案键（配合 Config.ErrorMessages / SetErrorMessages 覆盖）。
+const (
+	// ErrorMessageNotFound 404 兜底文案。
+	ErrorMessageNotFound = "not_found"
+	// ErrorMessageMethodNotAllowed 405 兜底文案。
+	ErrorMessageMethodNotAllowed = "method_not_allowed"
+	// ErrorMessageBodyTooLarge 413 请求体过大文案。
+	ErrorMessageBodyTooLarge = "body_too_large"
+	// ErrorMessageRateLimited 429 限流拒绝文案。
+	ErrorMessageRateLimited = "rate_limited"
+	// ErrorMessageTooBusy 503 并发限制拒绝文案。
+	ErrorMessageTooBusy = "too_busy"
+	// ErrorMessageTimeout 503 请求超时文案。
+	ErrorMessageTimeout = "timeout"
+)
+
 // webx 错误码：统一使用 errx 结构化错误。
 const (
 	// CodeConfigInvalid 配置校验失败。

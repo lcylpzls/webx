@@ -146,6 +146,9 @@ func TestServerChainAPI(t *testing.T) {
 	if got := s.SetMaxConcurrentRequests(10); got != s {
 		t.Error("SetMaxConcurrentRequests 应返回自身")
 	}
+	if got := s.SetErrorMessages(map[string]string{ErrorMessageNotFound: "x"}); got != s {
+		t.Error("SetErrorMessages 应返回自身")
+	}
 	if got := s.DisableRateLimit(); got != s {
 		t.Error("DisableRateLimit 应返回自身")
 	}
@@ -1249,6 +1252,13 @@ func TestSetMaxConcurrentRequestsStartedGuard(t *testing.T) {
 	}
 }
 
+func TestSetErrorMessagesStartedGuard(t *testing.T) {
+	s := &Server{started: true}
+	if got := s.SetErrorMessages(nil); got != s {
+		t.Error("SetErrorMessages 应返回自身")
+	}
+}
+
 func TestServerRequestIDOptions(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareRequestID = true
@@ -1340,6 +1350,119 @@ func TestServerMaxConcurrentRequests(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("恢复后应放行：%d", resp.StatusCode)
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestServerErrorMessages(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MaxBodyBytes = 16
+	cfg.RequestTimeout = 50 * time.Millisecond
+	cfg.MiddlewareTimeout = true
+	cfg.MiddlewareRecovery = true
+	cfg.ErrorMessages = map[string]string{
+		ErrorMessageMethodNotAllowed: "自定义 405",
+		ErrorMessageBodyTooLarge:     "自定义 413",
+		ErrorMessageRateLimited:      "自定义 429",
+		ErrorMessageTooBusy:          "自定义 503 繁忙",
+		ErrorMessageTimeout:          "自定义 503 超时",
+	}
+	s := newTestServer(t, cfg)
+	s.SetMaxConcurrentRequests(1)
+	s.EnableRateLimit(RateLimitOptions{
+		QPS:     2,
+		Window:  time.Second,
+		KeyFunc: func(c *core.Context) string { return c.Request().URL.Path },
+	})
+	s.SetErrorMessages(map[string]string{ErrorMessageNotFound: "流式 404"})
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{Method: "GET", Path: "/ok", Handler: func(c *core.Context) { c.Success("ok", nil) }})
+	s.RegisterRoute(Route{
+		Method: "POST",
+		Path:   "/ok",
+		Handler: func(c *core.Context) {
+			_, _ = io.ReadAll(c.Request().Body)
+			c.Success("ok", nil)
+		},
+	})
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/slow",
+		Handler: func(c *core.Context) {
+			time.Sleep(500 * time.Millisecond)
+			c.Success("ok", nil)
+		},
+	})
+	startServer(t, s)
+	client := testHTTPClient()
+	base := "https://" + s.ListenerAddr()
+
+	check := func(name string, resp *http.Response, wantCode int, wantMsg string) {
+		t.Helper()
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != wantCode || !strings.Contains(string(body), wantMsg) {
+			t.Errorf("%s 不符：%d %s（期望 %d 含 %s）", name, resp.StatusCode, body, wantCode, wantMsg)
+		}
+	}
+
+	resp, err := client.Get(base + "/missing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("404", resp, http.StatusNotFound, "流式 404")
+
+	patchReq, _ := http.NewRequest(http.MethodPatch, base+"/ok", nil)
+	resp, err = client.Do(patchReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("405", resp, http.StatusMethodNotAllowed, "自定义 405")
+
+	resp, err = client.Post(base+"/ok", "application/json", strings.NewReader(strings.Repeat("x", 100)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("413", resp, http.StatusRequestEntityTooLarge, "自定义 413")
+
+	for i := 0; i < 3; i++ {
+		resp, err = client.Get(base + "/ok")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 2 {
+			check("429", resp, http.StatusTooManyRequests, "自定义 429")
+		} else {
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+		}
+	}
+
+	slowDone := make(chan struct{})
+	go func() {
+		defer close(slowDone)
+		resp, err := client.Get(base + "/slow")
+		if err != nil {
+			return
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+	time.Sleep(100 * time.Millisecond)
+	resp, err = client.Get(base + "/slow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("503 繁忙", resp, http.StatusServiceUnavailable, "自定义 503 繁忙")
+	<-slowDone
+
+	resp, err = client.Get(base + "/slow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("503 超时", resp, http.StatusServiceUnavailable, "自定义 503 超时")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

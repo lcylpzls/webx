@@ -2,6 +2,18 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.32.0] - 2026-08-08
+
+### 新增
+
+- 内置错误文案可定制：`error_messages` 配置或 `SetErrorMessages`，覆盖
+  404 / 405 / 413 / 429 / 503（并发繁忙与请求超时分开）；
+- AccessLog 请求头白名单：`access_log_headers` 按白名单记录请求头，
+  命中 `access_log_redact` 的值自动脱敏；
+- 嵌套结构体绑定：`form` / `query` 支持嵌套结构与结构体指针递归绑定，
+  带循环引用防护；
+- 新增 `examples/production` 生产综合模板与 README 快速开始。
+
 ## [v0.31.0] - 2026-08-08
 
 ### 新增

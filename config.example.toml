@@ -42,6 +42,16 @@ log_success_req = false        # true=记录成功请求
 access_log_sample_rate = 0     # 0=全部记录，N>0 平均每 N 条记 1 条
 access_log_redact = ["token", "password"] # query 脱敏键
 slow_request_threshold = "0s"  # >0 时对慢请求额外记录 Warn（如 "1s"）
+access_log_headers = []       # 记录到日志的请求头白名单，如 ["X-Trace-ID", "X-User-ID"]
+
+# --- 内置错误文案（可选覆盖） ---
+# [error_messages]
+# not_found = "页面不存在"
+# method_not_allowed = "不支持的请求方法"
+# body_too_large = "请求体超出限制"
+# rate_limited = "访问过于频繁，请稍后重试"
+# too_busy = "服务繁忙，请稍后重试"
+# timeout = "请求超时，请重试"
 
 # --- 可信代理 ---
 # 仅来自这些网段的请求才信任 X-Forwarded-For / X-Real-IP；

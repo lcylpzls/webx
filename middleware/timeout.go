@@ -45,9 +45,24 @@ func (w *timeoutWriter) Write(b []byte) (int, error) {
 	}
 }
 
-// Timeout 返回请求超时中间件。
+// TimeoutOptions 定义请求超时中间件的配置。
+type TimeoutOptions struct {
+	// Message 超时响应文案（默认 "请求处理超时"）。
+	Message string
+}
+
+// Timeout 返回请求超时中间件（默认文案）。
 // 向请求注入带超时的 Context；超时后丢弃 Handler 写入并返回 503。
 func Timeout(timeout time.Duration) core.HandlerFunc {
+	return TimeoutWithOptions(timeout, TimeoutOptions{})
+}
+
+// TimeoutWithOptions 返回带文案选项的请求超时中间件。
+func TimeoutWithOptions(timeout time.Duration, opts TimeoutOptions) core.HandlerFunc {
+	message := opts.Message
+	if message == "" {
+		message = "请求处理超时"
+	}
 	return func(c *core.Context) {
 		if timeout <= 0 {
 			c.Next()
@@ -66,7 +81,7 @@ func Timeout(timeout time.Duration) core.HandlerFunc {
 
 		if tw.timedOut && !tw.wroteHeader {
 			c.ResetWriteState()
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, "请求处理超时", nil)
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, message, nil)
 		}
 	}
 }

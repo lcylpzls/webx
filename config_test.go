@@ -184,6 +184,7 @@ middleware_metrics = true
 access_log_enabled = true
 access_log_sample_rate = 10
 access_log_redact = ["token"]
+access_log_headers = ["X-Trace-ID"]
 min_tls_version = 771
 quic_max_idle_timeout = "45s"
 quic_max_incoming_streams = 200
@@ -196,6 +197,9 @@ security_cross_origin_opener_policy = "same-origin"
 gzip_min_size = 2048
 debug = true
 cors_allow_credentials = true
+
+[error_messages]
+not_found = "页面不存在"
 `
 	if err := os.WriteFile(path, []byte(toml), 0o600); err != nil {
 		t.Fatal(err)
@@ -218,6 +222,12 @@ cors_allow_credentials = true
 	}
 	if cfg.AccessLogSampleRate != 10 || len(cfg.AccessLogRedact) != 1 || cfg.AccessLogRedact[0] != "token" {
 		t.Errorf("访问日志配置不符：%+v", cfg)
+	}
+	if len(cfg.AccessLogHeaders) != 1 || cfg.AccessLogHeaders[0] != "X-Trace-ID" {
+		t.Errorf("访问日志请求头白名单不符：%+v", cfg.AccessLogHeaders)
+	}
+	if cfg.ErrorMessages["not_found"] != "页面不存在" {
+		t.Errorf("错误文案配置加载不符：%+v", cfg.ErrorMessages)
 	}
 	if cfg.MinTLSVersion != tls.VersionTLS12 || cfg.QUICMaxIdleTimeout != 45*time.Second || cfg.QUICMaxIncomingStreams != 200 {
 		t.Errorf("TLS/QUIC 配置加载不符：%+v", cfg)

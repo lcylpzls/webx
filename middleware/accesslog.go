@@ -4,6 +4,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/lcylpzls/logx"
@@ -20,6 +21,8 @@ type AccessLogOptions struct {
 	RedactKeys []string
 	// SlowThreshold 慢请求阈值；>0 且请求耗时达到阈值时额外记录 Warn（默认关闭）。
 	SlowThreshold time.Duration
+	// HeaderKeys 需要写入日志的请求头白名单（命中 RedactKeys 的值会脱敏）。
+	HeaderKeys []string
 }
 
 // countingWriter 统计响应体字节数。
@@ -70,7 +73,7 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 			return
 		}
 		query := redactQuery(c.Request().URL.RawQuery, opts.RedactKeys)
-		fields := logx.Fields(
+		logFields := []logx.Field{
 			logx.String("method", c.Request().Method),
 			logx.String("path", c.Request().URL.Path),
 			logx.Int("status", status),
@@ -84,13 +87,42 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 			logx.Any("duration", elapsed.String()),
 			logx.Int64("duration_ms", elapsed.Milliseconds()),
 			logx.Int64("bytes", cw.n),
-		)
+		}
+		for _, key := range opts.HeaderKeys {
+			if key == "" {
+				continue
+			}
+			value := c.GetHeader(key)
+			if value == "" {
+				continue
+			}
+			if isRedactKey(opts.RedactKeys, key) {
+				value = "***"
+			}
+			logFields = append(logFields, logx.String(headerFieldName(key), value))
+		}
+		fields := logx.Fields(logFields...)
 		if status >= 400 {
 			logger.Warn("访问日志", fields)
 			return
 		}
 		logger.Info("访问日志", fields)
 	}
+}
+
+// headerFieldName 将请求头名转为日志字段名（X-Trace-ID → header_x_trace_id）。
+func headerFieldName(key string) string {
+	return "header_" + strings.ToLower(strings.ReplaceAll(key, "-", "_"))
+}
+
+// isRedactKey 判断指定键是否命中脱敏列表。
+func isRedactKey(keys []string, key string) bool {
+	for _, k := range keys {
+		if k == key {
+			return true
+		}
+	}
+	return false
 }
 
 // requestScheme 返回请求协议：TLS 或 HTTP/3 记为 https，否则为 http。

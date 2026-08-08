@@ -91,21 +91,52 @@ func (c *Context) BindQuery(out any) error {
 	return bindValues(out, c.request.URL.Query(), "query")
 }
 
-// bindValues 将 url.Values 按 tagName 绑定到结构体。
+// bindValues 将 url.Values 按 tagName 绑定到结构体（支持嵌套结构体）。
 func bindValues(out any, values url.Values, tagName string) error {
+	return bindValuesRec(out, values, tagName, make(map[reflect.Type]bool))
+}
+
+// bindValuesRec 递归绑定，visited 用于防护循环引用。
+func bindValuesRec(out any, values url.Values, tagName string, visited map[reflect.Type]bool) error {
 	rv := reflect.ValueOf(out)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		return errors.New("webx：绑定目标必须为非空指针")
 	}
 	rv = rv.Elem()
 	rt := rv.Type()
+	if visited[rt] {
+		return nil
+	}
+	visited[rt] = true
+	defer delete(visited, rt)
 	for i := 0; i < rt.NumField(); i++ {
 		sf := rt.Field(i)
 		if !sf.IsExported() {
 			continue
 		}
 		tag := sf.Tag.Get(tagName)
-		if tag == "" || tag == "-" {
+		if tag == "-" {
+			continue
+		}
+		field := rv.Field(i)
+		switch field.Kind() {
+		case reflect.Struct:
+			if err := bindValuesRec(field.Addr().Interface(), values, tagName, visited); err != nil {
+				return err
+			}
+			continue
+		case reflect.Ptr:
+			if field.Type().Elem().Kind() == reflect.Struct {
+				if field.IsNil() {
+					continue
+				}
+				if err := bindValuesRec(field.Interface(), values, tagName, visited); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+		if tag == "" {
 			continue
 		}
 		defaultValue := ""
@@ -127,7 +158,6 @@ func bindValues(out any, values url.Values, tagName string) error {
 				continue
 			}
 		}
-		field := rv.Field(i)
 		switch field.Kind() {
 		case reflect.String:
 			field.SetString(vals[0])

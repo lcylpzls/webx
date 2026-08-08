@@ -191,6 +191,45 @@ func TestAccessLogSlowThreshold(t *testing.T) {
 	}
 }
 
+func TestAccessLogHeaderWhitelist(t *testing.T) {
+	var buf bytes.Buffer
+	logger, err := logx.NewBuilder().EnableWriter(&buf, logx.InfoLevel).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer logger.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Trace-ID", "trace-1")
+	req.Header.Set("X-User-ID", "u1")
+	req.Header.Set("X-Secret", "s1")
+	req.Header.Set("X-Skip", "no")
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, req)
+	c.SetHandlers([]core.HandlerFunc{
+		AccessLog(logger, AccessLogOptions{
+			LogSuccess: true,
+			HeaderKeys: []string{"X-Trace-ID", "X-User-ID", "X-Secret", "", "X-Missing"},
+			RedactKeys: []string{"X-Secret"},
+		}),
+		func(c *core.Context) { c.Success("ok", nil) },
+	})
+	c.Run()
+	log := buf.String()
+	for _, want := range []string{
+		"header_x_trace_id=trace-1",
+		"header_x_user_id=u1",
+		"header_x_secret=***",
+	} {
+		if !strings.Contains(log, want) {
+			t.Errorf("访问日志缺少请求头字段 %s：%s", want, log)
+		}
+	}
+	if strings.Contains(log, "header_x_skip") || strings.Contains(log, "s1") {
+		t.Errorf("白名单外请求头不应记录：%s", log)
+	}
+}
+
 func TestRedactQuery(t *testing.T) {
 	if got := redactQuery("", []string{"a"}); got != "" {
 		t.Errorf("空 query 应原样返回：%s", got)

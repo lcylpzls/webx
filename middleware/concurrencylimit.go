@@ -9,9 +9,10 @@ import (
 
 // ConcurrencyLimiter 限制同一时刻处理的请求数。
 type ConcurrencyLimiter struct {
-	max      int64
-	active   atomic.Int64
-	rejected atomic.Uint64
+	max       int64
+	active    atomic.Int64
+	rejected  atomic.Uint64
+	rejectMsg string
 }
 
 // NewConcurrencyLimiter 创建并发限制器；max <= 0 表示不限制。
@@ -51,12 +52,21 @@ func (l *ConcurrencyLimiter) Rejected() uint64 {
 	return l.rejected.Load()
 }
 
+// SetRejectMessage 设置拒绝响应文案；空字符串使用默认文案。
+func (l *ConcurrencyLimiter) SetRejectMessage(msg string) {
+	l.rejectMsg = msg
+}
+
 // ConcurrencyLimit 返回并发限制中间件；额度已满时返回 503 并携带 Retry-After。
 func ConcurrencyLimit(l *ConcurrencyLimiter) core.HandlerFunc {
 	return func(c *core.Context) {
 		if !l.TryAcquire() {
 			c.Header("Retry-After", "1")
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, "请求过于繁忙，请稍后重试", nil)
+			message := l.rejectMsg
+			if message == "" {
+				message = "请求过于繁忙，请稍后重试"
+			}
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, message, nil)
 			return
 		}
 		defer l.Release()

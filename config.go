@@ -68,6 +68,8 @@ type Config struct {
 	AccessLogSampleRate int `toml:"access_log_sample_rate"`
 	// AccessLogRedact 访问日志 query 参数中需要脱敏的键。
 	AccessLogRedact []string `toml:"access_log_redact"`
+	// AccessLogHeaders 访问日志需要记录的请求头白名单。
+	AccessLogHeaders []string `toml:"access_log_headers"`
 	// TrustedProxies 可信代理网段（CIDR 或 IP）；仅来自这些网段的请求
 	// 才信任 X-Forwarded-For / X-Real-IP，空列表表示不信任任何代理头。
 	TrustedProxies []string `toml:"trusted_proxies"`
@@ -133,6 +135,8 @@ type Config struct {
 	GzipLevel int `toml:"gzip_level"`
 	// Debug 调试模式：Recovery 响应携带 panic 摘要（生产环境保持 false）。
 	Debug bool `toml:"debug"`
+	// ErrorMessages 内置错误响应文案覆盖（键见 ErrorMessage 系列常量）。
+	ErrorMessages map[string]string `toml:"error_messages"`
 
 	// trustedNets 是 TrustedProxies 解析后的网段（Validate 时填充）。
 	trustedNets []*net.IPNet

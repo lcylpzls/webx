@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -88,6 +89,47 @@ func TestConcurrencyLimitMiddleware(t *testing.T) {
 	}
 	if rec.Code != http.StatusOK {
 		t.Errorf("未超限应放行：%d", rec.Code)
+	}
+}
+
+func TestConcurrencyLimitCustomMessage(t *testing.T) {
+	l := NewConcurrencyLimiter(0)
+	l.SetRejectMessage("自定义繁忙文案")
+	if l.rejectMsg != "自定义繁忙文案" {
+		t.Error("拒绝文案未保存")
+	}
+
+	l2 := NewConcurrencyLimiter(1)
+	l2.SetRejectMessage("自定义繁忙文案")
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetHandlers([]core.HandlerFunc{
+		ConcurrencyLimit(l2),
+		func(c *core.Context) {
+			close(entered)
+			<-release
+			c.Success("ok", nil)
+		},
+	})
+	done := make(chan struct{})
+	go func() {
+		c.Run()
+		close(done)
+	}()
+	<-entered
+	rec2 := httptest.NewRecorder()
+	c2 := core.NewContext(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
+	c2.SetHandlers([]core.HandlerFunc{
+		ConcurrencyLimit(l2),
+		func(c *core.Context) { c.Success("ok", nil) },
+	})
+	c2.Run()
+	close(release)
+	<-done
+	if rec2.Code != http.StatusServiceUnavailable || !strings.Contains(rec2.Body.String(), "自定义繁忙文案") {
+		t.Errorf("自定义文案未生效：%d %s", rec2.Code, rec2.Body.String())
 	}
 }
 

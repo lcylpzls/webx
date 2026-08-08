@@ -28,6 +28,20 @@ func TestBodyLimitOverContentLength(t *testing.T) {
 	}
 }
 
+func TestBodyLimitCustomMessage(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 100)))
+	c := core.NewContext(rec, req)
+	c.SetHandlers([]core.HandlerFunc{
+		BodyLimitWithOptions(10, BodyLimitOptions{Message: "自定义超限文案"}),
+		func(c *core.Context) { c.Success("ok", nil) },
+	})
+	c.Run()
+	if rec.Code != http.StatusRequestEntityTooLarge || !strings.Contains(rec.Body.String(), "自定义超限文案") {
+		t.Errorf("自定义文案未生效：%d %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestBodyLimitChunkedWrapped(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 100)))

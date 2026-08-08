@@ -22,6 +22,7 @@ type RateLimiter struct {
 	rejected   atomic.Uint64
 	maxBuckets int
 	keyFunc    func(*core.Context) string
+	rejectMsg  string
 }
 
 type tokenBucket struct {
@@ -64,6 +65,13 @@ func (rl *RateLimiter) SetKeyFunc(fn func(*core.Context) string) {
 	if fn != nil {
 		rl.keyFunc = fn
 	}
+}
+
+// SetRejectMessage 设置拒绝响应文案；空字符串使用默认文案。
+func (rl *RateLimiter) SetRejectMessage(msg string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	rl.rejectMsg = msg
 }
 
 // Allow 检查指定 IP 是否被允许通过。
@@ -150,7 +158,11 @@ func RateLimit(rl *RateLimiter) core.HandlerFunc {
 			if retryAfter := rl.RetryAfter(key); retryAfter > 0 {
 				c.Header("Retry-After", strconv.FormatInt(int64(retryAfter.Seconds()), 10))
 			}
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, "请求过于频繁，请稍后重试", nil)
+			message := rl.rejectMsg
+			if message == "" {
+				message = "请求过于频繁，请稍后重试"
+			}
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, message, nil)
 			return
 		}
 		c.Next()

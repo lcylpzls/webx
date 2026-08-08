@@ -1,0 +1,32 @@
+tls_cert_file = "/etc/ssl/certs/server.crt"
+tls_key_file = "/etc/ssl/private/server.key"
+shutdown_timeout = "30s"
+request_timeout = "30s"
+max_body_bytes = 10485760
+
+middleware_request_id = true
+middleware_recovery = true
+middleware_timeout = true
+middleware_cors = true
+middleware_validation = true
+middleware_gzip = true
+middleware_metrics = true
+middleware_security = true
+
+access_log_enabled = true
+access_log_headers = ["X-Trace-ID"]
+slow_request_threshold = "1s"
+
+trusted_proxies = ["10.0.0.0/8", "127.0.0.1/32"]
+
+liveness_path = "/healthz"
+readiness_path = "/readyz"
+metrics_enabled = true
+metrics_path = "/metrics"
+
+security_hsts_max_age = 31536000
+security_hsts_include_subdomains = true
+security_content_security_policy = "default-src 'self'"
+security_cross_origin_resource_policy = "same-origin"
+
+gzip_level = 5

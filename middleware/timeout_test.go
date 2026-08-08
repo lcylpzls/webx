@@ -38,6 +38,22 @@ func TestTimeoutTriggers(t *testing.T) {
 	}
 }
 
+func TestTimeoutCustomMessage(t *testing.T) {
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetHandlers([]core.HandlerFunc{
+		TimeoutWithOptions(10*time.Millisecond, TimeoutOptions{Message: "自定义超时文案"}),
+		func(c *core.Context) {
+			<-c.Request().Context().Done()
+			_ = c.String(http.StatusOK, "迟到响应")
+		},
+	})
+	c.Run()
+	if rec.Code != http.StatusServiceUnavailable || !contains(rec.Body.String(), "自定义超时文案") {
+		t.Errorf("自定义文案未生效：%d %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestTimeoutWroteHeaderBeforeExpiry(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))

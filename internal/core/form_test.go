@@ -47,7 +47,7 @@ type formModelBad struct {
 }
 
 type formModelUnsupported struct {
-	T struct{} `form:"t"`
+	T map[string]string `form:"t"`
 }
 
 type formModelHidden struct {
@@ -190,7 +190,7 @@ type queryModelBad struct {
 }
 
 type queryModelUnsupported struct {
-	T struct{} `query:"t"`
+	T map[string]string `query:"t"`
 }
 
 type queryModelHidden struct {
@@ -346,6 +346,121 @@ func TestContextBindDispatch(t *testing.T) {
 	}
 	if err := c.Bind(&qm); err != nil || qm.Name != "query" {
 		t.Errorf("Bind 查询不符：%v %+v", err, qm)
+	}
+}
+
+type nestedAddr struct {
+	City string `query:"pcity" form:"pcity"`
+	Zip  int    `query:"pzip" form:"pzip"`
+}
+
+type nestedQueryModel struct {
+	Name string `query:"name"`
+	Addr struct {
+		City string `query:"city"`
+		Zip  int    `query:"zip"`
+	} `query:"addr"`
+	Home struct {
+		City string `query:"hcity"`
+	} `query:"home"`
+	Skip struct {
+		X string `query:"x"`
+	} `query:"-"`
+	Ptr   *nestedAddr `query:"ptr"`
+	P     *int        `query:"p"`
+	NoTag string
+}
+
+func TestBindQueryNested(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?name=webx&city=北京&zip=100000&hcity=上海&pcity=深圳&x=no", nil)
+	c := NewContext(httptest.NewRecorder(), req)
+	var m nestedQueryModel
+	m.Ptr = &nestedAddr{}
+	if err := c.BindQuery(&m); err != nil {
+		t.Fatalf("BindQuery 失败：%v", err)
+	}
+	if m.Name != "webx" || m.Addr.City != "北京" || m.Addr.Zip != 100000 ||
+		m.Home.City != "上海" || m.Skip.X != "" || m.NoTag != "" {
+		t.Errorf("嵌套绑定不符：%+v", m)
+	}
+	if m.Ptr == nil || m.Ptr.City != "深圳" {
+		t.Errorf("嵌套指针绑定不符：%+v", m.Ptr)
+	}
+}
+
+func TestBindQueryNestedError(t *testing.T) {
+	m := nestedQueryModel{}
+	m.Ptr = &nestedAddr{}
+	req := httptest.NewRequest(http.MethodGet, "/?zip=abc", nil)
+	c := NewContext(httptest.NewRecorder(), req)
+	if err := c.BindQuery(&m); err == nil {
+		t.Error("嵌套结构体解析失败应报错")
+	}
+
+	m2 := nestedQueryModel{}
+	m2.Ptr = &nestedAddr{}
+	req = httptest.NewRequest(http.MethodGet, "/?pzip=abc", nil)
+	c = NewContext(httptest.NewRecorder(), req)
+	if err := c.BindQuery(&m2); err == nil {
+		t.Error("嵌套指针解析失败应报错")
+	}
+}
+
+func TestBindQueryNestedNilPtr(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?name=x", nil)
+	c := NewContext(httptest.NewRecorder(), req)
+	var m nestedQueryModel
+	if err := c.BindQuery(&m); err != nil {
+		t.Fatalf("BindQuery 失败：%v", err)
+	}
+	if m.Ptr != nil {
+		t.Errorf("nil 指针应跳过：%+v", m.Ptr)
+	}
+}
+
+func TestBindQueryNestedCycle(t *testing.T) {
+	type cycleNode struct {
+		Name string     `query:"name"`
+		Next *cycleNode `query:"next"`
+	}
+	var n cycleNode
+	n.Next = &n
+	req := httptest.NewRequest(http.MethodGet, "/?name=x", nil)
+	c := NewContext(httptest.NewRecorder(), req)
+	if err := c.BindQuery(&n); err != nil {
+		t.Fatalf("循环引用应安全跳过：%v", err)
+	}
+	if n.Name != "x" {
+		t.Errorf("循环引用绑定不符：%+v", n)
+	}
+}
+
+func TestBindQueryPtrScalarError(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?p=1", nil)
+	c := NewContext(httptest.NewRecorder(), req)
+	var m nestedQueryModel
+	if err := c.BindQuery(&m); err == nil {
+		t.Error("指针标量字段应报类型不支持")
+	}
+}
+
+type nestedFormModel struct {
+	Name string `form:"name"`
+	Addr struct {
+		City string `form:"city"`
+	} `form:"addr"`
+}
+
+func TestBindFormNested(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("name=webx&city=北京"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	c := NewContext(httptest.NewRecorder(), req)
+	var m nestedFormModel
+	if err := c.BindForm(&m); err != nil {
+		t.Fatalf("BindForm 失败：%v", err)
+	}
+	if m.Name != "webx" || m.Addr.City != "北京" {
+		t.Errorf("表单嵌套绑定不符：%+v", m)
 	}
 }
 
