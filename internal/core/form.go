@@ -22,11 +22,17 @@ func (c *Context) BindForm(out any) error {
 	if err := c.request.ParseMultipartForm(32 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
 		return err
 	}
-	return bindFormValues(out, c.request.Form)
+	return bindValues(out, c.request.Form, "form")
 }
 
-// bindFormValues 将表单值绑定到结构体。
-func bindFormValues(out any, values url.Values) error {
+// BindQuery 解析查询参数到 out。
+// 字段通过 query tag 映射，支持 string/int/uint/float/bool/[]string。
+func (c *Context) BindQuery(out any) error {
+	return bindValues(out, c.request.URL.Query(), "query")
+}
+
+// bindValues 将 url.Values 按 tagName 绑定到结构体。
+func bindValues(out any, values url.Values, tagName string) error {
 	rv := reflect.ValueOf(out)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		return errors.New("webx：绑定目标必须为非空指针")
@@ -38,7 +44,7 @@ func bindFormValues(out any, values url.Values) error {
 		if !sf.IsExported() {
 			continue
 		}
-		tag := sf.Tag.Get("form")
+		tag := sf.Tag.Get(tagName)
 		if tag == "" || tag == "-" {
 			continue
 		}

@@ -3,6 +3,7 @@ package webx
 import (
 	"crypto/tls"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/lcylpzls/confx"
@@ -47,6 +48,10 @@ type Config struct {
 
 	// HealthPath 健康检查端点路径，默认为 "/health"。
 	HealthPath string `toml:"health_path"`
+	// MetricsEnabled 是否启用 Prometheus 文本格式指标端点。
+	MetricsEnabled bool `toml:"metrics_enabled"`
+	// MetricsPath 指标端点路径，启用时默认为 "/metrics"。
+	MetricsPath string `toml:"metrics_path"`
 
 	// LogLevel 日志级别，可选 debug、info、warn、error，为空默认 info。
 	LogLevel string `toml:"log_level"`
@@ -202,6 +207,12 @@ func (c *Config) Validate() error {
 	}
 	if c.HealthPath == "" {
 		c.HealthPath = "/health"
+	}
+	if c.MetricsEnabled && c.MetricsPath == "" {
+		c.MetricsPath = "/metrics"
+	}
+	if c.MetricsPath != "" && !strings.HasPrefix(c.MetricsPath, "/") {
+		return errx.New(errx.KindInvalid, CodeConfigInvalid, "指标端点路径必须以 / 开头")
 	}
 	if c.ReadHeaderTimeout == 0 {
 		c.ReadHeaderTimeout = 10 * time.Second

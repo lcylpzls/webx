@@ -44,3 +44,11 @@ type RateLimitOptions struct {
 	// KeyFunc 限流维度提取函数（可选，默认按客户端 IP）。
 	KeyFunc KeyFunc
 }
+
+// RequestIDOptions 定义请求 ID 中间件的配置参数。
+type RequestIDOptions struct {
+	// Header 请求 ID 头名（默认 X-Request-ID）。
+	Header string
+	// Generator 请求 ID 生成函数（默认 UUID v7）。
+	Generator func() string
+}

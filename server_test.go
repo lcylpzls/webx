@@ -127,6 +127,12 @@ func TestServerChainAPI(t *testing.T) {
 	if got := s.EnableRateLimit(RateLimitOptions{QPS: 10, Window: time.Second}); got != s {
 		t.Error("EnableRateLimit 应返回自身")
 	}
+	if got := s.SetRequestIDOptions(RequestIDOptions{Header: "X-Trace-ID"}); got != s {
+		t.Error("SetRequestIDOptions 应返回自身")
+	}
+	if got := s.EnableMetricsEndpoint("/metrics"); got != s {
+		t.Error("EnableMetricsEndpoint 应返回自身")
+	}
 	if got := s.DisableRateLimit(); got != s {
 		t.Error("DisableRateLimit 应返回自身")
 	}
@@ -1113,6 +1119,43 @@ func TestSetMiddlewareOrderStartedGuard(t *testing.T) {
 	if got := s.SetMiddlewareOrder(nil); got != s {
 		t.Error("SetMiddlewareOrder 应返回自身")
 	}
+}
+
+func TestSetRequestIDOptionsStartedGuard(t *testing.T) {
+	s := &Server{started: true}
+	if got := s.SetRequestIDOptions(RequestIDOptions{Header: "X"}); got != s {
+		t.Error("SetRequestIDOptions 应返回自身")
+	}
+}
+
+func TestServerRequestIDOptions(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareRequestID = true
+	s := newTestServer(t, cfg)
+	s.SetRequestIDOptions(RequestIDOptions{
+		Header:    "X-Trace-ID",
+		Generator: func() string { return "trace-abc" },
+	})
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/ok",
+		Handler: func(c *core.Context) { c.Success("ok", nil) },
+	})
+	startServer(t, s)
+	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/ok")
+	if err != nil {
+		t.Fatalf("GET 失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("X-Trace-ID") != "trace-abc" {
+		t.Errorf("自定义请求 ID 未生效：%d %v", resp.StatusCode, resp.Header)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
 }
 
 func TestServerMiddlewareOrder(t *testing.T) {

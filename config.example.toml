@@ -23,6 +23,10 @@ quic_max_incoming_streams = 100 # 单连接最大入站流数（默认 100）
 # --- 健康检查 ---
 health_path = "/health"
 
+# --- 指标端点（Prometheus 文本格式，自研零依赖） ---
+metrics_enabled = false            # true=启用 /metrics 指标端点
+metrics_path = "/metrics"          # 端点路径（需以 / 开头）
+
 # --- 平台限制 ---
 # Unix Socket 监听（UseUnixSocketListen）在 Windows 上要求
 # Windows 10 build 1803 (10.0.17134) 或更高版本；低于该版本时

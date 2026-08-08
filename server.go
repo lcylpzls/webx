@@ -72,6 +72,8 @@ type Server struct {
 	connCtx        func(context.Context, net.Conn) context.Context
 	onShutdown     []func()
 	mwOrder        []MiddlewareType
+	requestIDOpts  RequestIDOptions
+	metricsPath    string
 }
 
 // SNICertificate 是按 ServerName（SNI）指定的证书。
@@ -317,6 +319,31 @@ func (s *Server) SetSNICertificates(certs []SNICertificate) *Server {
 	return s
 }
 
+// SetRequestIDOptions 设置请求 ID 中间件的配置（启动前调用）。
+func (s *Server) SetRequestIDOptions(opts RequestIDOptions) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.warnStarted("设置请求 ID 选项")
+		return s
+	}
+	s.requestIDOpts = opts
+	return s
+}
+
+// EnableMetricsEndpoint 启用 Prometheus 文本格式指标端点（启动前调用）。
+// path 为空表示禁用；绕过业务中间件链，避免自采集反馈。
+func (s *Server) EnableMetricsEndpoint(path string) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.warnStarted("启用指标端点")
+		return s
+	}
+	s.metricsPath = path
+	return s
+}
+
 // EnableRateLimit 启用 IP 限流中间件。
 func (s *Server) EnableRateLimit(opts RateLimitOptions) *Server {
 	s.mu.Lock()
@@ -496,6 +523,11 @@ func (s *Server) Start() error {
 	if !hasHealth {
 		if err := s.router.Handle("GET", s.config.HealthPath, []core.HandlerFunc{healthHandler(s.startTime, s.healthChecks)}); err != nil {
 			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "健康检查路由注册失败")
+		}
+	}
+	if path := s.metricsEndpointPath(); path != "" {
+		if err := s.router.Handle("GET", path, []core.HandlerFunc{s.serveMetrics}); err != nil {
+			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "指标端点路由注册失败")
 		}
 	}
 
@@ -717,7 +749,10 @@ func (s *Server) registerBuiltinMiddleware() {
 	if !s.config.MiddlewareRecovery {
 		s.mwManager.Disable("recovery")
 	}
-	s.mwManager.RegisterBuiltin("request_id", middleware.RequestID())
+	s.mwManager.RegisterBuiltin("request_id", middleware.RequestIDWithOptions(middleware.RequestIDOptions{
+		Header:    s.requestIDOpts.Header,
+		Generator: s.requestIDOpts.Generator,
+	}))
 	if !s.config.MiddlewareRequestID {
 		s.mwManager.Disable("request_id")
 	}

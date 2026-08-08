@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lcylpzls/webx"
 )
@@ -113,5 +115,73 @@ func TestHandlerErrorResponse(t *testing.T) {
 	}))(c)
 	if rec.Code != http.StatusServiceUnavailable || rec.Body.String() != "custom" {
 		t.Errorf("自定义错误处理器不符：%d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestNewProxyDefaults(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer target.Close()
+	tu, _ := url.Parse(target.URL)
+	rp := newProxy(tu)
+	if rp.ErrorHandler == nil {
+		t.Error("默认错误处理器未设置")
+	}
+	if rp.FlushInterval != 0 {
+		t.Errorf("默认 FlushInterval 应为 0：%v", rp.FlushInterval)
+	}
+	if rp.Transport != nil {
+		t.Error("默认 Transport 应为 nil")
+	}
+}
+
+func TestWithFlushInterval(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer target.Close()
+	tu, _ := url.Parse(target.URL)
+	rp := newProxy(tu, WithFlushInterval(-1))
+	if rp.FlushInterval != -1 {
+		t.Errorf("FlushInterval 未生效：%v", rp.FlushInterval)
+	}
+}
+
+func TestWithTimeout(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer target.Close()
+	tu, _ := url.Parse(target.URL)
+
+	rp := newProxy(tu, WithTimeout(50*time.Millisecond))
+	if rp.Transport == nil {
+		t.Fatal("WithTimeout 应包装 Transport")
+	}
+	start := time.Now()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "http://webx/", nil)
+	rp.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("超时应输出 502：%d", rec.Code)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("超时未生效：%v", elapsed)
+	}
+
+	// 叠加选项：第二次包装时 base 已存在
+	rp2 := newProxy(tu, WithTimeout(10*time.Millisecond), WithTimeout(20*time.Millisecond))
+	if rp2.Transport == nil {
+		t.Fatal("叠加 WithTimeout 应保留包装")
+	}
+	if _, err := rp2.Transport.RoundTrip(req.WithContext(context.Background())); err == nil {
+		t.Error("超时 RoundTrip 应返回错误")
+	}
+}
+
+func TestWithTimeoutDisabled(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer target.Close()
+	tu, _ := url.Parse(target.URL)
+	rp := newProxy(tu, WithTimeout(0))
+	if rp.Transport != nil {
+		t.Error("超时 <=0 不应包装 Transport")
 	}
 }

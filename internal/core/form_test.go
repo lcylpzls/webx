@@ -125,10 +125,10 @@ func TestBindFormErrors(t *testing.T) {
 	if err := c.BindForm(&m); err == nil {
 		t.Error("非法数值应报错")
 	}
-	if err := bindFormValues(nil, url.Values{}); err == nil {
+	if err := bindValues(nil, url.Values{}, "form"); err == nil {
 		t.Error("nil 目标应报错")
 	}
-	if err := bindFormValues(m, url.Values{}); err == nil {
+	if err := bindValues(m, url.Values{}, "form"); err == nil {
 		t.Error("非指针目标应报错")
 	}
 }
@@ -153,5 +153,79 @@ func TestBindFormMalformedMultipart(t *testing.T) {
 	var m formModel
 	if err := c.BindForm(&m); err == nil {
 		t.Error("损坏的 multipart 应报错")
+	}
+}
+
+type queryModel struct {
+	Keyword string   `query:"keyword"`
+	Page    int      `query:"page"`
+	Limit   uint     `query:"limit"`
+	Ratio   float64  `query:"ratio"`
+	Active  bool     `query:"active"`
+	Tags    []string `query:"tags"`
+	Skip    string   `query:"-"`
+}
+
+func TestBindQuery(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?keyword=webx&page=3&limit=10&ratio=1.5&active=true&tags=a&tags=b&skip=1", nil)
+	c := NewContext(httptest.NewRecorder(), req)
+	var m queryModel
+	if err := c.BindQuery(&m); err != nil {
+		t.Fatalf("BindQuery 失败：%v", err)
+	}
+	if m.Keyword != "webx" || m.Page != 3 || m.Limit != 10 || m.Ratio != 1.5 || !m.Active {
+		t.Errorf("查询绑定不符：%+v", m)
+	}
+	if len(m.Tags) != 2 || m.Tags[1] != "b" || m.Skip != "" {
+		t.Errorf("切片/忽略字段不符：%+v", m)
+	}
+}
+
+type queryModelBad struct {
+	IDs []int `query:"ids"`
+}
+
+type queryModelUnsupported struct {
+	T struct{} `query:"t"`
+}
+
+type queryModelHidden struct {
+	hidden string `query:"hidden"`
+}
+
+func TestBindQueryErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		out  any
+	}{
+		{"int 非法", "page=x", &queryModel{}},
+		{"uint 非法", "limit=x", &queryModel{}},
+		{"float 非法", "ratio=x", &queryModel{}},
+		{"bool 非法", "active=x", &queryModel{}},
+		{"切片非字符串", "ids=1", &queryModelBad{}},
+		{"类型不支持", "t=x", &queryModelUnsupported{}},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodGet, "/?"+tc.raw, nil)
+		c := NewContext(httptest.NewRecorder(), req)
+		if err := c.BindQuery(tc.out); err == nil {
+			t.Errorf("%s：应返回错误", tc.name)
+		}
+	}
+	if err := bindValues(nil, url.Values{}, "query"); err == nil {
+		t.Error("nil 目标应报错")
+	}
+}
+
+func TestBindQueryUnexportedField(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/?hidden=x", nil)
+	c := NewContext(httptest.NewRecorder(), req)
+	var m queryModelHidden
+	if err := c.BindQuery(&m); err != nil {
+		t.Fatalf("BindQuery 失败：%v", err)
+	}
+	if m.hidden != "" {
+		t.Error("未导出字段不应被绑定")
 	}
 }

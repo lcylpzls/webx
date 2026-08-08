@@ -74,7 +74,7 @@
 
 ## 3. 依赖策略
 
-- **直接依赖仅 quic-go**（HTTP/3 必需）；
+- **直接依赖：quic-go（HTTP/3 必需）与 google/uuid（UUID v7 标准实现）**；
 - logx / errx / confx 为自家库；
-- 禁止为小功能引入第三方（如 UUID 自研、CORS 自研、限流自研）；
+- 禁止为小功能引入第三方（CORS 自研、限流自研、路由自研）；
 - confx 内部使用 BurntSushi/toml 解析，webx 不直接感知。

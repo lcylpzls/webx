@@ -2,6 +2,24 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.26.0] - 2026-08-08
+
+### 新增
+
+- Prometheus 指标端点：`EnableMetricsEndpoint(path)` 或配置 `metrics_enabled` /
+  `metrics_path`（默认 `/metrics`），输出文本格式指标（请求数、状态码分布、
+  协议维度、路由/分组级、限流、panic、连接数、活跃请求）；
+  端点绕过业务中间件链，避免自采集反馈；
+- `Context.BindQuery`：查询参数绑定（`query` tag），与 BindJSON/BindForm 对齐；
+- proxy：`WithTimeout`（上游整体超时）与 `WithFlushInterval`（SSE 流式刷新）；
+- `SetRequestIDOptions`：自定义请求 ID 头名与生成函数。
+
+### 变更
+
+- 请求 ID 生成器由自研 UUID v4 升级为 google/uuid 的 UUID v7
+  （`uuid.Must(uuid.NewV7())`，时间有序，适合分布式链路 ID）；
+- 新增第三方直接依赖：`github.com/google/uuid`。
+
 ## [v0.25.0] - 2026-08-08
 
 ### 新增

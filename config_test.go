@@ -102,6 +102,26 @@ func TestConfigValidateExplicitLevelAndCORS(t *testing.T) {
 	}
 }
 
+func TestConfigMetricsPath(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MetricsEnabled = true
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("启用指标端点应校验通过：%v", err)
+	}
+	if cfg.MetricsPath != "/metrics" {
+		t.Errorf("默认指标路径不符：%s", cfg.MetricsPath)
+	}
+	cfg.MetricsPath = "metrics"
+	if err := cfg.Validate(); err == nil {
+		t.Error("指标路径不以 / 开头应报错")
+	}
+	cfg.MetricsPath = "/custom"
+	cfg.MetricsEnabled = false
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("未启用指标端点不应校验失败：%v", err)
+	}
+}
+
 func TestLoadConfigSuccess(t *testing.T) {
 	cert, key := writeTestCert(t)
 	path := filepath.Join(t.TempDir(), "config.toml")

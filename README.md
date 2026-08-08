@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 当前状态：**核心实现完成**。各包语句覆盖率 100%，
-> 当前版本：v0.25.0（v1.0.0 定版评估中）。
+> 当前版本：v0.26.0（v1.0.0 定版评估中）。
 
 ## 技术栈
 
@@ -17,7 +17,10 @@
 | [logx](https://github.com/lcylpzls/logx) | 结构化日志 | 自家库，零第三方依赖 |
 | [errx](https://github.com/lcylpzls/errx) | 结构化错误 | 自家库，统一错误码 |
 | [confx](https://github.com/lcylpzls/confx) | TOML 配置加载 | 自家库 |
-| [quic-go](https://github.com/quic-go/quic-go) | HTTP/3 (QUIC) 传输 | **唯一直接第三方依赖** |
+| [quic-go](https://github.com/quic-go/quic-go) | HTTP/3 (QUIC) 传输 | 第三方直接依赖之一 |
+| [google/uuid](https://github.com/google/uuid) | UUID v7 请求 ID | 标准实现，`uuid.Must` 稳定生成 |
+
+> 第三方直接依赖：`quic-go`（HTTP/3）与 `google/uuid`（UUID v7），其余全部自研。
 
 ## 设计原则
 
@@ -38,6 +41,7 @@
   Gzip / Metrics / AccessLog / Security（顺序可配置）；
 - 📊 标准化响应：`{code, msg, data, requestId, timestamp}`；
 - 🩺 健康检查：`/health`，路径可配置；
+- 📈 Prometheus 指标端点：`/metrics` 文本格式输出（零第三方依赖）；
 - 🪵 日志接入 logx；错误接入 errx；配置接入 confx（TOML）；
 - 🧹 优雅关闭：SIGINT/SIGTERM 信号捕获 + `Stop(ctx)`；
 - 🗂️ 静态文件服务与 SPA 回退（支持 `embed`）。
@@ -70,12 +74,16 @@
 | 多通道监听 | `UseHttp2Listen / UseHttp3Listen / UseUnixSocketListen` |
 | 路由/分组 | `RegisterRoute / RegisterRouteGroup / RouteGroup.GET...` |
 | 中间件管理 | `UseGlobalMiddleware / OverrideMiddleware / Disable/EnableMiddleware` |
+| 请求 ID | `SetRequestIDOptions`（自定义头名与生成器，默认 UUID v7） |
+| 指标端点 | `EnableMetricsEndpoint("/metrics")`（Prometheus 文本格式） |
 | 内置中间件 | Recovery、RequestID、Timeout、CORS、Validation、RateLimit、Gzip、Metrics、AccessLog |
 | 标准化响应 | `c.Success / c.Fail / c.JSONResponse / c.AbortWithStatusJSON` |
+| 参数绑定 | `c.BindJSON / c.BindForm / c.BindQuery` |
 | errx 集成 | `webx.RespondError / StatusForError` |
 | 健康检查 | `RegisterHealthCheck`（/health 聚合输出） |
 | 静态/SPA | `ServeStaticDir / ServeStaticFS / ServeStatic*WithOptions / EnableSPA` |
 | 反向代理 | `webx/proxy.Handler(target, opts...)` |
+| 代理选项 | `WithErrorHandler / WithTimeout / WithFlushInterval` |
 | 指标 | `Server.Metrics()`（状态码分布、协议维度、路由/分组级聚合、活跃请求/连接、限流/Panic） |
 | 路由/分组统计 | `Server.RouteStats()` / `Server.GroupStats()` |
 | 优雅关闭 | `Stop(ctx)` / 信号自动关闭 |

@@ -1,35 +1,48 @@
 package middleware
 
 import (
-	"encoding/binary"
-	"fmt"
-	"math/rand/v2"
-
+	"github.com/google/uuid"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
+// RequestIDOptions 定义请求 ID 中间件的配置参数。
+type RequestIDOptions struct {
+	// Header 请求 ID 头名（默认 X-Request-ID）。
+	Header string
+	// Generator 请求 ID 生成函数（默认 UUID v7）。
+	Generator func() string
+}
+
 // RequestID 返回请求 ID 生成中间件。
-// 优先使用请求头 X-Request-ID，否则生成 UUID v4。
+// 优先使用请求头 X-Request-ID，否则生成 UUID v7。
 func RequestID() core.HandlerFunc {
+	return RequestIDWithOptions(RequestIDOptions{})
+}
+
+// RequestIDWithOptions 返回按选项配置的请求 ID 生成中间件。
+func RequestIDWithOptions(opts RequestIDOptions) core.HandlerFunc {
+	header := opts.Header
+	if header == "" {
+		header = "X-Request-ID"
+	}
+	generator := opts.Generator
+	if generator == nil {
+		generator = newUUIDV7
+	}
 	return func(c *core.Context) {
-		requestID := c.GetHeader("X-Request-ID")
+		requestID := c.GetHeader(header)
 		if requestID == "" {
-			requestID = newUUIDV4()
+			requestID = generator()
 		}
 		c.Set("requestId", requestID)
-		c.Header("X-Request-ID", requestID)
+		c.Header(header, requestID)
 		// 出站透传：转发到上游时保留同一条请求 ID。
-		c.Request().Header.Set("X-Request-ID", requestID)
+		c.Request().Header.Set(header, requestID)
 		c.Next()
 	}
 }
 
-// newUUIDV4 自研 UUID v4 生成器，避免引入第三方 UUID 依赖。
-func newUUIDV4() string {
-	var b [16]byte
-	binary.BigEndian.PutUint64(b[0:8], rand.Uint64())
-	binary.BigEndian.PutUint64(b[8:16], rand.Uint64())
-	b[6] = (b[6] & 0x0f) | 0x40 // 版本 4
-	b[8] = (b[8] & 0x3f) | 0x80 // 变体 RFC 4122
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+// newUUIDV7 生成 UUID v7（时间有序，适合分布式链路 ID）。
+func newUUIDV7() string {
+	return uuid.Must(uuid.NewV7()).String()
 }
