@@ -2,6 +2,24 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [Unreleased]
+
+### 破坏性变更（v0.2.0）
+
+- `NewServer(cfg, logger)`：logger 改为由调用方注入 `logx.Logger`，
+  webx 内部不再创建日志器，只负责使用；`logger` 为 nil 时 `Start()` 返回错误。
+
+### 修复
+
+- HEAD 请求正确命中 GET 路由（HTTP 语义），不再误报 405；
+- 405 判定改为"最具体模式优先"，与 ServeMux 的选择一致，避免纯文本 405 混入；
+- Timeout 中间件的 Writer 支持 `Unwrap()`，`http.ResponseController` 的
+  Flush/Hijack 在 SSE、WebSocket 场景可用。
+
+### 工程
+
+- 新增基准测试：路由匹配、中间件链、JSON 响应。
+
 ## [v0.1.0] - 2026-08-08
 
 ### 规划

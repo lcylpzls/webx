@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -80,6 +81,15 @@ func TestTimeoutDisabled(t *testing.T) {
 	c.Run()
 	if !called || rec.Code != http.StatusOK {
 		t.Errorf("timeout<=0 应直接放行：%v %d", called, rec.Code)
+	}
+}
+
+func TestTimeoutWriterUnwrap(t *testing.T) {
+	rec := httptest.NewRecorder()
+	tw := &timeoutWriter{ResponseWriter: rec, ctx: context.Background()}
+	rc := http.NewResponseController(tw)
+	if err := rc.Flush(); err != nil {
+		t.Errorf("经 Unwrap 的 Flush 应可用：%v", err)
 	}
 }
 

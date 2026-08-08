@@ -1,10 +1,8 @@
 package webx
 
 import (
-	"context"
 	"net/http"
 
-	"github.com/lcylpzls/logx"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
@@ -30,7 +28,7 @@ func (s *Server) ServeStaticFS(prefix string, filesys http.FileSystem) *Server {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.started {
-		s.logger.WithContext(context.Background()).Warn("webx：服务已启动，不允许修改配置", logx.Fields())
+		s.logWarn("webx：服务已启动，不允许修改配置")
 		return s
 	}
 	s.staticEntries = append(s.staticEntries, staticEntry{prefix: prefix, fs: filesys})
@@ -42,7 +40,7 @@ func (s *Server) EnableSPA(filesys http.FileSystem, indexPath string) *Server {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.started {
-		s.logger.WithContext(context.Background()).Warn("webx：服务已启动，不允许修改配置", logx.Fields())
+		s.logWarn("webx：服务已启动，不允许修改配置")
 		return s
 	}
 	s.spa = &spaConfig{fs: filesys, indexPath: indexPath}

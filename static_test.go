@@ -118,7 +118,7 @@ func TestSPANoRouteRequestPathIsDir(t *testing.T) {
 func TestServeStaticDirAndFS(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(dir, "f.txt"), []byte("f"), 0o600)
-	s := NewServer(validConfig(t))
+	s := newTestServer(t, validConfig(t))
 	if got := s.ServeStaticDir("/d", dir); got != s {
 		t.Error("ServeStaticDir 应返回自身")
 	}

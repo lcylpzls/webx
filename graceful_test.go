@@ -10,12 +10,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/lcylpzls/logx"
 )
 
 func TestGracefulShutdownSignal(t *testing.T) {
-	logger := DefaultLogger(logx.InfoLevel)
+	logger := newTestLogger(t)
 	defer logger.Close()
 	quit := make(chan os.Signal, 1)
 	quit <- os.Interrupt
@@ -26,7 +24,7 @@ func TestGracefulShutdownSignal(t *testing.T) {
 }
 
 func TestGracefulShutdownContextCanceled(t *testing.T) {
-	logger := DefaultLogger(logx.InfoLevel)
+	logger := newTestLogger(t)
 	defer logger.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -37,7 +35,7 @@ func TestGracefulShutdownContextCanceled(t *testing.T) {
 }
 
 func TestGracefulShutdownPublic(t *testing.T) {
-	logger := DefaultLogger(logx.InfoLevel)
+	logger := newTestLogger(t)
 	defer logger.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -57,7 +55,7 @@ func TestGracefulShutdownPublic(t *testing.T) {
 }
 
 func TestShutdownServersErrors(t *testing.T) {
-	logger := DefaultLogger(logx.InfoLevel)
+	logger := newTestLogger(t)
 	defer logger.Close()
 
 	// 构造：nil Server、活跃连接阻塞的 Server、nil Listener、Close 失败的 Listener、
@@ -108,7 +106,7 @@ func (l *errCloseListener) Close() error {
 }
 
 func TestShutdownServersClean(t *testing.T) {
-	logger := DefaultLogger(logx.InfoLevel)
+	logger := newTestLogger(t)
 	defer logger.Close()
 	path := filepath.Join(t.TempDir(), "s.sock")
 	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {

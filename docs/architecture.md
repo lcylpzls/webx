@@ -134,8 +134,8 @@ srv := webx.NewServer(cfg)
 
 ### 3.6 日志与错误
 
-- 日志：内部默认使用 logx（控制台输出，级别可配置），也接受调用方注入
-  `logx.Logger`（`WithLogger`）；
+- 日志：`logx.Logger` 由调用方在 `NewServer(cfg, logger)` 时注入，
+  webx 内部只使用、不创建日志器；
 - 错误：所有失败路径返回 `errx` 结构化错误，错误码启动期注册
   （`WEBX_*`），见 [api-design.md](api-design.md) 的错误码表。
 

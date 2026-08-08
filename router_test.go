@@ -106,11 +106,53 @@ func TestRouterMethodNotAllowed(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("405 状态不符：%d", rec.Code)
 	}
-	if rec.Header().Get("Allow") != "GET, POST" {
+	if rec.Header().Get("Allow") != "GET, HEAD, POST" {
 		t.Errorf("Allow 头不符：%s", rec.Header().Get("Allow"))
 	}
 	if !strings.Contains(rec.Body.String(), "不支持的请求方法") {
 		t.Errorf("405 响应体不符：%s", rec.Body.String())
+	}
+}
+
+func TestRouterHeadOnGetRoute(t *testing.T) {
+	rt := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
+	if err := rt.Handle("GET", "/api/x", []core.HandlerFunc{
+		func(c *core.Context) { _ = c.String(http.StatusOK, "ok") },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodHead, "/api/x", nil))
+	if rec.Code != http.StatusOK {
+		t.Errorf("HEAD 应命中 GET 路由：%d", rec.Code)
+	}
+}
+
+func TestRouterSpecificityMethodDecision(t *testing.T) {
+	rt := NewRouter(core.NoRouteHandler, core.NoMethodHandler)
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "other.txt"), []byte("static"), 0o600)
+	if err := rt.HandleStatic("", http.Dir(dir)); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.Handle("POST", "/api/{id}", []core.HandlerFunc{noopCore}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 最具体模式（POST 参数路由）不允许 GET → 405，而非落到静态根
+	rec := httptest.NewRecorder()
+	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/42", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("最具体模式方法判定不符：%d", rec.Code)
+	}
+	if rec.Header().Get("Allow") != "POST" {
+		t.Errorf("Allow 头不符：%s", rec.Header().Get("Allow"))
+	}
+	// 未命中任何具体路由 → 静态根服务
+	rec = httptest.NewRecorder()
+	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/other.txt", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "static") {
+		t.Errorf("静态根服务不符：%d %s", rec.Code, rec.Body.String())
 	}
 }
 

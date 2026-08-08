@@ -143,8 +143,9 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rt.runFallback(w, r, rt.noRoute)
 		return
 	}
-	if !rt.methodAllowed(matches, r.Method) {
-		w.Header().Set("Allow", allowHeader(matches))
+	best := mostSpecific(matches)
+	if !methodAllowedAny(best, r.Method) {
+		w.Header().Set("Allow", allowHeader(best))
 		rt.runFallback(w, r, rt.noMethod)
 		return
 	}
@@ -174,14 +175,53 @@ func (rt *Router) match(path string) []*routePattern {
 	return out
 }
 
-// methodAllowed 判断请求方法是否被任一匹配模式允许。
-func (rt *Router) methodAllowed(matches []*routePattern, method string) bool {
-	for _, p := range matches {
+// methodAllowedAny 判断方法是否被同优先级模式组中的任一模式允许；
+// GET 路由同时响应 HEAD。
+func methodAllowedAny(patterns []*routePattern, method string) bool {
+	for _, p := range patterns {
 		if p.methods[method] {
+			return true
+		}
+		if method == http.MethodHead && p.methods[http.MethodGet] {
 			return true
 		}
 	}
 	return false
+}
+
+// mostSpecific 返回最具体的匹配模式组，与 ServeMux 的选择保持一致：
+// 字面段 > 参数段 > 通配/子树，段数越多越具体。
+// 同路径不同方法注册会得到相同分数，作为一组参与方法判定。
+func mostSpecific(matches []*routePattern) []*routePattern {
+	bestScore := patternScore(matches[0])
+	best := []*routePattern{matches[0]}
+	for _, p := range matches[1:] {
+		score := patternScore(p)
+		switch {
+		case score > bestScore:
+			bestScore = score
+			best = []*routePattern{p}
+		case score == bestScore:
+			best = append(best, p)
+		}
+	}
+	return best
+}
+
+// patternScore 计算模式优先级分数（越大越具体）。
+func patternScore(p *routePattern) int {
+	score := 0
+	for _, s := range p.segments {
+		switch {
+		case s.wildcard:
+			score += 1
+		case s.param != "":
+			score += 2
+		default:
+			score += 4
+		}
+	}
+	return score
 }
 
 // allowHeader 汇总匹配模式的全部方法，生成 Allow 响应头。
@@ -191,6 +231,10 @@ func allowHeader(matches []*routePattern) string {
 		for m := range p.methods {
 			set[m] = true
 		}
+	}
+	// HTTP 语义：GET 路由同时响应 HEAD，Allow 一并列出。
+	if set[http.MethodGet] {
+		set[http.MethodHead] = true
 	}
 	methods := make([]string, 0, len(set))
 	for m := range set {

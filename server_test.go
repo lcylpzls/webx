@@ -21,6 +21,23 @@ import (
 	"github.com/quic-go/quic-go/http3"
 )
 
+// newTestLogger 返回写入 io.Discard 的测试日志器。
+func newTestLogger(t *testing.T) logx.Logger {
+	t.Helper()
+	l, err := logx.NewBuilder().EnableWriter(io.Discard, logx.InfoLevel).Build()
+	if err != nil {
+		t.Fatalf("构建测试日志器失败：%v", err)
+	}
+	t.Cleanup(func() { _ = l.Close() })
+	return l
+}
+
+// newTestServer 创建注入测试日志器的 Server。
+func newTestServer(t *testing.T, cfg Config) *Server {
+	t.Helper()
+	return NewServer(cfg, newTestLogger(t))
+}
+
 func validConfig(t *testing.T) Config {
 	t.Helper()
 	cert, key := writeTestCert(t)
@@ -63,11 +80,11 @@ func testHTTPClient() *http.Client {
 }
 
 func TestServerChainAPI(t *testing.T) {
-	s := NewServer(validConfig(t))
+	s := newTestServer(t, validConfig(t))
 	if s == nil {
 		t.Fatal("NewServer 返回 nil")
 	}
-	if got := s.WithLogger(DefaultLogger(logx.InfoLevel)); got != s {
+	if got := s.WithLogger(newTestLogger(t)); got != s {
 		t.Error("链式方法应返回自身")
 	}
 	if got := s.UseGlobalMiddleware(noopHandler); got != s {
@@ -123,14 +140,27 @@ func TestServerChainAPI(t *testing.T) {
 	}
 }
 
+func TestWarnStartedWithNilLogger(t *testing.T) {
+	s := &Server{started: true}
+	if got := s.RegisterRoute(Route{Method: "GET", Path: "/x", Handler: noopHandler}); got != s {
+		t.Error("RegisterRoute 应返回自身")
+	}
+}
+
 func TestServerStartErrors(t *testing.T) {
+	// logger 为 nil
+	s := NewServer(validConfig(t), nil)
+	s.UseHttp2Listen("127.0.0.1:0")
+	if err := s.Start(); err == nil {
+		t.Error("nil logger 应报错")
+	}
 	// 无监听方式
-	s := NewServer(validConfig(t))
+	s = newTestServer(t, validConfig(t))
 	if err := s.Start(); !errx.Is(err, CodeStartFailed) {
 		t.Errorf("无监听方式错误不符：%v", err)
 	}
 	// 配置校验失败
-	s = NewServer(Config{})
+	s = newTestServer(t, Config{})
 	s.UseHttp2Listen(":0")
 	if err := s.Start(); err == nil {
 		t.Error("非法配置应报错")
@@ -139,40 +169,40 @@ func TestServerStartErrors(t *testing.T) {
 	orig := checkUnixSocket
 	checkUnixSocket = func() error { return errors.New("平台不支持") }
 	defer func() { checkUnixSocket = orig }()
-	s = NewServer(validConfig(t))
+	s = newTestServer(t, validConfig(t))
 	s.UseUnixSocketListen("x.sock", 0o600)
 	if err := s.Start(); err == nil {
 		t.Error("平台检查失败应报错")
 	}
 	// HTTP/2 监听失败
-	s = NewServer(validConfig(t))
+	s = newTestServer(t, validConfig(t))
 	s.UseHttp2Listen("bad-addr")
 	if err := s.Start(); err == nil {
 		t.Error("非法 HTTP/2 地址应报错")
 	}
 	// 启动失败时回收限流清理 goroutine
-	s = NewServer(validConfig(t))
+	s = newTestServer(t, validConfig(t))
 	s.EnableRateLimit(RateLimitOptions{QPS: 10, Window: time.Second})
 	s.UseHttp2Listen("bad-addr")
 	if err := s.Start(); err == nil {
 		t.Error("限流场景下非法地址应启动失败")
 	}
 	// 路由注册失败（非法参数名）
-	s = NewServer(validConfig(t))
+	s = newTestServer(t, validConfig(t))
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.RegisterRoute(Route{Method: "GET", Path: "/x/:", Handler: noopHandler})
 	if err := s.Start(); err == nil {
 		t.Error("非法路由应报错")
 	}
 	// 路由组注册失败
-	s = NewServer(validConfig(t))
+	s = newTestServer(t, validConfig(t))
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.RegisterRouteGroup("/g", func(rg *RouteGroup) { rg.GET("/x/:", noopHandler) })
 	if err := s.Start(); err == nil {
 		t.Error("非法分组路由应报错")
 	}
 	// 静态路由注册失败（非法前缀）
-	s = NewServer(validConfig(t))
+	s = newTestServer(t, validConfig(t))
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.ServeStaticFS("/a/{p...}/b", http.Dir(t.TempDir()))
 	if err := s.Start(); err == nil {
@@ -181,7 +211,7 @@ func TestServerStartErrors(t *testing.T) {
 	// 健康检查注册失败（非法路径）
 	cfg := validConfig(t)
 	cfg.HealthPath = "/x/:"
-	s = NewServer(cfg)
+	s = newTestServer(t, cfg)
 	s.UseHttp2Listen("127.0.0.1:0")
 	if err := s.Start(); err == nil {
 		t.Error("非法健康检查路径应报错")
@@ -202,7 +232,7 @@ func TestServerIntegration(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello-webx"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewServer(cfg)
+	s := newTestServer(t, cfg)
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.RegisterRoute(Route{
 		Method: "GET",
@@ -273,7 +303,7 @@ func TestServerIntegration(t *testing.T) {
 	}
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusMethodNotAllowed || resp.Header.Get("Allow") != "GET" {
+	if resp.StatusCode != http.StatusMethodNotAllowed || resp.Header.Get("Allow") != "GET, HEAD" {
 		t.Errorf("405 不符：%d %s", resp.StatusCode, resp.Header.Get("Allow"))
 	}
 
@@ -328,7 +358,7 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareRecovery = true
 	cfg.MiddlewareRequestID = true
-	s := NewServer(cfg)
+	s := newTestServer(t, cfg)
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.EnableRateLimit(RateLimitOptions{QPS: 1, Window: time.Second, CleanupInterval: time.Millisecond})
 	s.RegisterRoute(Route{
@@ -376,7 +406,7 @@ func TestServerHTTP3(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareRequestID = true
 	h3Addr := freeUDPAddr(t)
-	s := NewServer(cfg)
+	s := newTestServer(t, cfg)
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.UseHttp3Listen(h3Addr)
 	s.RegisterRoute(Route{Method: "GET", Path: "/ping", Handler: func(c *core.Context) { c.Success("h3", nil) }})
@@ -409,7 +439,7 @@ func TestServerUnixSocket(t *testing.T) {
 		t.Skipf("当前平台不支持 Unix Socket：%v", err)
 	}
 	path := filepath.Join(t.TempDir(), "webx.sock")
-	s := NewServer(validConfig(t))
+	s := newTestServer(t, validConfig(t))
 	s.UseUnixSocketListen(path, 0o600)
 	s.RegisterRoute(Route{Method: "GET", Path: "/ping", Handler: func(c *core.Context) { c.Success("unix", nil) }})
 	startServer(t, s)
@@ -445,14 +475,14 @@ func TestServerUnixSocket(t *testing.T) {
 }
 
 func TestServerStartRollback(t *testing.T) {
-	s := NewServer(validConfig(t))
+	s := newTestServer(t, validConfig(t))
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.UseHttp3Listen("bad-addr")
 	if err := s.Start(); err == nil {
 		t.Error("非法 QUIC 地址应启动失败")
 	}
 	// HTTP/2 + HTTP/3 成功、Unix 失败 → 回滚关闭全部监听器
-	s = NewServer(validConfig(t))
+	s = newTestServer(t, validConfig(t))
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.UseHttp3Listen(freeUDPAddr(t))
 	dir := t.TempDir()
@@ -465,7 +495,7 @@ func TestServerStartRollback(t *testing.T) {
 }
 
 func TestServerHealthUserRegistered(t *testing.T) {
-	s := NewServer(validConfig(t))
+	s := newTestServer(t, validConfig(t))
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.RegisterRoute(Route{
 		Method: "GET",
@@ -490,7 +520,7 @@ func TestServerHealthUserRegistered(t *testing.T) {
 	_ = s.Stop(ctx)
 
 	// 通过路由分组注册 /health 同样跳过自动注册
-	s2 := NewServer(validConfig(t))
+	s2 := newTestServer(t, validConfig(t))
 	s2.UseHttp2Listen("127.0.0.1:0")
 	s2.RegisterRouteGroup("", func(rg *RouteGroup) {
 		rg.GET("/health", func(c *core.Context) { _ = c.String(http.StatusOK, "group-health") })
@@ -511,7 +541,7 @@ func TestServerHealthUserRegistered(t *testing.T) {
 }
 
 func TestServerShutdownErrorWrapped(t *testing.T) {
-	logger := DefaultLogger(logx.InfoLevel)
+	logger := newTestLogger(t)
 	defer logger.Close()
 	nonEmptyDir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(nonEmptyDir, "x"), []byte("x"), 0o600)
@@ -528,7 +558,7 @@ func TestServerShutdownErrorWrapped(t *testing.T) {
 }
 
 func TestServerUnixServeErrorLogged(t *testing.T) {
-	s := NewServer(validConfig(t))
+	s := newTestServer(t, validConfig(t))
 	s.UseUnixSocketListen(filepath.Join(t.TempDir(), "x.sock"), 0o600)
 	errCh := make(chan error, 1)
 	go func() { errCh <- s.Start() }()
@@ -556,7 +586,7 @@ func TestServerUnixServeErrorLogged(t *testing.T) {
 }
 
 func TestRegisterBuiltinMiddlewareDefaults(t *testing.T) {
-	s := NewServer(Config{})
+	s := newTestServer(t, Config{})
 	s.registerBuiltinMiddleware()
 	chain := s.mwManager.Build(context.Background())
 	if len(chain) != 0 {
@@ -569,7 +599,7 @@ func TestServerStaticAndSPA(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, "app.js"), []byte("console.log(1)"), 0o600)
 	_ = os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>spa</html>"), 0o600)
 
-	s := NewServer(validConfig(t))
+	s := newTestServer(t, validConfig(t))
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.ServeStaticDir("/static", dir)
 	s.EnableSPA(http.Dir(dir), "index.html")
@@ -603,7 +633,7 @@ func TestServerStaticAndSPA(t *testing.T) {
 }
 
 func TestServerWaitSignal(t *testing.T) {
-	logger := DefaultLogger(logx.InfoLevel)
+	logger := newTestLogger(t)
 	defer logger.Close()
 	s := &Server{logger: logger, config: Config{ShutdownTimeout: time.Second}}
 	s.signalCtx, s.signalCancel = context.WithCancel(context.Background())

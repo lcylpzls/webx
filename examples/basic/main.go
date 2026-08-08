@@ -2,16 +2,22 @@
 package main
 
 import (
+	"github.com/lcylpzls/logx"
 	"github.com/lcylpzls/webx"
 )
 
 func main() {
+	logger, err := logx.NewBuilder().EnableConsole(logx.InfoLevel).Build()
+	if err != nil {
+		panic(err)
+	}
+	defer logger.Close()
 	// 配置通过 confx 从 TOML 加载（见同目录 config.toml）。
 	cfg, err := webx.LoadConfig("config.toml")
 	if err != nil {
 		panic(err)
 	}
-	if err := webx.NewServer(cfg).
+	if err := webx.NewServer(cfg, logger).
 		UseHttp2Listen(":8443").
 		RegisterRoute(webx.Route{
 			Method: "GET",

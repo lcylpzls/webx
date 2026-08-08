@@ -67,10 +67,12 @@ type Server struct {
 var checkUnixSocket = unixSocketSupported
 
 // NewServer 创建 webx Server 实例。
-func NewServer(cfg Config) *Server {
+// logger 由调用方注入（logx.Logger），webx 内部只使用、不创建日志器；
+// logger 为 nil 时 Start() 会返回错误。
+func NewServer(cfg Config, logger logx.Logger) *Server {
 	return &Server{
 		config:    cfg,
-		logger:    DefaultLogger(parseLogLevel(cfg.LogLevel)),
+		logger:    logger,
 		mwManager: middleware.NewManager(),
 	}
 }
@@ -292,6 +294,10 @@ func (s *Server) Start() error {
 	}
 	s.started = true
 	s.mu.Unlock()
+
+	if s.logger == nil {
+		return errx.New(errx.KindInvalid, CodeStartFailed, "logger 不能为 nil，请在 NewServer 时注入 logx.Logger")
+	}
 
 	// 启动失败时回收限流清理 goroutine，避免泄漏。
 	startedOK := false
@@ -607,7 +613,14 @@ func (s *Server) cancelCleanup() {
 
 // warnStarted 记录启动后修改配置的警告。
 func (s *Server) warnStarted(action string) {
-	s.logger.WithContext(context.Background()).Warn("webx：服务已启动，不允许"+action, logx.Fields())
+	s.logWarn("webx：服务已启动，不允许" + action)
+}
+
+// logWarn 输出警告日志；logger 未注入时静默跳过。
+func (s *Server) logWarn(msg string) {
+	if s.logger != nil {
+		s.logger.WithContext(context.Background()).Warn(msg, logx.Fields())
+	}
 }
 
 // serveHTTP3 在 QUIC Listener 上运行 HTTP/3 服务。

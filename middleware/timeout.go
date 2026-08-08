@@ -17,6 +17,12 @@ type timeoutWriter struct {
 	wroteHeader bool
 }
 
+// Unwrap 返回底层 Writer，供 http.ResponseController 透传 Flush/Hijack 等能力
+// （SSE、WebSocket 等场景依赖该接口）。
+func (w *timeoutWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 // WriteHeader 写入状态码；Context 已超时则丢弃。
 func (w *timeoutWriter) WriteHeader(code int) {
 	select {

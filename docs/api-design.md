@@ -78,7 +78,7 @@ func (c *Context) IsAborted() bool
 ### 2.2 Server 链式 API（与 ginx 对齐）
 
 ```go
-func NewServer(cfg Config) *Server
+func NewServer(cfg Config, logger logx.Logger) *Server
 func (s *Server) WithLogger(l logx.Logger) *Server
 func (s *Server) UseHttp2Listen(addr string) *Server
 func (s *Server) UseHttp3Listen(addr string) *Server
