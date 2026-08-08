@@ -32,6 +32,7 @@ func NewManager() *Manager {
 			"timeout",
 			"cors",
 			"validation",
+			"security",
 			"gzip",
 			"rate_limit",
 			"metrics",

@@ -25,6 +25,8 @@ const (
 	MiddlewareGzip MiddlewareType = "gzip"
 	// MiddlewareMetrics 请求/5xx 计数中间件。
 	MiddlewareMetrics MiddlewareType = "metrics"
+	// MiddlewareSecurity 安全响应头中间件。
+	MiddlewareSecurity MiddlewareType = "security"
 	// MiddlewareAccessLog 访问日志中间件。
 	MiddlewareAccessLog MiddlewareType = "access_log"
 )

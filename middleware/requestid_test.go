@@ -32,12 +32,16 @@ func TestRequestIDFromHeader(t *testing.T) {
 
 func TestRequestIDGenerated(t *testing.T) {
 	rec := httptest.NewRecorder()
-	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
 		RequestID(),
 		func(c *core.Context) {
 			if !uuidPattern.MatchString(c.RequestID()) {
 				t.Errorf("生成的 UUID v4 格式不符：%s", c.RequestID())
+			}
+			if got := req.Header.Get("X-Request-ID"); got != c.RequestID() {
+				t.Errorf("出站请求头未透传：%s", got)
 			}
 		},
 	})

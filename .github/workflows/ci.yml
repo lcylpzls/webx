@@ -61,6 +61,16 @@ jobs:
         if: runner.os == 'Linux'
         run: go tool cover -func coverage.out
 
+      - name: Coverage gate (100%)
+        if: runner.os == 'Linux'
+        run: |
+          total=$(go tool cover -func=coverage.out | tail -n 1 | awk '{print $NF}')
+          echo "语句覆盖率：$total"
+          if [ "$total" != "100.0%" ]; then
+            echo "覆盖率未达 100%，禁止合入"
+            exit 1
+          fi
+
       - name: Upload coverage artifact
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7

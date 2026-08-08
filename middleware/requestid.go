@@ -18,6 +18,8 @@ func RequestID() core.HandlerFunc {
 		}
 		c.Set("requestId", requestID)
 		c.Header("X-Request-ID", requestID)
+		// 出站透传：转发到上游时保留同一条请求 ID。
+		c.Request().Header.Set("X-Request-ID", requestID)
 		c.Next()
 	}
 }

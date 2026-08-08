@@ -17,22 +17,35 @@ var gzipPool = sync.Pool{
 	},
 }
 
+// GzipOptions 定义响应压缩中间件的选项。
+type GzipOptions struct {
+	// MinSize 未显式写状态码时，小于该字节数的响应不压缩（0=默认 1024）。
+	MinSize int
+}
+
 // Gzip 返回响应压缩中间件：客户端 Accept-Encoding 含 gzip 时启用。
 func Gzip() core.HandlerFunc {
+	return GzipWithOptions(GzipOptions{})
+}
+
+// GzipWithOptions 返回带选项的响应压缩中间件。
+func GzipWithOptions(opts GzipOptions) core.HandlerFunc {
+	minSize := opts.MinSize
+	if minSize <= 0 {
+		minSize = 1024
+	}
 	return func(c *core.Context) {
 		if !acceptsGzip(c.GetHeader("Accept-Encoding")) {
 			c.Next()
 			return
 		}
 		orig := c.Writer()
-		c.Header("Content-Encoding", "gzip")
-		c.Header("Vary", "Accept-Encoding")
 		gz := gzipPool.Get().(*gzip.Writer)
-		gz.Reset(orig)
-		c.SetWriter(&gzipWriter{ResponseWriter: orig, gz: gz})
+		gw := &gzipWriter{ResponseWriter: orig, gz: gz, minSize: minSize}
+		c.SetWriter(gw)
 
 		c.Next()
-		_ = gz.Close()
+		_ = gw.Close()
 		gzipPool.Put(gz)
 		c.SetWriter(orig)
 	}
@@ -53,24 +66,114 @@ type gzipWriter struct {
 	http.ResponseWriter
 	gz        *gzip.Writer
 	wroteHead bool
+	started   bool
+	decided   bool
+	compress  bool
+	minSize   int
+	buf       []byte
 }
 
 // WriteHeader 记录状态码并透传。
 func (w *gzipWriter) WriteHeader(code int) {
 	if !w.wroteHead {
 		w.wroteHead = true
+		if !w.compressible() {
+			w.Header().Del("Content-Encoding")
+			w.ResponseWriter.WriteHeader(code)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Vary", "Accept-Encoding")
+		w.gz.Reset(w.ResponseWriter)
+		w.started = true
 		w.ResponseWriter.WriteHeader(code)
 	}
 }
 
 // Write 写入压缩数据。
 func (w *gzipWriter) Write(p []byte) (int, error) {
+	if !w.compressible() {
+		return w.ResponseWriter.Write(p)
+	}
+	if !w.started {
+		w.buf = append(w.buf, p...)
+		if len(w.buf) >= w.minSize {
+			w.startGzip(200)
+			if w.started {
+				return len(p), nil
+			}
+		}
+		return len(p), nil
+	}
 	return w.gz.Write(p)
+}
+
+// Close 结束压缩；小响应（未达 MinSize 且未显式写状态码）按明文输出。
+func (w *gzipWriter) Close() error {
+	if w.started {
+		return w.gz.Close()
+	}
+	if len(w.buf) > 0 {
+		w.Header().Del("Content-Encoding")
+		_, err := w.ResponseWriter.Write(w.buf)
+		w.buf = nil
+		return err
+	}
+	return nil
+}
+
+// compressible 判断响应内容类型是否值得压缩。
+func (w *gzipWriter) compressible() bool {
+	if w.decided {
+		return w.compress
+	}
+	w.decided = true
+	ct := w.Header().Get("Content-Type")
+	if ct == "" {
+		w.compress = true
+		return true
+	}
+	if i := strings.IndexByte(ct, ';'); i >= 0 {
+		ct = ct[:i]
+	}
+	switch {
+	case strings.HasPrefix(ct, "text/"),
+		ct == "application/json",
+		strings.HasPrefix(ct, "application/javascript"),
+		strings.HasPrefix(ct, "application/xml"),
+		ct == "application/xhtml+xml",
+		ct == "image/svg+xml":
+		w.compress = true
+	default:
+		w.compress = false
+	}
+	return w.compress
+}
+
+// startGzip 在首次隐式写入时启动压缩流。
+func (w *gzipWriter) startGzip(code int) {
+	if !w.wroteHead {
+		w.wroteHead = true
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Vary", "Accept-Encoding")
+		w.gz.Reset(w.ResponseWriter)
+		w.started = true
+		w.ResponseWriter.WriteHeader(code)
+		if len(w.buf) > 0 {
+			_, _ = w.gz.Write(w.buf)
+			w.buf = nil
+		}
+	}
 }
 
 // Flush 刷新压缩流。
 func (w *gzipWriter) Flush() {
-	_ = w.gz.Flush()
+	if !w.started && len(w.buf) > 0 {
+		w.startGzip(200)
+	}
+	if w.started {
+		_ = w.gz.Flush()
+	}
 }
 
 // Unwrap 返回底层 Writer。

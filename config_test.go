@@ -64,6 +64,8 @@ func TestConfigValidateErrors(t *testing.T) {
 		{"请求头负数", Config{TLSCertFile: cert, TLSKeyFile: key, MaxHeaderBytes: -1}, "最大请求头字节数不能为负数"},
 		{"请求体负数", Config{TLSCertFile: cert, TLSKeyFile: key, MaxBodyBytes: -1}, "最大请求体字节数不能为负数"},
 		{"采样率负数", Config{TLSCertFile: cert, TLSKeyFile: key, AccessLogSampleRate: -1}, "访问日志采样率不能为负数"},
+		{"gzip 最小负数", Config{TLSCertFile: cert, TLSKeyFile: key, GzipMinSize: -1}, "gzip 最小字节数不能为负数"},
+		{"HSTS 负数", Config{TLSCertFile: cert, TLSKeyFile: key, SecurityHSTSMaxAge: -1}, "HSTS 缓存秒数不能为负数"},
 		{"日志级别非法", Config{TLSCertFile: cert, TLSKeyFile: key, LogLevel: "verbose"}, "日志级别无效"},
 	}
 	for _, tc := range cases {
@@ -122,6 +124,10 @@ min_tls_version = 771
 quic_max_idle_timeout = "45s"
 quic_max_incoming_streams = 200
 quic_drain_timeout = "5s"
+middleware_security = true
+security_hsts_max_age = 3600
+security_referrer_policy = "no-referrer"
+gzip_min_size = 2048
 `
 	if err := os.WriteFile(path, []byte(toml), 0o600); err != nil {
 		t.Fatal(err)
@@ -150,6 +156,10 @@ quic_drain_timeout = "5s"
 	}
 	if cfg.QUICDrainTimeout != 5*time.Second {
 		t.Errorf("QUIC 排空加载不符：%+v", cfg)
+	}
+	if !cfg.MiddlewareSecurity || cfg.SecurityHSTSMaxAge != 3600 ||
+		cfg.SecurityReferrerPolicy != "no-referrer" || cfg.GzipMinSize != 2048 {
+		t.Errorf("安全/gzip 配置加载不符：%+v", cfg)
 	}
 }
 

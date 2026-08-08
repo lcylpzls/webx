@@ -82,6 +82,14 @@ type Config struct {
 	MiddlewareGzip bool `toml:"middleware_gzip"`
 	// MiddlewareMetrics 是否启用请求/5xx 计数中间件。
 	MiddlewareMetrics bool `toml:"middleware_metrics"`
+	// MiddlewareSecurity 是否启用安全响应头中间件。
+	MiddlewareSecurity bool `toml:"middleware_security"`
+	// SecurityHSTSMaxAge HSTS 缓存秒数（0=不启用 HSTS）。
+	SecurityHSTSMaxAge int `toml:"security_hsts_max_age"`
+	// SecurityReferrerPolicy Referrer-Policy 取值（空=不设置）。
+	SecurityReferrerPolicy string `toml:"security_referrer_policy"`
+	// GzipMinSize 响应压缩最小字节数（0=默认 1024）。
+	GzipMinSize int `toml:"gzip_min_size"`
 }
 
 // isRegularFile 检查给定路径是否存在且为普通文件（非目录）。
@@ -151,6 +159,12 @@ func (c *Config) Validate() error {
 	}
 	if c.AccessLogSampleRate < 0 {
 		return errx.New(errx.KindInvalid, CodeConfigInvalid, "访问日志采样率不能为负数")
+	}
+	if c.GzipMinSize < 0 {
+		return errx.New(errx.KindInvalid, CodeConfigInvalid, "gzip 最小字节数不能为负数")
+	}
+	if c.SecurityHSTSMaxAge < 0 {
+		return errx.New(errx.KindInvalid, CodeConfigInvalid, "HSTS 缓存秒数不能为负数")
 	}
 	if c.MaxBodyBytes == 0 {
 		c.MaxBodyBytes = 10 * 1024 * 1024

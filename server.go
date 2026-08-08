@@ -676,7 +676,18 @@ func (s *Server) registerBuiltinMiddleware() {
 	if !s.config.MiddlewareValidation {
 		s.mwManager.Disable("validation")
 	}
-	s.mwManager.RegisterBuiltin("gzip", middleware.Gzip())
+	s.mwManager.RegisterBuiltin("security", middleware.SecurityHeaders(middleware.SecurityHeadersOptions{
+		ContentTypeNoSniff: true,
+		FrameDeny:          true,
+		ReferrerPolicy:     s.config.SecurityReferrerPolicy,
+		HSTSMaxAge:         time.Duration(s.config.SecurityHSTSMaxAge) * time.Second,
+	}))
+	if !s.config.MiddlewareSecurity {
+		s.mwManager.Disable("security")
+	}
+	s.mwManager.RegisterBuiltin("gzip", middleware.GzipWithOptions(middleware.GzipOptions{
+		MinSize: s.config.GzipMinSize,
+	}))
 	if !s.config.MiddlewareGzip {
 		s.mwManager.Disable("gzip")
 	}
