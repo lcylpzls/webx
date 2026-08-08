@@ -123,6 +123,18 @@ func TestConfigMetricsPath(t *testing.T) {
 	}
 }
 
+func TestConfigSlowRequestThreshold(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.SlowRequestThreshold = -time.Second
+	if err := cfg.Validate(); err == nil {
+		t.Error("负的慢请求阈值应报错")
+	}
+	cfg.SlowRequestThreshold = time.Second
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("合法慢请求阈值不应报错：%v", err)
+	}
+}
+
 func TestLoadConfigSuccess(t *testing.T) {
 	cert, key := writeTestCert(t)
 	path := filepath.Join(t.TempDir(), "config.toml")

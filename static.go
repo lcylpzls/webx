@@ -22,6 +22,8 @@ type StaticOptions struct {
 	MaxAge time.Duration
 	// DisableIndex 禁用目录索引：无 index.html 的目录返回 404。
 	DisableIndex bool
+	// EnableETag 按文件 mtime 与大小生成弱 ETag，支持 If-None-Match 返回 304。
+	EnableETag bool
 }
 
 // spaConfig 缓存 SPA 回退配置。
@@ -107,7 +109,7 @@ func spaNoRoute(filesys http.FileSystem, indexPath string) core.HandlerFunc {
 // staticOptionsFileServer 包装 http.FileServer，应用缓存头与目录索引选项。
 func staticOptionsFileServer(fs http.FileSystem, opts StaticOptions) http.Handler {
 	next := http.FileServer(fs)
-	if opts.MaxAge <= 0 && !opts.DisableIndex {
+	if opts.MaxAge <= 0 && !opts.DisableIndex && !opts.EnableETag {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -129,6 +131,22 @@ func staticOptionsFileServer(fs http.FileSystem, opts StaticOptions) http.Handle
 				}
 			}
 		}
+		if opts.EnableETag {
+			if f, err := fs.Open(r.URL.Path); err == nil {
+				if info, statErr := f.Stat(); statErr == nil && !info.IsDir() {
+					defer f.Close()
+					w.Header().Set("Etag", weakETag(info.ModTime(), info.Size()))
+					http.ServeContent(w, r, path.Base(r.URL.Path), info.ModTime(), f)
+					return
+				}
+				f.Close()
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// weakETag 按文件 mtime 与大小生成弱 ETag。
+func weakETag(modTime time.Time, size int64) string {
+	return fmt.Sprintf("W/\"%x-%x\"", modTime.Unix(), size)
 }

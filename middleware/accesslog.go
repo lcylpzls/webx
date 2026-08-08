@@ -18,6 +18,8 @@ type AccessLogOptions struct {
 	SampleRate int
 	// RedactKeys query 参数中需要脱敏的键。
 	RedactKeys []string
+	// SlowThreshold 慢请求阈值；>0 且请求耗时达到阈值时额外记录 Warn（默认关闭）。
+	SlowThreshold time.Duration
 }
 
 // countingWriter 统计响应体字节数。
@@ -51,6 +53,16 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 		c.Next()
 		c.SetWriter(orig)
 		status := c.StatusCode()
+		elapsed := time.Since(start)
+		if opts.SlowThreshold > 0 && elapsed >= opts.SlowThreshold {
+			logger.Warn("慢请求", logx.Fields(
+				logx.String("method", c.Request().Method),
+				logx.String("path", c.Request().URL.Path),
+				logx.Int("status", status),
+				logx.String("requestId", c.RequestID()),
+				logx.String("duration", elapsed.String()),
+			))
+		}
 		if status >= 200 && status < 300 && !opts.LogSuccess {
 			return
 		}
@@ -68,8 +80,8 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 			logx.String("proto", friendlyProto(c.Request().Proto)),
 			logx.String("query", query),
 			logx.String("user_agent", c.GetHeader("User-Agent")),
-			logx.Any("duration", time.Since(start).String()),
-			logx.Int64("duration_ms", time.Since(start).Milliseconds()),
+			logx.Any("duration", elapsed.String()),
+			logx.Int64("duration_ms", elapsed.Milliseconds()),
 			logx.Int64("bytes", cw.n),
 		)
 		if status >= 400 {

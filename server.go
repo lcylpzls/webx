@@ -74,6 +74,7 @@ type Server struct {
 	mwOrder        []MiddlewareType
 	requestIDOpts  RequestIDOptions
 	metricsPath    string
+	maxConcurrent  int
 }
 
 // SNICertificate 是按 ServerName（SNI）指定的证书。
@@ -341,6 +342,19 @@ func (s *Server) EnableMetricsEndpoint(path string) *Server {
 		return s
 	}
 	s.metricsPath = path
+	return s
+}
+
+// SetMaxConcurrentRequests 设置同时处理的请求数上限（启动前调用）。
+// n <= 0 表示不限制；超限请求返回 503 并携带 Retry-After。
+func (s *Server) SetMaxConcurrentRequests(n int) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.warnStarted("设置并发上限")
+		return s
+	}
+	s.maxConcurrent = n
 	return s
 }
 
@@ -760,6 +774,10 @@ func (s *Server) registerBuiltinMiddleware() {
 	if s.config.MaxBodyBytes <= 0 {
 		s.mwManager.Disable("body_limit")
 	}
+	s.mwManager.RegisterBuiltin("concurrency_limit", middleware.ConcurrencyLimit(middleware.NewConcurrencyLimiter(s.maxConcurrent)))
+	if s.maxConcurrent <= 0 {
+		s.mwManager.Disable("concurrency_limit")
+	}
 	s.mwManager.RegisterBuiltin("timeout", middleware.Timeout(s.config.RequestTimeout))
 	if !s.config.MiddlewareTimeout {
 		s.mwManager.Disable("timeout")
@@ -810,9 +828,10 @@ func (s *Server) registerBuiltinMiddleware() {
 		s.mwManager.Disable("metrics")
 	}
 	s.mwManager.RegisterBuiltin("access_log", middleware.AccessLog(s.logger, middleware.AccessLogOptions{
-		LogSuccess: s.config.LogSuccessReq,
-		SampleRate: s.config.AccessLogSampleRate,
-		RedactKeys: s.config.AccessLogRedact,
+		LogSuccess:    s.config.LogSuccessReq,
+		SampleRate:    s.config.AccessLogSampleRate,
+		RedactKeys:    s.config.AccessLogRedact,
+		SlowThreshold: s.config.SlowRequestThreshold,
 	}))
 	if !s.config.AccessLogEnabled {
 		s.mwManager.Disable("access_log")

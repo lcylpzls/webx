@@ -2,6 +2,22 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.28.0] - 2026-08-08
+
+### 新增
+
+- 并发限制：`SetMaxConcurrentRequests(n)`，同一时刻请求数超限返回 503 +
+  `Retry-After`（防雪崩，panic 时额度自动释放）；
+- 慢请求日志：`slow_request_threshold` 配置，请求耗时达到阈值时额外记录 Warn
+  （默认关闭，不受成功日志开关与采样率影响）；
+- Context 便捷方法：`Redirect`、`Cookie`、`SetCookie`、`File`
+  （单文件输出支持 304 与 Range）；
+- 静态服务可选弱 ETag：`StaticOptions.EnableETag`，`If-None-Match` 命中返回 304。
+
+### 变更
+
+- 内置中间件默认顺序新增 `concurrency_limit`（位于 body_limit 之后）。
+
 ## [v0.27.0] - 2026-08-08
 
 ### 新增

@@ -5,8 +5,11 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -193,6 +196,26 @@ func (c *Context) Header(key, value string) {
 	c.writer.Header().Set(key, value)
 }
 
+// Redirect 返回重定向响应；非 3xx 状态码统一转为 302。
+func (c *Context) Redirect(status int, location string) {
+	if status < 300 || status > 399 {
+		status = http.StatusFound
+	}
+	c.Header("Location", location)
+	c.writeHeader(status)
+	_, _ = fmt.Fprintf(c.writer, "<a href=\"%s\">%s</a>", html.EscapeString(location), http.StatusText(status))
+}
+
+// Cookie 返回请求中指定名称的 Cookie。
+func (c *Context) Cookie(name string) (*http.Cookie, error) {
+	return c.request.Cookie(name)
+}
+
+// SetCookie 向响应写入 Cookie。
+func (c *Context) SetCookie(cookie *http.Cookie) {
+	http.SetCookie(c.writer, cookie)
+}
+
 // JSON 以 JSON 格式写入响应。
 func (c *Context) JSON(code int, data any) error {
 	c.Header("Content-Type", "application/json; charset=utf-8")
@@ -216,6 +239,45 @@ func (c *Context) BindJSON(out any) error {
 	}
 	decoder := json.NewDecoder(body)
 	return decoder.Decode(out)
+}
+
+// openFile 打开待服务文件（测试可替换以覆盖异常分支）。
+var openFile = os.Open
+
+// statFile 查询文件信息（测试可替换以覆盖异常分支）。
+var statFile = os.Stat
+
+// statusRecorder 记录首个写入的 HTTP 状态码。
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+// WriteHeader 记录状态码并透传。
+func (w *statusRecorder) WriteHeader(code int) {
+	if w.status == 0 {
+		w.status = code
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// File 输出单个文件（支持 304 与 Range）。
+func (c *Context) File(path string) {
+	f, err := openFile(path)
+	if err != nil {
+		c.writeHeader(http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	info, err := statFile(path)
+	if err != nil {
+		c.writeHeader(http.StatusInternalServerError)
+		return
+	}
+	rec := &statusRecorder{ResponseWriter: c.writer}
+	http.ServeContent(rec, c.request, filepath.Base(path), info.ModTime(), f)
+	c.status = rec.status
+	c.wrote = true
 }
 
 // SetHandlers 设置待执行的处理器链（中间件 + 最终处理器）。

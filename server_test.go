@@ -134,6 +134,9 @@ func TestServerChainAPI(t *testing.T) {
 	if got := s.EnableMetricsEndpoint("/metrics"); got != s {
 		t.Error("EnableMetricsEndpoint 应返回自身")
 	}
+	if got := s.SetMaxConcurrentRequests(10); got != s {
+		t.Error("SetMaxConcurrentRequests 应返回自身")
+	}
 	if got := s.DisableRateLimit(); got != s {
 		t.Error("DisableRateLimit 应返回自身")
 	}
@@ -1136,6 +1139,13 @@ func TestSetRequestIDOptionsStartedGuard(t *testing.T) {
 	}
 }
 
+func TestSetMaxConcurrentRequestsStartedGuard(t *testing.T) {
+	s := &Server{started: true}
+	if got := s.SetMaxConcurrentRequests(1); got != s {
+		t.Error("SetMaxConcurrentRequests 应返回自身")
+	}
+}
+
 func TestServerRequestIDOptions(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareRequestID = true
@@ -1159,6 +1169,70 @@ func TestServerRequestIDOptions(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || resp.Header.Get("X-Trace-ID") != "trace-abc" {
 		t.Errorf("自定义请求 ID 未生效：%d %v", resp.StatusCode, resp.Header)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
+func TestServerMaxConcurrentRequests(t *testing.T) {
+	cfg := validConfig(t)
+	s := newTestServer(t, cfg)
+	s.SetMaxConcurrentRequests(1)
+	s.UseHttp2Listen("127.0.0.1:0")
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var enteredOnce sync.Once
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/slow",
+		Handler: func(c *core.Context) {
+			enteredOnce.Do(func() { close(entered) })
+			<-release
+			c.Success("ok", nil)
+		},
+	})
+	startServer(t, s)
+	client := testHTTPClient()
+	base := "https://" + s.ListenerAddr()
+
+	slowDone := make(chan struct{})
+	go func() {
+		defer close(slowDone)
+		resp, err := client.Get(base + "/slow")
+		if err != nil {
+			t.Errorf("慢请求失败：%v", err)
+			return
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+	<-entered
+
+	resp, err := client.Get(base + "/slow")
+	if err != nil {
+		t.Fatalf("超限请求失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("超限应 503：%d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Retry-After"); got != "1" {
+		t.Errorf("应携带 Retry-After：%s", got)
+	}
+	close(release)
+	<-slowDone
+
+	resp, err = client.Get(base + "/slow")
+	if err != nil {
+		t.Fatalf("恢复后请求失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("恢复后应放行：%d", resp.StatusCode)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

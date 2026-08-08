@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -140,5 +141,67 @@ func TestServeStaticDirAndFS(t *testing.T) {
 	}
 	if s.staticEntries[2].opts.MaxAge != 60*time.Second || !s.staticEntries[2].opts.DisableIndex {
 		t.Errorf("选项未保存：%+v", s.staticEntries[2].opts)
+	}
+}
+
+func TestServeStaticETag(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "f.txt"), []byte("内容"), 0o600)
+	h := staticOptionsFileServer(http.Dir(dir), StaticOptions{EnableETag: true})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/f.txt", nil)
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "内容" {
+		t.Fatalf("文件响应不符：%d %s", rec.Code, rec.Body.String())
+	}
+	etag := rec.Header().Get("Etag")
+	if !strings.HasPrefix(etag, `W/"`) {
+		t.Fatalf("ETag 头缺失：%s", etag)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/f.txt", nil)
+	req.Header.Set("If-None-Match", etag)
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotModified {
+		t.Errorf("If-None-Match 命中应 304：%d", rec.Code)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("304 不应携带响应体：%s", rec.Body.String())
+	}
+
+	// 缺失文件 → 回退 FileServer 404
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/missing.txt", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("缺失文件应 404：%d", rec.Code)
+	}
+
+	// 目录请求 → 回退 FileServer，不生成 ETag
+	_ = os.WriteFile(filepath.Join(dir, "index.html"), []byte("index"), 0o600)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK || rec.Header().Get("Etag") != "" {
+		t.Errorf("目录响应不符：%d etag=%s", rec.Code, rec.Header().Get("Etag"))
+	}
+
+	// Stat 失败 → 回退 FileServer
+	rec = httptest.NewRecorder()
+	staticOptionsFileServer(errStatFS{}, StaticOptions{EnableETag: true}).
+		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("Stat 失败回退 FileServer 应 500：%d", rec.Code)
+	}
+}
+
+func TestWeakETag(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	got := weakETag(now, 1024)
+	if !strings.HasPrefix(got, `W/"`) || !strings.HasSuffix(got, `-400"`) {
+		t.Errorf("弱 ETag 不符：%s", got)
+	}
+	if got == weakETag(now.Add(time.Second), 1024) {
+		t.Error("mtime 不同应生成不同 ETag")
 	}
 }

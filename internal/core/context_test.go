@@ -3,8 +3,11 @@ package core
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -127,6 +130,111 @@ func TestContextStatusAndHeader(t *testing.T) {
 	c.Header("X-Test", "yes")
 	if rec.Header().Get("X-Test") != "yes" {
 		t.Error("Header 设置不符")
+	}
+}
+
+func TestContextRedirect(t *testing.T) {
+	rec := httptest.NewRecorder()
+	c := NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.Redirect(http.StatusFound, "/next")
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/next" {
+		t.Errorf("重定向不符：%d %v", rec.Code, rec.Header())
+	}
+	if !strings.Contains(rec.Body.String(), "/next") {
+		t.Error("重定向响应体应包含目标地址")
+	}
+	if got := c.StatusCode(); got != http.StatusFound {
+		t.Errorf("StatusCode 未记录：%d", got)
+	}
+
+	rec = httptest.NewRecorder()
+	c = NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.Redirect(http.StatusOK, "/coerced") // 非 3xx 强制转 302
+	if rec.Code != http.StatusFound {
+		t.Errorf("非 3xx 状态码应转为 302：%d", rec.Code)
+	}
+}
+
+func TestContextCookie(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "sid", Value: "abc"})
+	rec := httptest.NewRecorder()
+	c := NewContext(rec, req)
+	cookie, err := c.Cookie("sid")
+	if err != nil || cookie.Value != "abc" {
+		t.Errorf("Cookie 读取不符：%v %v", cookie, err)
+	}
+	if _, err := c.Cookie("missing"); err == nil {
+		t.Error("缺失 Cookie 应报错")
+	}
+	c.SetCookie(&http.Cookie{Name: "k", Value: "v"})
+	if got := rec.Result().Cookies(); len(got) != 1 || got[0].Name != "k" || got[0].Value != "v" {
+		t.Errorf("SetCookie 不符：%+v", got)
+	}
+}
+
+func TestContextFile(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(filePath, []byte("文件内容"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/a.txt", nil)
+	c := NewContext(rec, req)
+	c.File(filePath)
+	if rec.Code != http.StatusOK || rec.Body.String() != "文件内容" {
+		t.Errorf("文件响应不符：%d %s", rec.Code, rec.Body.String())
+	}
+	if got := c.StatusCode(); got != http.StatusOK {
+		t.Errorf("StatusCode 未记录：%d", got)
+	}
+
+	// 304：If-Modified-Since 命中
+	info, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/a.txt", nil)
+	req.Header.Set("If-Modified-Since", info.ModTime().UTC().Format(http.TimeFormat))
+	c = NewContext(rec, req)
+	c.File(filePath)
+	if rec.Code != http.StatusNotModified {
+		t.Errorf("命中条件请求应 304：%d", rec.Code)
+	}
+
+	// 文件不存在 → 404
+	rec = httptest.NewRecorder()
+	c = NewContext(rec, httptest.NewRequest(http.MethodGet, "/missing", nil))
+	c.File(filepath.Join(dir, "missing.txt"))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("缺失文件应 404：%d", rec.Code)
+	}
+
+	// stat 失败 → 500
+	origStat := statFile
+	statFile = func(string) (os.FileInfo, error) { return nil, errors.New("stat 失败") }
+	rec = httptest.NewRecorder()
+	c = NewContext(rec, httptest.NewRequest(http.MethodGet, "/a.txt", nil))
+	c.File(filePath)
+	statFile = origStat
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("stat 失败应 500：%d", rec.Code)
+	}
+}
+
+func TestStatusRecorder(t *testing.T) {
+	rec := httptest.NewRecorder()
+	sw := &statusRecorder{ResponseWriter: rec}
+	sw.WriteHeader(http.StatusCreated)
+	sw.WriteHeader(http.StatusInternalServerError)
+	if sw.status != http.StatusCreated {
+		t.Errorf("状态码应记录首次写入：%d", sw.status)
+	}
+	if rec.Code != http.StatusCreated {
+		t.Errorf("透传状态码不符：%d", rec.Code)
 	}
 }
 

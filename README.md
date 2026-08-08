@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 当前状态：**核心实现完成**。各包语句覆盖率 100%，
-> 当前版本：v0.27.0（v1.0.0 定版评估中）。
+> 当前版本：v0.28.0（v1.0.0 定版评估中）。
 
 ## 技术栈
 
@@ -41,6 +41,9 @@
   Gzip / Metrics / AccessLog / Security / BodyLimit（顺序可配置）；
 - 📤 文件上传：`FormFile` / `SaveUploadedFile`（沿用请求体大小限制）；
 - 📏 全局请求体限制：`max_body_bytes` 超限直接 413；
+- 🛡️ 并发限制：`SetMaxConcurrentRequests` 超限返回 503 + Retry-After（防雪崩）；
+- 🐢 慢请求日志：`slow_request_threshold` 超阈值自动 Warn；
+- ⚡ 静态资源 ETag：可选弱 ETag，`If-None-Match` 命中返回 304；
 - 📊 标准化响应：`{code, msg, data, requestId, timestamp}`；
 - 🩺 健康检查：`/health`，路径可配置；
 - 📈 Prometheus 指标端点：`/metrics` 文本格式输出（零第三方依赖）；
@@ -78,13 +81,15 @@
 | 中间件管理 | `UseGlobalMiddleware / OverrideMiddleware / Disable/EnableMiddleware` |
 | 请求 ID | `SetRequestIDOptions`（自定义头名与生成器，默认 UUID v7） |
 | 指标端点 | `EnableMetricsEndpoint("/metrics")`（Prometheus 文本格式） |
+| 并发限制 | `SetMaxConcurrentRequests(n)`（超限 503 + Retry-After） |
 | 内置中间件 | Recovery、RequestID、BodyLimit、Timeout、CORS、Validation、RateLimit、Gzip、Metrics、AccessLog、Security |
 | 标准化响应 | `c.Success / c.Fail / c.JSONResponse / c.AbortWithStatusJSON` |
 | 参数绑定 | `c.BindJSON / c.BindForm / c.BindQuery` |
 | 文件上传 | `c.FormFile(name)` / `c.SaveUploadedFile(fh, dest)` |
+| Web 便捷方法 | `c.Redirect / c.Cookie / c.SetCookie / c.File` |
 | errx 集成 | `webx.RespondError / StatusForError` |
 | 健康检查 | `RegisterHealthCheck`（/health 聚合输出） |
-| 静态/SPA | `ServeStaticDir / ServeStaticFS / ServeStatic*WithOptions / EnableSPA` |
+| 静态/SPA | `ServeStaticDir / ServeStaticFS / ServeStatic*WithOptions（MaxAge/DisableIndex/EnableETag）/ EnableSPA` |
 | 反向代理 | `webx/proxy.Handler(target, opts...)` |
 | 代理选项 | `WithErrorHandler / WithTimeout / WithFlushInterval` |
 | 指标 | `Server.Metrics()`（状态码分布、协议维度、路由/分组级聚合、活跃请求/连接、限流/Panic） |

@@ -39,6 +39,7 @@ access_log_enabled = true
 log_success_req = false        # true=记录成功请求
 access_log_sample_rate = 0     # 0=全部记录，N>0 平均每 N 条记 1 条
 access_log_redact = ["token", "password"] # query 脱敏键
+slow_request_threshold = "0s"  # >0 时对慢请求额外记录 Warn（如 "1s"）
 
 # --- CORS（留空则使用默认值） ---
 cors_allowed_origins = ["*"]

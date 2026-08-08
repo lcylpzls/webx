@@ -30,6 +30,7 @@ func NewManager() *Manager {
 			"recovery",
 			"request_id",
 			"body_limit",
+			"concurrency_limit",
 			"timeout",
 			"cors",
 			"validation",

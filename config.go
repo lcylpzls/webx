@@ -63,6 +63,8 @@ type Config struct {
 	AccessLogSampleRate int `toml:"access_log_sample_rate"`
 	// AccessLogRedact 访问日志 query 参数中需要脱敏的键。
 	AccessLogRedact []string `toml:"access_log_redact"`
+	// SlowRequestThreshold 慢请求日志阈值（0=关闭）。
+	SlowRequestThreshold time.Duration `toml:"slow_request_threshold"`
 
 	// CORSAllowedOrigins CORS 允许的来源列表，为空使用默认值。
 	CORSAllowedOrigins []string `toml:"cors_allowed_origins"`
@@ -178,6 +180,9 @@ func (c *Config) Validate() error {
 	}
 	if c.AccessLogSampleRate < 0 {
 		return errx.New(errx.KindInvalid, CodeConfigInvalid, "访问日志采样率不能为负数")
+	}
+	if c.SlowRequestThreshold < 0 {
+		return errx.New(errx.KindInvalid, CodeConfigInvalid, "慢请求阈值不能为负数")
 	}
 	if c.GzipMinSize < 0 {
 		return errx.New(errx.KindInvalid, CodeConfigInvalid, "gzip 最小字节数不能为负数")
