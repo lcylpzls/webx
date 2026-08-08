@@ -145,6 +145,12 @@ func TestServerChainAPI(t *testing.T) {
 	if m := s.Metrics(); m.Requests != 0 || m.Errors5xx != 0 {
 		t.Errorf("未启动时 Metrics 应为 0：%+v", m)
 	}
+	if got := s.RouteStats(); got != nil {
+		t.Errorf("未启动时 RouteStats 应为 nil：%+v", got)
+	}
+	if got := s.GroupStats(); got != nil {
+		t.Errorf("未启动时 GroupStats 应为 nil：%+v", got)
+	}
 }
 
 func TestWarnStartedWithNilLogger(t *testing.T) {
@@ -515,7 +521,7 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 		t.Errorf("panic 应计入 5xx 指标：%+v", m)
 	}
 	var boomOK, okOK bool
-	for _, rs := range m.Routes {
+	for _, rs := range s.RouteStats() {
 		switch rs.Path {
 		case "/boom":
 			boomOK = rs.Requests == 1 && rs.Errors5xx == 1
@@ -525,10 +531,10 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 		}
 	}
 	if !boomOK || !okOK {
-		t.Errorf("路由级统计不符：%+v", m.Routes)
+		t.Errorf("路由级统计不符：%+v", s.RouteStats())
 	}
-	if len(m.Groups) != 0 {
-		t.Errorf("直接注册路由不应有分组统计：%+v", m.Groups)
+	if len(s.GroupStats()) != 0 {
+		t.Errorf("直接注册路由不应有分组统计：%+v", s.GroupStats())
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -565,12 +571,12 @@ func TestServerRouteGroupStats(t *testing.T) {
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}
-	m := s.Metrics()
-	if len(m.Routes) != 3 {
-		t.Fatalf("路由统计数量不符：%+v", m.Routes)
+	routes := s.RouteStats()
+	if len(routes) != 3 {
+		t.Fatalf("路由统计数量不符：%+v", routes)
 	}
 	var users, admin, ping bool
-	for _, rs := range m.Routes {
+	for _, rs := range routes {
 		switch rs.Path {
 		case "/api/users/:id":
 			users = rs.Requests == 2 && rs.Errors5xx == 0
@@ -581,11 +587,12 @@ func TestServerRouteGroupStats(t *testing.T) {
 		}
 	}
 	if !users || !admin || !ping {
-		t.Errorf("路由级统计不符：%+v", m.Routes)
+		t.Errorf("路由级统计不符：%+v", routes)
 	}
-	if len(m.Groups) != 1 || m.Groups[0].Prefix != "/api" ||
-		m.Groups[0].Requests != 3 || m.Groups[0].Errors5xx != 1 {
-		t.Errorf("分组级统计不符：%+v", m.Groups)
+	groups := s.GroupStats()
+	if len(groups) != 1 || groups[0].Prefix != "/api" ||
+		groups[0].Requests != 3 || groups[0].Errors5xx != 1 {
+		t.Errorf("分组级统计不符：%+v", groups)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

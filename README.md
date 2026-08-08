@@ -77,6 +77,7 @@
 | 静态/SPA | `ServeStaticDir / ServeStaticFS / ServeStatic*WithOptions / EnableSPA` |
 | 反向代理 | `webx/proxy.Handler(target, opts...)` |
 | 指标 | `Server.Metrics()`（状态码分布、协议维度、路由/分组级聚合、活跃请求/连接、限流/Panic） |
+| 路由/分组统计 | `Server.RouteStats()` / `Server.GroupStats()` |
 | 优雅关闭 | `Stop(ctx)` / 信号自动关闭 |
 | 证书热重载 | `SetCertificateLoader`（默认按文件 mtime 自动重载） |
 

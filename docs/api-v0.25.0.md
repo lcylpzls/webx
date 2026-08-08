@@ -222,10 +222,6 @@ type Metrics struct {
 	AvgHTTP2RequestDurationMs uint64
 	// AvgHTTP3RequestDurationMs HTTP/3 平均请求耗时（毫秒，需启用 MiddlewareMetrics）。
 	AvgHTTP3RequestDurationMs uint64
-	// Routes 路由级统计（按注册路径聚合，需启用 MiddlewareMetrics）。
-	Routes []RouteStat
-	// Groups 分组级统计（按分组前缀聚合，需启用 MiddlewareMetrics）。
-	Groups []GroupStat
 	// ActiveConnections 当前打开的连接数。
 	ActiveConnections int64
 	// RequestsInFlight 当前活跃请求数（需启用 MiddlewareMetrics）。
@@ -388,6 +384,9 @@ func (s *Server) EnableRateLimit(opts RateLimitOptions) *Server
 func (s *Server) EnableSPA(filesys http.FileSystem, indexPath string) *Server
     EnableSPA 启用 SPA 回退：未匹配路由的 GET/HEAD 请求先尝试文件，再回退 index。
 
+func (s *Server) GroupStats() []GroupStat
+    GroupStats 返回分组级统计快照（按分组前缀排序；需启用 MiddlewareMetrics）。
+
 func (s *Server) ListenerAddr() string
     ListenerAddr 返回第一个 Listener 的监听地址（port 0 动态端口时可用）。
 
@@ -411,6 +410,9 @@ func (s *Server) RegisterRouteGroup(prefix string, fn func(*RouteGroup)) *Server
 
 func (s *Server) RegisterRoutes(routes []Route) *Server
     RegisterRoutes 批量注册路由。
+
+func (s *Server) RouteStats() []RouteStat
+    RouteStats 返回路由级统计快照（按注册路径排序；需启用 MiddlewareMetrics）。
 
 func (s *Server) ServeStaticDir(prefix, root string) *Server
     ServeStaticDir 从本地目录提供静态文件。

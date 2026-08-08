@@ -6,8 +6,8 @@
 
 ### 新增
 
-- Metrics 增加路由级统计：`Routes`（按注册路径聚合请求数、5xx 数与平均耗时）；
-- Metrics 增加分组级统计：`Groups`（按分组前缀聚合，直接注册的路由不计入分组）；
+- 新增 `Server.RouteStats()`：按注册路径聚合请求数、5xx 数与平均耗时；
+- 新增 `Server.GroupStats()`：按分组前缀聚合（直接注册的路由不计入分组）；
 - Metrics panic 安全采样：处理器 panic 时仍完整记录请求数、耗时与 5xx 分布，
   随后重新抛出交由 Recovery 中间件处理；
 - AccessLog 协议字段可读化：`HTTP/2.0` → `HTTP/2`、`HTTP/3.0` → `HTTP/3`。

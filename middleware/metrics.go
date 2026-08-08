@@ -32,13 +32,19 @@ type Metrics struct {
 	http1Samples atomic.Uint64
 	http2Samples atomic.Uint64
 	http3Samples atomic.Uint64
-	routes       sync.Map
-	groups       sync.Map
+	stats        *routeGroupStore
+}
+
+// routeGroupStore 持有路由级与分组级的计数器集合。
+// 独立为指针结构，保持 Metrics 可比较（不直接引入 map 字段）。
+type routeGroupStore struct {
+	routes sync.Map
+	groups sync.Map
 }
 
 // NewMetrics 创建指标计数器。
 func NewMetrics() *Metrics {
-	return &Metrics{}
+	return &Metrics{stats: &routeGroupStore{}}
 }
 
 // ProtocolStats 协议维度请求统计快照。
@@ -185,8 +191,11 @@ func (m *Metrics) ProtocolStats() ProtocolStats {
 
 // RouteStats 返回路由级统计快照（按注册路径排序）。
 func (m *Metrics) RouteStats() []RouteStat {
+	if m.stats == nil {
+		return nil
+	}
 	var out []RouteStat
-	m.routes.Range(func(key, value any) bool {
+	m.stats.routes.Range(func(key, value any) bool {
 		s := value.(*routeStat)
 		out = append(out, RouteStat{
 			Path:          key.(string),
@@ -202,8 +211,11 @@ func (m *Metrics) RouteStats() []RouteStat {
 
 // GroupStats 返回分组级统计快照（按分组前缀排序）。
 func (m *Metrics) GroupStats() []GroupStat {
+	if m.stats == nil {
+		return nil
+	}
 	var out []GroupStat
-	m.groups.Range(func(key, value any) bool {
+	m.stats.groups.Range(func(key, value any) bool {
 		s := value.(*routeStat)
 		out = append(out, GroupStat{
 			Prefix:        key.(string),
@@ -219,6 +231,9 @@ func (m *Metrics) GroupStats() []GroupStat {
 
 // recordRoute 更新当前请求的路由级与分组级统计。
 func (m *Metrics) recordRoute(c *core.Context, status int, elapsed uint64) {
+	if m.stats == nil {
+		return
+	}
 	if route := c.Route(); route != "" {
 		s := m.routeStat(route)
 		s.requests.Add(1)
@@ -241,21 +256,21 @@ func (m *Metrics) recordRoute(c *core.Context, status int, elapsed uint64) {
 
 // routeStat 返回指定路由的计数器，不存在时创建。
 func (m *Metrics) routeStat(route string) *routeStat {
-	if v, ok := m.routes.Load(route); ok {
+	if v, ok := m.stats.routes.Load(route); ok {
 		return v.(*routeStat)
 	}
 	s := &routeStat{}
-	v, _ := m.routes.LoadOrStore(route, s)
+	v, _ := m.stats.routes.LoadOrStore(route, s)
 	return v.(*routeStat)
 }
 
 // groupStat 返回指定分组的计数器，不存在时创建。
 func (m *Metrics) groupStat(group string) *routeStat {
-	if v, ok := m.groups.Load(group); ok {
+	if v, ok := m.stats.groups.Load(group); ok {
 		return v.(*routeStat)
 	}
 	s := &routeStat{}
-	v, _ := m.groups.LoadOrStore(group, s)
+	v, _ := m.stats.groups.LoadOrStore(group, s)
 	return v.(*routeStat)
 }
 

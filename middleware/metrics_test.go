@@ -220,8 +220,8 @@ func TestMetricsRouteAndGroupStats(t *testing.T) {
 	}
 
 	// 零样本条目平均耗时为 0
-	m.routes.Store("/zero", &routeStat{})
-	m.groups.Store("/zero", &routeStat{})
+	m.stats.routes.Store("/zero", &routeStat{})
+	m.stats.groups.Store("/zero", &routeStat{})
 	rs = m.RouteStats()
 	gs = m.GroupStats()
 	var routeZero, groupZero bool
@@ -246,5 +246,26 @@ func TestMetricsRouteAndGroupStats(t *testing.T) {
 	}
 	if got := fresh.GroupStats(); len(got) != 0 {
 		t.Errorf("空分组快照应为空：%+v", got)
+	}
+}
+
+func TestMetricsZeroValueSafe(t *testing.T) {
+	var m Metrics
+	if got := m.RouteStats(); got != nil {
+		t.Errorf("零值 RouteStats 应为 nil：%+v", got)
+	}
+	if got := m.GroupStats(); got != nil {
+		t.Errorf("零值 GroupStats 应为 nil：%+v", got)
+	}
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+	c.SetRoute("/x")
+	c.SetHandlers([]core.HandlerFunc{
+		MetricsHandler(&m),
+		func(c *core.Context) { c.Success("ok", nil) },
+	})
+	c.Run()
+	if got := m.RouteStats(); got != nil {
+		t.Errorf("零值 Metrics 不应产生路由统计：%+v", got)
 	}
 }

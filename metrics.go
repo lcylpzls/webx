@@ -39,10 +39,6 @@ type Metrics struct {
 	AvgHTTP2RequestDurationMs uint64
 	// AvgHTTP3RequestDurationMs HTTP/3 平均请求耗时（毫秒，需启用 MiddlewareMetrics）。
 	AvgHTTP3RequestDurationMs uint64
-	// Routes 路由级统计（按注册路径聚合，需启用 MiddlewareMetrics）。
-	Routes []RouteStat
-	// Groups 分组级统计（按分组前缀聚合，需启用 MiddlewareMetrics）。
-	Groups []GroupStat
 	// ActiveConnections 当前打开的连接数。
 	ActiveConnections int64
 	// RequestsInFlight 当前活跃请求数（需启用 MiddlewareMetrics）。
@@ -91,26 +87,6 @@ func (s *Server) Metrics() Metrics {
 		m.AvgHTTP1RequestDurationMs = ps.HTTP1AvgMs
 		m.AvgHTTP2RequestDurationMs = ps.HTTP2AvgMs
 		m.AvgHTTP3RequestDurationMs = ps.HTTP3AvgMs
-		routeStats := s.metrics.RouteStats()
-		m.Routes = make([]RouteStat, len(routeStats))
-		for i, st := range routeStats {
-			m.Routes[i] = RouteStat{
-				Path:                 st.Path,
-				Requests:             st.Requests,
-				Errors5xx:            st.Errors5xx,
-				AvgRequestDurationMs: st.AvgDurationMs,
-			}
-		}
-		groupStats := s.metrics.GroupStats()
-		m.Groups = make([]GroupStat, len(groupStats))
-		for i, st := range groupStats {
-			m.Groups[i] = GroupStat{
-				Prefix:               st.Prefix,
-				Requests:             st.Requests,
-				Errors5xx:            st.Errors5xx,
-				AvgRequestDurationMs: st.AvgDurationMs,
-			}
-		}
 		m.RequestsInFlight = s.metrics.InFlight()
 	}
 	if s.rateLimiter != nil {
@@ -118,6 +94,42 @@ func (s *Server) Metrics() Metrics {
 	}
 	m.ActiveConnections = s.activeConns.Load()
 	return m
+}
+
+// RouteStats 返回路由级统计快照（按注册路径排序；需启用 MiddlewareMetrics）。
+func (s *Server) RouteStats() []RouteStat {
+	if s.metrics == nil {
+		return nil
+	}
+	stats := s.metrics.RouteStats()
+	out := make([]RouteStat, len(stats))
+	for i, st := range stats {
+		out[i] = RouteStat{
+			Path:                 st.Path,
+			Requests:             st.Requests,
+			Errors5xx:            st.Errors5xx,
+			AvgRequestDurationMs: st.AvgDurationMs,
+		}
+	}
+	return out
+}
+
+// GroupStats 返回分组级统计快照（按分组前缀排序；需启用 MiddlewareMetrics）。
+func (s *Server) GroupStats() []GroupStat {
+	if s.metrics == nil {
+		return nil
+	}
+	stats := s.metrics.GroupStats()
+	out := make([]GroupStat, len(stats))
+	for i, st := range stats {
+		out[i] = GroupStat{
+			Prefix:               st.Prefix,
+			Requests:             st.Requests,
+			Errors5xx:            st.Errors5xx,
+			AvgRequestDurationMs: st.AvgDurationMs,
+		}
+	}
+	return out
 }
 
 // connState 统计当前打开的连接数。
