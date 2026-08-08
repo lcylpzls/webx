@@ -90,6 +90,8 @@ type Config struct {
 	SecurityReferrerPolicy string `toml:"security_referrer_policy"`
 	// GzipMinSize 响应压缩最小字节数（0=默认 1024）。
 	GzipMinSize int `toml:"gzip_min_size"`
+	// Debug 调试模式：Recovery 响应携带 panic 摘要（生产环境保持 false）。
+	Debug bool `toml:"debug"`
 }
 
 // isRegularFile 检查给定路径是否存在且为普通文件（非目录）。

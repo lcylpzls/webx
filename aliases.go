@@ -25,6 +25,12 @@ const (
 	CodeServiceUnavailable = core.CodeServiceUnavailable
 )
 
+// NoRouteHandler 404 兜底处理器（嵌入自定义路由器时使用）。
+var NoRouteHandler = core.NoRouteHandler
+
+// NoMethodHandler 405 兜底处理器。
+var NoMethodHandler = core.NoMethodHandler
+
 // NewContext 创建请求上下文（用于在自定义路由器中嵌入 webx Handler）。
 func NewContext(w http.ResponseWriter, r *http.Request) *Context {
 	return core.NewContext(w, r)

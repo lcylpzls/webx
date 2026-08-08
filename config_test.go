@@ -128,6 +128,7 @@ middleware_security = true
 security_hsts_max_age = 3600
 security_referrer_policy = "no-referrer"
 gzip_min_size = 2048
+debug = true
 `
 	if err := os.WriteFile(path, []byte(toml), 0o600); err != nil {
 		t.Fatal(err)
@@ -160,6 +161,9 @@ gzip_min_size = 2048
 	if !cfg.MiddlewareSecurity || cfg.SecurityHSTSMaxAge != 3600 ||
 		cfg.SecurityReferrerPolicy != "no-referrer" || cfg.GzipMinSize != 2048 {
 		t.Errorf("安全/gzip 配置加载不符：%+v", cfg)
+	}
+	if !cfg.Debug {
+		t.Errorf("debug 配置加载不符：%+v", cfg)
 	}
 }
 

@@ -1,10 +1,12 @@
 package proxy
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -79,5 +81,37 @@ func TestHandlerUpgrade(t *testing.T) {
 	Handler(tu)(c)
 	if !hit.Load() {
 		t.Error("Upgrade 请求未透传到上游")
+	}
+}
+
+func TestHandlerErrorResponse(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	tu, _ := url.Parse(target.URL)
+	target.Close() // 上游已关闭 → 代理错误
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "http://webx/", nil)
+	c := webx.NewContext(rec, req)
+	Handler(tu)(c)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("上游不可用应 502：%d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("响应体不是 JSON：%v", err)
+	}
+	if body["code"] != float64(502) || !strings.Contains(body["msg"].(string), "上游") {
+		t.Errorf("默认错误体不符：%s", rec.Body.String())
+	}
+
+	// 自定义错误处理器
+	rec = httptest.NewRecorder()
+	c = webx.NewContext(rec, httptest.NewRequest(http.MethodGet, "http://webx/", nil))
+	Handler(tu, WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("custom"))
+	}))(c)
+	if rec.Code != http.StatusServiceUnavailable || rec.Body.String() != "custom" {
+		t.Errorf("自定义错误处理器不符：%d %s", rec.Code, rec.Body.String())
 	}
 }

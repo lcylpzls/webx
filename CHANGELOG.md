@@ -2,6 +2,14 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.18.0] - 2026-08-08
+
+### 新增
+
+- Debug 模式：`Config.Debug` 开启后 Recovery 响应携带 panic 摘要；
+- proxy：`WithErrorHandler` 自定义上游错误处理，默认输出统一 JSON 502；
+- 导出 `NoRouteHandler`/`NoMethodHandler`，新增 `ExampleNewRouter` godoc 示例。
+
 ## [v0.17.0] - 2026-08-08
 
 ### 性能

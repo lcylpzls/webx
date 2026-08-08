@@ -647,7 +647,7 @@ func callRouteGroupFn(fn func(*RouteGroup), rg *RouteGroup) (err error) {
 // registerBuiltinMiddleware 按配置注册内置中间件。
 func (s *Server) registerBuiltinMiddleware() {
 	s.metrics = middleware.NewMetrics()
-	s.mwManager.RegisterBuiltin("recovery", middleware.RecoveryWith(s.logger, s.metrics))
+	s.mwManager.RegisterBuiltin("recovery", middleware.RecoveryWithOptions(s.logger, s.metrics, s.config.Debug))
 	if !s.config.MiddlewareRecovery {
 		s.mwManager.Disable("recovery")
 	}

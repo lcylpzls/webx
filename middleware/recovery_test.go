@@ -88,3 +88,16 @@ func TestRecoveryWithLogger(t *testing.T) {
 		t.Errorf("panic 日志应含 requestId 与调用栈：%s", buf.String())
 	}
 }
+
+func TestRecoveryWithOptionsDebug(t *testing.T) {
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetHandlers([]core.HandlerFunc{
+		RecoveryWithOptions(nil, nil, true),
+		func(c *core.Context) { panic("boom") },
+	})
+	c.Run()
+	if !strings.Contains(rec.Body.String(), "boom") {
+		t.Errorf("debug 模式响应应含 panic 摘要：%s", rec.Body.String())
+	}
+}

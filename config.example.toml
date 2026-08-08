@@ -25,6 +25,7 @@ health_path = "/health"
 
 # --- 日志 ---
 log_level = "info"             # debug/info/warn/error
+debug = false                  # 调试模式：Recovery 响应携带 panic 摘要（生产保持 false）
 access_log_enabled = true
 log_success_req = false        # true=记录成功请求
 access_log_sample_rate = 0     # 0=全部记录，N>0 平均每 N 条记 1 条

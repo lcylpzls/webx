@@ -24,3 +24,15 @@ func ExampleStatusForError() {
 	// Output:
 	// 403
 }
+
+func ExampleNewRouter() {
+	rt := webx.NewRouter(webx.NoRouteHandler, webx.NoMethodHandler)
+	_ = rt.Handle("GET", "/ping", []webx.HandlerFunc{
+		func(c *webx.Context) { c.Success("pong", nil) },
+	})
+	rec := httptest.NewRecorder()
+	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ping", nil))
+	fmt.Println(rec.Code)
+	// Output:
+	// 200
+}
