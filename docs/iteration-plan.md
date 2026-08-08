@@ -68,7 +68,7 @@
 - `go vet ./...`、`staticcheck ./...` 零告警；
 - Linux `-race` 全绿；
 - fuzz：路由翻译、JSON 绑定、限流至少各 1 个目标（CI 10s 短跑）；
-- 三平台 CI：ubuntu / windows / macos × Go 1.21 / 1.26（macOS 仅 1.26）；
+- 三平台 CI：ubuntu / windows / macos × Go 1.26.x；
 - v0.1.0 起维护 API 基线，CI 增加 apidiff 检查；
 - 所有日志、注释、文档使用简体中文。
 

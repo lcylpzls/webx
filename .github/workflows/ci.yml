@@ -11,12 +11,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        go: ['1.21.x', '1.26.x']
-        # Go 1.21 构建的测试二进制无法在 macos-latest（新版 dyld）加载
-        # （missing LC_UUID），macOS 仅验证 1.26.x。
-        exclude:
-          - os: macos-latest
-            go: '1.21.x'
+        go: ['1.26.x']
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -45,7 +40,14 @@ jobs:
 
       - name: Race detector (Linux)
         if: runner.os == 'Linux'
-        run: go test -race -count=1 ./...
+        run: |
+          go test -race -count=1 ./... 2>&1 | tee race.log
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            sed -n '1,80p' race.log | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
 
       - name: Coverage (Linux)
         if: runner.os == 'Linux'
