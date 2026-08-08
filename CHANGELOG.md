@@ -2,9 +2,9 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
-## [Unreleased]
+## [v0.2.0] - 2026-08-08
 
-### 破坏性变更（v0.2.0）
+### 破坏性变更
 
 - `NewServer(cfg, logger)`：logger 改为由调用方注入 `logx.Logger`，
   webx 内部不再创建日志器，只负责使用；`logger` 为 nil 时 `Start()` 返回错误。
