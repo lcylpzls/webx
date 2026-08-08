@@ -69,6 +69,8 @@ type Server struct {
 	certLoader     func(*tls.ClientHelloInfo) (*tls.Certificate, error)
 	sniCerts       []SNICertificate
 	activeConns    atomic.Int64
+	connCtx        func(context.Context, net.Conn) context.Context
+	onShutdown     []func()
 }
 
 // SNICertificate 是按 ServerName（SNI）指定的证书。
@@ -253,6 +255,34 @@ func (s *Server) SetCertificateLoader(fn func(*tls.ClientHelloInfo) (*tls.Certif
 		return s
 	}
 	s.certLoader = fn
+	return s
+}
+
+// SetConnContext 设置每连接上下文注入函数（供链路/连接级数据传播）。
+func (s *Server) SetConnContext(fn func(context.Context, net.Conn) context.Context) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.logWarn("webx：服务已启动，不允许设置连接上下文函数")
+		return s
+	}
+	if fn != nil {
+		s.connCtx = fn
+	}
+	return s
+}
+
+// RegisterOnShutdown 注册关闭钩子（http.Server.Shutdown 触发时执行）。
+func (s *Server) RegisterOnShutdown(fn func()) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.logWarn("webx：服务已启动，不允许注册关闭钩子")
+		return s
+	}
+	if fn != nil {
+		s.onShutdown = append(s.onShutdown, fn)
+	}
 	return s
 }
 
@@ -458,7 +488,9 @@ func (s *Server) Start() error {
 			IdleTimeout:       s.config.IdleTimeout,
 			MaxHeaderBytes:    s.config.MaxHeaderBytes,
 			ConnState:         s.connState,
+			ConnContext:       s.connCtx,
 		}
+		s.applyServerHooks(srv)
 		s.addHTTPServer(srv)
 		wg.Add(1)
 		go func() {
@@ -504,7 +536,9 @@ func (s *Server) Start() error {
 			IdleTimeout:       s.config.IdleTimeout,
 			MaxHeaderBytes:    s.config.MaxHeaderBytes,
 			ConnState:         s.connState,
+			ConnContext:       s.connCtx,
 		}
+		s.applyServerHooks(srv)
 		s.addHTTPServer(srv)
 		wg.Add(1)
 		go func() {
@@ -682,10 +716,12 @@ func (s *Server) registerBuiltinMiddleware() {
 		s.mwManager.Disable("validation")
 	}
 	s.mwManager.RegisterBuiltin("security", middleware.SecurityHeaders(middleware.SecurityHeadersOptions{
-		ContentTypeNoSniff: true,
-		FrameDeny:          true,
-		ReferrerPolicy:     s.config.SecurityReferrerPolicy,
-		HSTSMaxAge:         time.Duration(s.config.SecurityHSTSMaxAge) * time.Second,
+		ContentTypeNoSniff:      true,
+		FrameDeny:               true,
+		ReferrerPolicy:          s.config.SecurityReferrerPolicy,
+		HSTSMaxAge:              time.Duration(s.config.SecurityHSTSMaxAge) * time.Second,
+		PermissionsPolicy:       s.config.SecurityPermissionsPolicy,
+		CrossOriginOpenerPolicy: s.config.SecurityCrossOriginOpenerPolicy,
 	}))
 	if !s.config.MiddlewareSecurity {
 		s.mwManager.Disable("security")

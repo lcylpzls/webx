@@ -48,6 +48,9 @@ func TestAccessLogSuccessOnly(t *testing.T) {
 	if !strings.Contains(buf.String(), "bytes=") {
 		t.Errorf("访问日志应包含响应字节数：%s", buf.String())
 	}
+	if !strings.Contains(buf.String(), "proto=") {
+		t.Errorf("访问日志应包含协议字段：%s", buf.String())
+	}
 }
 
 func TestAccessLogLogAll(t *testing.T) {

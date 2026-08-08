@@ -127,6 +127,8 @@ quic_drain_timeout = "5s"
 middleware_security = true
 security_hsts_max_age = 3600
 security_referrer_policy = "no-referrer"
+security_permissions_policy = "camera=()"
+security_cross_origin_opener_policy = "same-origin"
 gzip_min_size = 2048
 debug = true
 cors_allow_credentials = true
@@ -168,6 +170,9 @@ cors_allow_credentials = true
 	}
 	if !cfg.CORSAllowCredentials {
 		t.Errorf("CORS 凭据配置加载不符：%+v", cfg)
+	}
+	if cfg.SecurityPermissionsPolicy != "camera=()" || cfg.SecurityCrossOriginOpenerPolicy != "same-origin" {
+		t.Errorf("安全头扩展配置加载不符：%+v", cfg)
 	}
 }
 

@@ -94,6 +94,7 @@ jobs:
         run: |
           go test -run '^$' -fuzz '^FuzzTranslatePattern$' -fuzztime=10s .
           go test -run '^$' -fuzz '^FuzzBindJSON$' -fuzztime=10s ./internal/core/
+          go test -run '^$' -fuzz '^FuzzBindForm$' -fuzztime=10s ./internal/core/
           go test -run '^$' -fuzz '^FuzzRateLimit$' -fuzztime=10s ./middleware/
 
   apidiff:

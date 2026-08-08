@@ -19,6 +19,8 @@ type Metrics struct {
 	AvgRequestDurationMs uint64
 	// ActiveConnections 当前打开的连接数。
 	ActiveConnections int64
+	// RequestsInFlight 当前活跃请求数（需启用 MiddlewareMetrics）。
+	RequestsInFlight int64
 }
 
 // Metrics 返回运行指标快照；未启用对应能力时字段为 0。
@@ -31,6 +33,7 @@ func (s *Server) Metrics() Metrics {
 		if samples > 0 {
 			m.AvgRequestDurationMs = totalNs / samples / 1_000_000
 		}
+		m.RequestsInFlight = s.metrics.InFlight()
 	}
 	if s.rateLimiter != nil {
 		m.RateLimited = s.rateLimiter.Rejected()
@@ -46,5 +49,12 @@ func (s *Server) connState(_ net.Conn, state http.ConnState) {
 		s.activeConns.Add(1)
 	case http.StateClosed, http.StateHijacked:
 		s.activeConns.Add(-1)
+	}
+}
+
+// applyServerHooks 为 http.Server 注册关闭钩子。
+func (s *Server) applyServerHooks(srv *http.Server) {
+	for _, fn := range s.onShutdown {
+		srv.RegisterOnShutdown(fn)
 	}
 }

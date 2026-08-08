@@ -14,10 +14,12 @@ func TestSecurityHeaders(t *testing.T) {
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
 		SecurityHeaders(SecurityHeadersOptions{
-			ContentTypeNoSniff: true,
-			FrameDeny:          true,
-			ReferrerPolicy:     "no-referrer",
-			HSTSMaxAge:         3600 * time.Second,
+			ContentTypeNoSniff:      true,
+			FrameDeny:               true,
+			ReferrerPolicy:          "no-referrer",
+			HSTSMaxAge:              3600 * time.Second,
+			PermissionsPolicy:       "camera=()",
+			CrossOriginOpenerPolicy: "same-origin",
 		}),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
@@ -33,6 +35,12 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 	if rec.Header().Get("Strict-Transport-Security") != "max-age=3600" {
 		t.Errorf("HSTS 头不符：%s", rec.Header().Get("Strict-Transport-Security"))
+	}
+	if rec.Header().Get("Permissions-Policy") != "camera=()" {
+		t.Error("Permissions-Policy 头缺失")
+	}
+	if rec.Header().Get("Cross-Origin-Opener-Policy") != "same-origin" {
+		t.Error("Cross-Origin-Opener-Policy 头缺失")
 	}
 }
 

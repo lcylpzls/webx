@@ -17,6 +17,10 @@ type SecurityHeadersOptions struct {
 	ReferrerPolicy string
 	// HSTSMaxAge 大于 0 时设置 Strict-Transport-Security。
 	HSTSMaxAge time.Duration
+	// PermissionsPolicy 设置 Permissions-Policy（空则不设置）。
+	PermissionsPolicy string
+	// CrossOriginOpenerPolicy 设置 Cross-Origin-Opener-Policy（空则不设置）。
+	CrossOriginOpenerPolicy string
 }
 
 // SecurityHeaders 返回安全响应头中间件。
@@ -34,6 +38,12 @@ func SecurityHeaders(opts SecurityHeadersOptions) core.HandlerFunc {
 		if opts.HSTSMaxAge > 0 {
 			c.Header("Strict-Transport-Security",
 				fmt.Sprintf("max-age=%d", int64(opts.HSTSMaxAge.Seconds())))
+		}
+		if opts.PermissionsPolicy != "" {
+			c.Header("Permissions-Policy", opts.PermissionsPolicy)
+		}
+		if opts.CrossOriginOpenerPolicy != "" {
+			c.Header("Cross-Origin-Opener-Policy", opts.CrossOriginOpenerPolicy)
 		}
 		c.Next()
 	}

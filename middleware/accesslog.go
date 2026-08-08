@@ -65,6 +65,7 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 			logx.String("requestId", c.RequestID()),
 			logx.String("ip", c.RemoteIP()),
 			logx.String("host", c.Request().Host),
+			logx.String("proto", c.Request().Proto),
 			logx.String("query", query),
 			logx.String("user_agent", c.GetHeader("User-Agent")),
 			logx.Any("duration", time.Since(start).String()),

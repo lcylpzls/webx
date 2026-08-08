@@ -14,6 +14,7 @@ type Metrics struct {
 	panics     atomic.Uint64
 	durationNs atomic.Uint64
 	samples    atomic.Uint64
+	inFlight   atomic.Int64
 }
 
 // NewMetrics 创建指标计数器。
@@ -26,7 +27,9 @@ func MetricsHandler(m *Metrics) core.HandlerFunc {
 	return func(c *core.Context) {
 		start := time.Now()
 		m.requests.Add(1)
+		m.inFlight.Add(1)
 		c.Next()
+		m.inFlight.Add(-1)
 		m.durationNs.Add(uint64(time.Since(start)))
 		m.samples.Add(1)
 		if c.StatusCode() >= 500 {
@@ -48,4 +51,9 @@ func (m *Metrics) Panics() uint64 {
 // Durations 返回累计耗时（纳秒）与样本数。
 func (m *Metrics) Durations() (totalNs, samples uint64) {
 	return m.durationNs.Load(), m.samples.Load()
+}
+
+// InFlight 返回当前活跃请求数。
+func (m *Metrics) InFlight() int64 {
+	return m.inFlight.Load()
 }

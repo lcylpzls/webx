@@ -54,3 +54,33 @@ func TestMetricsDurations(t *testing.T) {
 		t.Errorf("耗时统计不符：totalNs=%d samples=%d", totalNs, samples)
 	}
 }
+
+func TestMetricsInFlight(t *testing.T) {
+	m := NewMetrics()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	c.SetHandlers([]core.HandlerFunc{
+		MetricsHandler(m),
+		func(c *core.Context) {
+			close(entered)
+			<-release
+			c.Success("ok", nil)
+		},
+	})
+	done := make(chan struct{})
+	go func() {
+		c.Run()
+		close(done)
+	}()
+	<-entered
+	if got := m.InFlight(); got != 1 {
+		t.Errorf("处理中 InFlight 应为 1：%d", got)
+	}
+	close(release)
+	<-done
+	if got := m.InFlight(); got != 0 {
+		t.Errorf("处理完成 InFlight 应为 0：%d", got)
+	}
+}

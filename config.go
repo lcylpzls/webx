@@ -90,6 +90,10 @@ type Config struct {
 	SecurityHSTSMaxAge int `toml:"security_hsts_max_age"`
 	// SecurityReferrerPolicy Referrer-Policy 取值（空=不设置）。
 	SecurityReferrerPolicy string `toml:"security_referrer_policy"`
+	// SecurityPermissionsPolicy Permissions-Policy 取值（空=不设置）。
+	SecurityPermissionsPolicy string `toml:"security_permissions_policy"`
+	// SecurityCrossOriginOpenerPolicy Cross-Origin-Opener-Policy 取值（空=不设置）。
+	SecurityCrossOriginOpenerPolicy string `toml:"security_cross_origin_opener_policy"`
 	// GzipMinSize 响应压缩最小字节数（0=默认 1024）。
 	GzipMinSize int `toml:"gzip_min_size"`
 	// Debug 调试模式：Recovery 响应携带 panic 摘要（生产环境保持 false）。

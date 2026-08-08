@@ -2,6 +2,16 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v0.22.0] - 2026-08-08
+
+### 新增
+
+- Metrics 增加 `RequestsInFlight`（活跃请求数）；
+- AccessLog 增加协议字段（HTTP/1.1、HTTP/2、HTTP/3）；
+- `SetConnContext` 每连接上下文注入、`RegisterOnShutdown` 关闭钩子；
+- 安全头扩展：`Permissions-Policy`、`Cross-Origin-Opener-Policy`；
+- `FuzzBindForm` 模糊目标。
+
 ## [v0.21.0] - 2026-08-08
 
 ### 工程

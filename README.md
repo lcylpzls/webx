@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 当前状态：**核心实现完成**。各包语句覆盖率 100%，
-> 当前版本：v0.21.0（v1.0.0 定版评估中）。
+> 当前版本：v0.22.0（v1.0.0 定版评估中）。
 
 ## 技术栈
 

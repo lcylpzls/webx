@@ -651,6 +651,43 @@ func TestMetricsActiveConnections(t *testing.T) {
 	_ = s.Stop(ctx)
 }
 
+func TestServerConnContextAndOnShutdown(t *testing.T) {
+	type ctxKey struct{}
+	cfg := validConfig(t)
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.SetConnContext(func(ctx context.Context, _ net.Conn) context.Context {
+		return context.WithValue(ctx, ctxKey{}, "conn-value")
+	})
+	shutdownCh := make(chan struct{}, 1)
+	s.RegisterOnShutdown(func() { shutdownCh <- struct{}{} })
+	s.RegisterRoute(Route{
+		Method: "GET",
+		Path:   "/ctx",
+		Handler: func(c *core.Context) {
+			_ = c.String(http.StatusOK, "%s", c.Request().Context().Value(ctxKey{}))
+		},
+	})
+	startServer(t, s)
+	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/ctx")
+	if err != nil {
+		t.Fatalf("GET 失败：%v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(body) != "conn-value" {
+		t.Errorf("连接上下文未注入：%s", body)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+	select {
+	case <-shutdownCh:
+	case <-time.After(2 * time.Second):
+		t.Error("关闭钩子未执行")
+	}
+}
+
 func TestServerSecurityHeaders(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareSecurity = true
@@ -922,6 +959,16 @@ func TestSetSNIStartedGuard(t *testing.T) {
 	s := &Server{started: true}
 	if got := s.SetSNICertificates(nil); got != s {
 		t.Error("SetSNICertificates 应返回自身")
+	}
+}
+
+func TestServerHooksStartedGuard(t *testing.T) {
+	s := &Server{started: true}
+	if got := s.SetConnContext(nil); got != s {
+		t.Error("SetConnContext 应返回自身")
+	}
+	if got := s.RegisterOnShutdown(nil); got != s {
+		t.Error("RegisterOnShutdown 应返回自身")
 	}
 }
 
