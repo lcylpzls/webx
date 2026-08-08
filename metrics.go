@@ -1,5 +1,10 @@
 package webx
 
+import (
+	"net"
+	"net/http"
+)
+
 // Metrics 是 webx 运行指标快照，可接入监控面板。
 type Metrics struct {
 	// Requests 请求总数（需启用 MiddlewareMetrics）。
@@ -12,6 +17,8 @@ type Metrics struct {
 	Panics uint64
 	// AvgRequestDurationMs 平均请求耗时（毫秒，需启用 MiddlewareMetrics）。
 	AvgRequestDurationMs uint64
+	// ActiveConnections 当前打开的连接数。
+	ActiveConnections int64
 }
 
 // Metrics 返回运行指标快照；未启用对应能力时字段为 0。
@@ -28,5 +35,16 @@ func (s *Server) Metrics() Metrics {
 	if s.rateLimiter != nil {
 		m.RateLimited = s.rateLimiter.Rejected()
 	}
+	m.ActiveConnections = s.activeConns.Load()
 	return m
+}
+
+// connState 统计当前打开的连接数。
+func (s *Server) connState(_ net.Conn, state http.ConnState) {
+	switch state {
+	case http.StateNew:
+		s.activeConns.Add(1)
+	case http.StateClosed, http.StateHijacked:
+		s.activeConns.Add(-1)
+	}
 }

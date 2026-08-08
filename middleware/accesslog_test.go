@@ -45,6 +45,9 @@ func TestAccessLogSuccessOnly(t *testing.T) {
 	if !strings.Contains(buf.String(), "duration_ms") || !strings.Contains(buf.String(), "user_agent") {
 		t.Errorf("访问日志应包含增强字段：%s", buf.String())
 	}
+	if !strings.Contains(buf.String(), "bytes=") {
+		t.Errorf("访问日志应包含响应字节数：%s", buf.String())
+	}
 }
 
 func TestAccessLogLogAll(t *testing.T) {
@@ -149,5 +152,17 @@ func TestRedactQuery(t *testing.T) {
 	}
 	if got := redactQuery("bad=%zz", []string{"a"}); got != "bad=%zz" {
 		t.Errorf("非法 query 应原样返回：%s", got)
+	}
+}
+
+func TestCountingWriter(t *testing.T) {
+	rec := httptest.NewRecorder()
+	cw := &countingWriter{ResponseWriter: rec}
+	if cw.Unwrap() != rec {
+		t.Error("Unwrap 不符")
+	}
+	n, err := cw.Write([]byte("hello"))
+	if err != nil || n != 5 || cw.n != 5 {
+		t.Errorf("写入计数不符：n=%d total=%d err=%v", n, cw.n, err)
 	}
 }

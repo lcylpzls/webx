@@ -1,5 +1,5 @@
 // Package webx 提供基于 Go 标准库的工业级 HTTP/HTTPS 服务组件库。
-// 路由基于 http.ServeMux，上下文与中间件链自研，日志/错误/配置
+// 路由基于自研 radix 匹配树，上下文与中间件链自研，日志/错误/配置
 // 分别接入 logx / errx / confx，HTTP/3 使用 quic-go。
 package webx
 
@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -67,6 +68,7 @@ type Server struct {
 	unixSocketPerm os.FileMode
 	certLoader     func(*tls.ClientHelloInfo) (*tls.Certificate, error)
 	sniCerts       []SNICertificate
+	activeConns    atomic.Int64
 }
 
 // SNICertificate 是按 ServerName（SNI）指定的证书。
@@ -455,6 +457,7 @@ func (s *Server) Start() error {
 			ReadHeaderTimeout: s.config.ReadHeaderTimeout,
 			IdleTimeout:       s.config.IdleTimeout,
 			MaxHeaderBytes:    s.config.MaxHeaderBytes,
+			ConnState:         s.connState,
 		}
 		s.addHTTPServer(srv)
 		wg.Add(1)
@@ -500,6 +503,7 @@ func (s *Server) Start() error {
 			ReadHeaderTimeout: s.config.ReadHeaderTimeout,
 			IdleTimeout:       s.config.IdleTimeout,
 			MaxHeaderBytes:    s.config.MaxHeaderBytes,
+			ConnState:         s.connState,
 		}
 		s.addHTTPServer(srv)
 		wg.Add(1)

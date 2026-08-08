@@ -149,4 +149,15 @@ jobs:
           check-latest: true
 
       - name: Benchmark
-        run: go test -bench . -benchmem -run '^$' ./...
+        run: |
+          go test -bench '^BenchmarkRouterServeHTTP500$' -benchmem -run '^$' . 2>&1 | tee bench.log
+          ns=$(grep 'BenchmarkRouterServeHTTP500' bench.log | awk -F'ns/op' '{print $1}' | awk '{print $NF}')
+          if [ -z "$ns" ]; then
+            echo "基准解析失败"
+            exit 1
+          fi
+          echo "路由 500 条：${ns} ns/op"
+          if awk "BEGIN{exit !($ns > 1000)}"; then
+            echo "路由性能回退超过阈值（1000ns）"
+            exit 1
+          fi

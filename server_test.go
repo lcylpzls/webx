@@ -626,6 +626,31 @@ func TestServerGzipAndMetrics(t *testing.T) {
 	_ = s.Stop(ctx)
 }
 
+func TestMetricsActiveConnections(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.MiddlewareMetrics = true
+	s := newTestServer(t, cfg)
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{
+		Method:  "GET",
+		Path:    "/ok",
+		Handler: func(c *core.Context) { c.Success("ok", nil) },
+	})
+	startServer(t, s)
+	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/ok")
+	if err != nil {
+		t.Fatalf("GET 失败：%v", err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if m := s.Metrics(); m.ActiveConnections < 1 {
+		t.Errorf("ActiveConnections 应 >= 1：%+v", m)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Stop(ctx)
+}
+
 func TestServerSecurityHeaders(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareSecurity = true

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"math/rand/v2"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -19,6 +20,24 @@ type AccessLogOptions struct {
 	RedactKeys []string
 }
 
+// countingWriter 统计响应体字节数。
+type countingWriter struct {
+	http.ResponseWriter
+	n int64
+}
+
+// Write 写入并计数。
+func (w *countingWriter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	w.n += int64(n)
+	return n, err
+}
+
+// Unwrap 返回底层 Writer。
+func (w *countingWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 // sampleRand 可注入的随机函数（测试可替换）。
 var sampleRand = rand.IntN
 
@@ -26,7 +45,11 @@ var sampleRand = rand.IntN
 func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 	return func(c *core.Context) {
 		start := time.Now()
+		orig := c.Writer()
+		cw := &countingWriter{ResponseWriter: orig}
+		c.SetWriter(cw)
 		c.Next()
+		c.SetWriter(orig)
 		status := c.StatusCode()
 		if status >= 200 && status < 300 && !opts.LogSuccess {
 			return
@@ -46,6 +69,7 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 			logx.String("user_agent", c.GetHeader("User-Agent")),
 			logx.Any("duration", time.Since(start).String()),
 			logx.Int64("duration_ms", time.Since(start).Milliseconds()),
+			logx.Int64("bytes", cw.n),
 		)
 		if status >= 400 {
 			logger.Warn("访问日志", fields)
