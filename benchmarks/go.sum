@@ -65,8 +65,8 @@ github.com/labstack/gommon v0.5.0 h1:6VSQ2NOzsnEJ5W6+84E0RbcaDDmgB6NIAzWCczTEe6c
 github.com/labstack/gommon v0.5.0/go.mod h1:Rzlg7HHy1maLfzBYGg9NZcVuz1sA68HHhLjhcEllYE0=
 github.com/lcylpzls/confx v0.3.1 h1:xmIXpvT99El1xYM33B2xWifQ0p3c5OaDTpcCf/K1w3g=
 github.com/lcylpzls/confx v0.3.1/go.mod h1:ibwiR7nqSYv0IuDHLO2JdLSJHTdTdiKsDdpUKw39lHY=
-github.com/lcylpzls/errx v1.2.0 h1:FmRfQk0jkeRn10GX3toGUEd/WMoXxkKXAgr8OBVhQDY=
-github.com/lcylpzls/errx v1.2.0/go.mod h1:+GcqVS4+6iuHvCELjwpsc1RKrdEtSNz00xq0lFrgdgI=
+github.com/lcylpzls/errx v1.3.1 h1:BEz53mq1Hd71VBI21vEhgkK54VOlX8T61ElnuUClh9o=
+github.com/lcylpzls/errx v1.3.1/go.mod h1:+GcqVS4+6iuHvCELjwpsc1RKrdEtSNz00xq0lFrgdgI=
 github.com/lcylpzls/logx v1.0.0 h1:jl5KHOGADJBIUif7UXaKiZiT3yycxKmmSHRxkatkaU0=
 github.com/lcylpzls/logx v1.0.0/go.mod h1:reR9kkXoO1rL8xqvvDvNAyyKsU4nqA/9WJlkeQDne4I=
 github.com/leodido/go-urn v1.4.0 h1:WT9HwE9SGECu3lg4d/dIA+jxlljEa1/ffXKmRjqdmIQ=

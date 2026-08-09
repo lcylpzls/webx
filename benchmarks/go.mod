@@ -37,7 +37,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/lcylpzls/confx v0.3.1 // indirect
-	github.com/lcylpzls/errx v1.2.0 // indirect
+	github.com/lcylpzls/errx v1.3.1 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/magiconair/properties v1.18.11 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
