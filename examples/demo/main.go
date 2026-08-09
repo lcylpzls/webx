@@ -8,6 +8,12 @@ import (
 	"github.com/lcylpzls/webx"
 )
 
+// 注册示例错误码：构造时无需再写分类。
+func init() {
+	errx.RegisterCode("USER_NOT_FOUND", "用户不存在")
+	errx.RegisterCodeKind("USER_NOT_FOUND", errx.KindNotFound)
+}
+
 func main() {
 	logger, err := logx.NewBuilder().EnableConsole(logx.InfoLevel).Build()
 	if err != nil {
@@ -27,7 +33,7 @@ func main() {
 		Path:   "/api/users/:id",
 		Handler: func(c *webx.Context) {
 			if c.Param("id") == "0" {
-				err := errx.New(errx.KindNotFound, "USER_NOT_FOUND", "用户不存在")
+				err := errx.NewCode("USER_NOT_FOUND", "用户不存在")
 				logger.Warn("业务错误", errxlogx.Fields(err))
 				c.Fail(404, 404, err.Message())
 				return

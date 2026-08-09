@@ -509,13 +509,13 @@ func (s *Server) Start() error {
 	s.mu.Lock()
 	if s.started {
 		s.mu.Unlock()
-		return errx.New(errx.KindInvalid, CodeStartFailed, "服务已启动，不允许重复启动")
+		return errx.NewCode(CodeStartFailed, "服务已启动，不允许重复启动")
 	}
 	s.started = true
 	s.mu.Unlock()
 
 	if s.logger == nil {
-		return errx.New(errx.KindInvalid, CodeStartFailed, "logger 不能为 nil，请在 NewServer 时注入 logx.Logger")
+		return errx.NewCode(CodeStartFailed, "logger 不能为 nil，请在 NewServer 时注入 logx.Logger")
 	}
 
 	// 启动失败时回收限流清理 goroutine，避免泄漏。
@@ -527,7 +527,7 @@ func (s *Server) Start() error {
 	}()
 
 	if !s.http2Enabled && !s.http3Enabled && !s.unixEnabled {
-		return errx.New(errx.KindInvalid, CodeStartFailed, "至少需要启用一种监听方式（HTTP/2、HTTP/3 或 Unix Socket）")
+		return errx.NewCode(CodeStartFailed, "至少需要启用一种监听方式（HTTP/2、HTTP/3 或 Unix Socket）")
 	}
 	if err := s.config.Validate(); err != nil {
 		return err
@@ -539,7 +539,7 @@ func (s *Server) Start() error {
 	}
 	if s.unixEnabled {
 		if err := checkUnixSocket(); err != nil {
-			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "Unix Socket 平台检查失败")
+			return errx.WrapCode(err, CodeStartFailed, "Unix Socket 平台检查失败")
 		}
 	}
 	s.startTime = time.Now()
@@ -586,22 +586,22 @@ func (s *Server) Start() error {
 
 	for _, entry := range s.staticEntries {
 		if err := s.router.HandleStaticWithOptions(entry.prefix, entry.fs, entry.opts); err != nil {
-			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "静态文件路由注册失败")
+			return errx.WrapCode(err, CodeStartFailed, "静态文件路由注册失败")
 		}
 	}
 	for _, route := range s.routes {
 		if err := s.router.Handle(route.Method, route.Path, buildChain(route)); err != nil {
-			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "路由注册失败："+route.Method+" "+route.Path)
+			return errx.WrapCode(err, CodeStartFailed, "路由注册失败："+route.Method+" "+route.Path)
 		}
 	}
 	for _, entry := range s.routeGroups {
 		rg := &RouteGroup{prefix: entry.prefix}
 		if err := callRouteGroupFn(entry.fn, rg); err != nil {
-			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "路由分组回调执行失败")
+			return errx.WrapCode(err, CodeStartFailed, "路由分组回调执行失败")
 		}
 		for _, route := range rg.flatten() {
 			if err := s.router.Handle(route.Method, route.Path, buildChain(route)); err != nil {
-				return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "路由注册失败："+route.Method+" "+route.Path)
+				return errx.WrapCode(err, CodeStartFailed, "路由注册失败："+route.Method+" "+route.Path)
 			}
 		}
 	}
@@ -616,17 +616,17 @@ func (s *Server) Start() error {
 	for _, ep := range probeEndpoints {
 		has, err := s.hasRoute(ep.path)
 		if err != nil {
-			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "健康探针路由检查失败")
+			return errx.WrapCode(err, CodeStartFailed, "健康探针路由检查失败")
 		}
 		if !has {
 			if err := s.router.Handle("GET", ep.path, []core.HandlerFunc{ep.handler}); err != nil {
-				return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "健康探针路由注册失败")
+				return errx.WrapCode(err, CodeStartFailed, "健康探针路由注册失败")
 			}
 		}
 	}
 	if path := s.metricsEndpointPath(); path != "" {
 		if err := s.router.Handle("GET", path, []core.HandlerFunc{s.serveMetrics}); err != nil {
-			return errx.Wrap(err, errx.KindInvalid, CodeStartFailed, "指标端点路由注册失败")
+			return errx.WrapCode(err, CodeStartFailed, "指标端点路由注册失败")
 		}
 	}
 
@@ -804,7 +804,7 @@ func (s *Server) shutdownAll(ctx context.Context) error {
 		_ = h3s.Close()
 	}
 	if err != nil {
-		return errx.Wrap(err, errx.KindUnavailable, CodeShutdownFailed, "优雅关闭失败")
+		return errx.WrapCode(err, CodeShutdownFailed, "优雅关闭失败")
 	}
 	return nil
 }

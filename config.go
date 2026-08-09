@@ -150,12 +150,12 @@ func isRegularFile(path string) error {
 	info, err := statPath(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return errx.Newf(errx.KindInvalid, CodeConfigInvalid, "文件不存在：%s", path)
+			return errx.NewCodef(CodeConfigInvalid, "文件不存在：%s", path)
 		}
-		return errx.Wrap(err, errx.KindInvalid, CodeConfigInvalid, "无法访问文件："+path)
+		return errx.WrapCode(err, CodeConfigInvalid, "无法访问文件："+path)
 	}
 	if info.IsDir() {
-		return errx.Newf(errx.KindInvalid, CodeConfigInvalid, "路径是目录而非文件：%s", path)
+		return errx.NewCodef(CodeConfigInvalid, "路径是目录而非文件：%s", path)
 	}
 	return nil
 }
@@ -164,19 +164,19 @@ func isRegularFile(path string) error {
 // 校验规则：证书/私钥必填且可配对、超时非负、日志级别合法。
 func (c *Config) Validate() error {
 	if c.TLSCertFile == "" {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "TLS 证书文件路径不能为空")
+		return errx.NewCode(CodeConfigInvalid, "TLS 证书文件路径不能为空")
 	}
 	if err := isRegularFile(c.TLSCertFile); err != nil {
 		return err
 	}
 	if c.TLSKeyFile == "" {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "TLS 私钥文件路径不能为空")
+		return errx.NewCode(CodeConfigInvalid, "TLS 私钥文件路径不能为空")
 	}
 	if err := isRegularFile(c.TLSKeyFile); err != nil {
 		return err
 	}
 	if _, err := tls.LoadX509KeyPair(c.TLSCertFile, c.TLSKeyFile); err != nil {
-		return errx.Wrap(err, errx.KindInvalid, CodeConfigInvalid, "TLS 证书加载失败")
+		return errx.WrapCode(err, CodeConfigInvalid, "TLS 证书加载失败")
 	}
 	if c.MinTLSVersion == 0 {
 		c.MinTLSVersion = tls.VersionTLS12
@@ -184,64 +184,64 @@ func (c *Config) Validate() error {
 	switch c.MinTLSVersion {
 	case tls.VersionTLS12, tls.VersionTLS13:
 	default:
-		return errx.Newf(errx.KindInvalid, CodeConfigInvalid, "最低 TLS 版本无效：%d，必须是 TLS1.2 或 TLS1.3", c.MinTLSVersion)
+		return errx.NewCodef(CodeConfigInvalid, "最低 TLS 版本无效：%d，必须是 TLS1.2 或 TLS1.3", c.MinTLSVersion)
 	}
 	if c.ShutdownTimeout < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "关闭超时时间不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "关闭超时时间不能为负数")
 	}
 	if c.RequestTimeout < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "请求超时时间不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "请求超时时间不能为负数")
 	}
 	if c.ReadTimeout < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "读取超时时间不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "读取超时时间不能为负数")
 	}
 	if c.WriteTimeout < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "写入超时时间不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "写入超时时间不能为负数")
 	}
 	if c.ReadHeaderTimeout < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "请求头读取超时时间不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "请求头读取超时时间不能为负数")
 	}
 	if c.IdleTimeout < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "空闲超时时间不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "空闲超时时间不能为负数")
 	}
 	if c.MaxHeaderBytes < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "最大请求头字节数不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "最大请求头字节数不能为负数")
 	}
 	if c.MaxBodyBytes < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "最大请求体字节数不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "最大请求体字节数不能为负数")
 	}
 	if c.AccessLogSampleRate < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "访问日志采样率不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "访问日志采样率不能为负数")
 	}
 	if c.SlowRequestThreshold < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "慢请求阈值不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "慢请求阈值不能为负数")
 	}
 	if c.GzipMinSize < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "gzip 最小字节数不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "gzip 最小字节数不能为负数")
 	}
 	if c.GzipLevel < 0 || c.GzipLevel > 9 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "gzip 压缩级别必须在 0-9 之间")
+		return errx.NewCode(CodeConfigInvalid, "gzip 压缩级别必须在 0-9 之间")
 	}
 	if c.SecurityHSTSMaxAge < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "HSTS 缓存秒数不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "HSTS 缓存秒数不能为负数")
 	}
 	if c.MaxBodyBytes == 0 {
 		c.MaxBodyBytes = 10 * 1024 * 1024
 	}
 	if c.QUICMaxIdleTimeout < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "QUIC 空闲超时不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "QUIC 空闲超时不能为负数")
 	}
 	if c.QUICMaxIdleTimeout == 0 {
 		c.QUICMaxIdleTimeout = 30 * time.Second
 	}
 	if c.QUICMaxIncomingStreams < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "QUIC 最大入站流数不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "QUIC 最大入站流数不能为负数")
 	}
 	if c.QUICMaxIncomingStreams == 0 {
 		c.QUICMaxIncomingStreams = 100
 	}
 	if c.QUICDrainTimeout < 0 {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "QUIC 排空超时不能为负数")
+		return errx.NewCode(CodeConfigInvalid, "QUIC 排空超时不能为负数")
 	}
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
@@ -253,7 +253,7 @@ func (c *Config) Validate() error {
 			if err != nil {
 				ip := net.ParseIP(entry)
 				if ip == nil {
-					return errx.Newf(errx.KindInvalid, CodeConfigInvalid, "可信代理网段非法：%s", entry)
+					return errx.NewCodef(CodeConfigInvalid, "可信代理网段非法：%s", entry)
 				}
 				_, ipNet, _ = net.ParseCIDR(entry + "/32")
 			}
@@ -264,7 +264,7 @@ func (c *Config) Validate() error {
 	switch c.LogLevel {
 	case "debug", "info", "warn", "error":
 	default:
-		return errx.Newf(errx.KindInvalid, CodeConfigInvalid, "日志级别无效：%s，必须是 debug、info、warn 或 error", c.LogLevel)
+		return errx.NewCodef(CodeConfigInvalid, "日志级别无效：%s，必须是 debug、info、warn 或 error", c.LogLevel)
 	}
 	if c.HealthPath == "" {
 		c.HealthPath = "/health"
@@ -279,7 +279,7 @@ func (c *Config) Validate() error {
 		c.MetricsPath = "/metrics"
 	}
 	if c.MetricsPath != "" && !strings.HasPrefix(c.MetricsPath, "/") {
-		return errx.New(errx.KindInvalid, CodeConfigInvalid, "指标端点路径必须以 / 开头")
+		return errx.NewCode(CodeConfigInvalid, "指标端点路径必须以 / 开头")
 	}
 	if c.ReadHeaderTimeout == 0 {
 		c.ReadHeaderTimeout = 10 * time.Second
@@ -302,10 +302,10 @@ func LoadConfig(path string) (Config, error) {
 	var cfg Config
 	cm, err := newConfigManager(confx.Toml)
 	if err != nil {
-		return cfg, errx.Wrap(err, errx.KindUnavailable, CodeConfigLoadFailed, "创建配置管理器失败")
+		return cfg, errx.WrapCode(err, CodeConfigLoadFailed, "创建配置管理器失败")
 	}
 	if err := cm.Load(path, &cfg); err != nil {
-		return cfg, errx.Wrap(err, errx.KindUnavailable, CodeConfigLoadFailed, "加载配置文件失败")
+		return cfg, errx.WrapCode(err, CodeConfigLoadFailed, "加载配置文件失败")
 	}
 	if err := cfg.Validate(); err != nil {
 		return cfg, err

@@ -68,7 +68,7 @@ func buildTLSConfig(getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error)
 func createTLSListener(addr string, getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), minVersion uint16) (net.Listener, error) {
 	ln, err := tls.Listen("tcp", addr, buildTLSConfig(getCert, minVersion, []string{"h2", "http/1.1"}))
 	if err != nil {
-		return nil, errx.Wrap(err, errx.KindUnavailable, CodeListenFailed, "TLS 监听失败，地址 "+addr)
+		return nil, errx.WrapCode(err, CodeListenFailed, "TLS 监听失败，地址 "+addr)
 	}
 	return ln, nil
 }
@@ -80,7 +80,7 @@ func createQUICListener(addr string, getCert func(*tls.ClientHelloInfo) (*tls.Ce
 		MaxIncomingStreams: maxStreams,
 	})
 	if err != nil {
-		return nil, errx.Wrap(err, errx.KindUnavailable, CodeListenFailed, "QUIC 监听失败，地址 "+addr)
+		return nil, errx.WrapCode(err, CodeListenFailed, "QUIC 监听失败，地址 "+addr)
 	}
 	return ln, nil
 }
@@ -89,18 +89,18 @@ func createQUICListener(addr string, getCert func(*tls.ClientHelloInfo) (*tls.Ce
 // 非 Windows 下先清理残留 Socket 文件，再监听并设置权限。
 func createUnixListener(path string, perm os.FileMode) (net.Listener, error) {
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		return nil, errx.Newf(errx.KindUnavailable, CodeListenFailed, "Unix Socket 路径为目录而非 Socket 文件，路径 %s", path)
+		return nil, errx.NewCodef(CodeListenFailed, "Unix Socket 路径为目录而非 Socket 文件，路径 %s", path)
 	}
 	if err := removePath(path); err != nil && !os.IsNotExist(err) {
-		return nil, errx.Wrap(err, errx.KindUnavailable, CodeListenFailed, "Unix Socket 残留文件清理失败，路径 "+path)
+		return nil, errx.WrapCode(err, CodeListenFailed, "Unix Socket 残留文件清理失败，路径 "+path)
 	}
 	ln, err := net.Listen("unix", path)
 	if err != nil {
-		return nil, errx.Wrap(err, errx.KindUnavailable, CodeListenFailed, "Unix Socket 监听失败，路径 "+path)
+		return nil, errx.WrapCode(err, CodeListenFailed, "Unix Socket 监听失败，路径 "+path)
 	}
 	if err := chmodPath(path, perm); err != nil {
 		ln.Close()
-		return nil, errx.Wrap(err, errx.KindUnavailable, CodeListenFailed, "Unix Socket 权限设置失败，路径 "+path)
+		return nil, errx.WrapCode(err, CodeListenFailed, "Unix Socket 权限设置失败，路径 "+path)
 	}
 	return ln, nil
 }

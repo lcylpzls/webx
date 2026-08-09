@@ -36,9 +36,15 @@ const (
 
 func init() {
 	errx.RegisterCode(CodeConfigInvalid, "webx 配置校验失败")
+	errx.RegisterCodeKind(CodeConfigInvalid, errx.KindInvalid)
 	errx.RegisterCode(CodeConfigLoadFailed, "webx 配置文件加载失败")
+	errx.RegisterCodeKind(CodeConfigLoadFailed, errx.KindUnavailable)
 	errx.RegisterCode(CodeListenFailed, "webx 监听器创建失败")
+	errx.RegisterCodeKind(CodeListenFailed, errx.KindUnavailable)
 	errx.RegisterCode(CodeStartFailed, "webx 服务启动失败")
+	errx.RegisterCodeKind(CodeStartFailed, errx.KindInvalid)
 	errx.RegisterCode(CodeShutdownFailed, "webx 优雅关闭失败")
+	errx.RegisterCodeKind(CodeShutdownFailed, errx.KindUnavailable)
 	errx.RegisterCode(CodePanic, "webx 请求处理发生 panic")
+	errx.RegisterCodeKind(CodePanic, errx.KindInternal)
 }
