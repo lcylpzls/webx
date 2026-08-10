@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 func TestSPANoRouteServeFileAndFallback(t *testing.T) {

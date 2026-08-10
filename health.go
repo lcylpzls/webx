@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 // healthData 健康检查响应中的 data 字段。

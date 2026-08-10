@@ -6,7 +6,7 @@ import (
 	"runtime/debug"
 
 	"github.com/lcylpzls/logx"
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 // Recovery 返回 Panic 捕获中间件，这是组件库中唯一调用 recover() 的位置。

@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"github.com/google/uuid"
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 // RequestIDOptions 定义请求 ID 中间件的配置参数。

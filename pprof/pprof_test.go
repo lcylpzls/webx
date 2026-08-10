@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/lcylpzls/webx"
+	"github.com/lcylpzls/webx/v2"
 )
 
 type fakeRegistrar struct {

@@ -14,7 +14,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/protocol/suite"
 	"github.com/hertz-contrib/http2/factory"
-	"github.com/lcylpzls/webx"
+	"github.com/lcylpzls/webx/v2"
 	"github.com/quic-go/quic-go/http3"
 )
 

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 // CORS 响应头的预计算规范化键。

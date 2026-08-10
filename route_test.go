@@ -3,7 +3,7 @@ package webx
 import (
 	"testing"
 
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 func TestRouteGroupMethods(t *testing.T) {

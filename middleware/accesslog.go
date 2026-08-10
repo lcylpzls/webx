@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/lcylpzls/logx"
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 var countingWriterPool = sync.Pool{New: func() any { return &countingWriter{} }}

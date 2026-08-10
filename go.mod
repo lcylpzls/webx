@@ -1,4 +1,4 @@
-module github.com/lcylpzls/webx
+module github.com/lcylpzls/webx/v2
 
 go 1.26.0
 

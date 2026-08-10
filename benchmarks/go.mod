@@ -9,7 +9,7 @@ require (
 	github.com/hertz-contrib/http2 v0.1.8
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/lcylpzls/logx v1.0.0
-	github.com/lcylpzls/webx v1.0.0
+	github.com/lcylpzls/webx/v2 v2.0.0
 	github.com/quic-go/quic-go v0.61.0
 	github.com/valyala/fasthttp v1.73.0
 )
@@ -59,9 +59,9 @@ require (
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/lcylpzls/webx => ..
+replace github.com/lcylpzls/webx/v2 => ..

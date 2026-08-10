@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 // 安全响应头的预计算规范化键。

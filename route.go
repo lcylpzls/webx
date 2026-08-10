@@ -1,6 +1,6 @@
 package webx
 
-import "github.com/lcylpzls/webx/internal/core"
+import "github.com/lcylpzls/webx/v2/internal/core"
 
 // HandlerFunc 是 webx 的业务处理器签名，不依赖任何第三方类型。
 type HandlerFunc = core.HandlerFunc

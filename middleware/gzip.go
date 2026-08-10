@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 // setHeader 以预计算键写入响应头（复用已有切片，热路径零分配）。

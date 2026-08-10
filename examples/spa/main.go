@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/lcylpzls/logx"
-	"github.com/lcylpzls/webx"
+	"github.com/lcylpzls/webx/v2"
 )
 
 //go:embed dist

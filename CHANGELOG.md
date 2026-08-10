@@ -6,6 +6,8 @@
 
 ### 破坏性变更
 
+- Go 模块路径升级为 `github.com/lcylpzls/webx/v2`（v2 主版本规范），
+  所有导入需追加 `/v2` 后缀；
 - 移除内置 Prometheus 指标端点：`EnableMetricsEndpoint`、
   配置项 `metrics_enabled` / `metrics_path` 与 `/metrics` 文本渲染全部删除；
 - 新增 `WithMetrics(webx.Metrics)`：外部注入统一指标接收器

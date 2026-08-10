@@ -5,7 +5,7 @@ import (
 	"github.com/lcylpzls/errx"
 	errxlogx "github.com/lcylpzls/errx/logx"
 	"github.com/lcylpzls/logx"
-	"github.com/lcylpzls/webx"
+	"github.com/lcylpzls/webx/v2"
 )
 
 // 注册示例错误码：构造时无需再写分类。

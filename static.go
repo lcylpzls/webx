@@ -6,7 +6,7 @@ import (
 	"path"
 	"time"
 
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 // staticEntry 缓存单条静态文件服务配置。

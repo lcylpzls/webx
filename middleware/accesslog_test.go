@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/lcylpzls/logx"
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 func TestAccessLogSuccessOnly(t *testing.T) {

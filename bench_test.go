@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 // discardWriter 是零分配的最小响应写入器，用于基准测试。

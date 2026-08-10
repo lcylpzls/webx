@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 func TestBodyLimitOverContentLength(t *testing.T) {

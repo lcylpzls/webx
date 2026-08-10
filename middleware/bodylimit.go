@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/lcylpzls/webx/internal/core"
+	"github.com/lcylpzls/webx/v2/internal/core"
 )
 
 // BodyLimitOptions 定义请求体限制中间件的配置。

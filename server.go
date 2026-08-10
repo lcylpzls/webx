@@ -19,8 +19,8 @@ import (
 
 	"github.com/lcylpzls/errx"
 	"github.com/lcylpzls/logx"
-	"github.com/lcylpzls/webx/internal/core"
-	"github.com/lcylpzls/webx/middleware"
+	"github.com/lcylpzls/webx/v2/internal/core"
+	"github.com/lcylpzls/webx/v2/middleware"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 )

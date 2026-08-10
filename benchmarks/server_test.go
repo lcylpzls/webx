@@ -23,7 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/labstack/echo/v4"
 	"github.com/lcylpzls/logx"
-	"github.com/lcylpzls/webx"
+	"github.com/lcylpzls/webx/v2"
 	"github.com/valyala/fasthttp"
 )
 
