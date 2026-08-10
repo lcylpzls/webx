@@ -2,13 +2,13 @@
 
 package webx
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lcylpzls/testx"
+)
 
 func TestCheckWindowsBuild(t *testing.T) {
-	if err := checkWindowsBuild(20000); err != nil {
-		t.Errorf("高版本 build 应通过：%v", err)
-	}
-	if err := checkWindowsBuild(10000); err == nil {
-		t.Error("过低 build 应报错")
-	}
+	testx.RequireNoError(t, checkWindowsBuild(20000))
+	testx.RequireError(t, checkWindowsBuild(10000))
 }
