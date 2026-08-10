@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/lcylpzls/webx/v2"
+	"github.com/lcylpzls/webx"
 )
 
 // Option 配置 ReverseProxy 的选项。

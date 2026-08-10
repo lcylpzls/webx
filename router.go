@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lcylpzls/webx/v2/internal/core"
+	"github.com/lcylpzls/webx/internal/core"
 )
 
 // Router 基于自研 radix 匹配树实现路由：

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lcylpzls/webx/v2"
+	"github.com/lcylpzls/webx"
 )
 
 func TestHandler(t *testing.T) {

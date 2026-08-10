@@ -3,7 +3,7 @@ package webx
 import (
 	"net/http"
 
-	"github.com/lcylpzls/webx/v2/internal/core"
+	"github.com/lcylpzls/webx/internal/core"
 )
 
 // 对外类型别名：业务代码只接触 webx 包，不感知 internal/core。

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/lcylpzls/logx"
-	"github.com/lcylpzls/webx/v2/internal/core"
+	"github.com/lcylpzls/webx/internal/core"
 )
 
 func TestRecoveryPanic(t *testing.T) {

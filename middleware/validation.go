@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/lcylpzls/webx/v2/internal/core"
+	"github.com/lcylpzls/webx/internal/core"
 )
 
 // Validation 返回请求参数校验中间件：

@@ -7,7 +7,7 @@ require (
 	github.com/lcylpzls/errx v1.4.0
 	github.com/lcylpzls/logx v1.2.0
 	github.com/lcylpzls/metricsx v1.3.0
-	github.com/lcylpzls/webx/v2 v2.1.0
+	github.com/lcylpzls/webx v1.3.0
 	github.com/prometheus/client_golang v1.24.1
 )
 
@@ -34,4 +34,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/lcylpzls/webx/v2 => ../
+replace github.com/lcylpzls/webx => ../

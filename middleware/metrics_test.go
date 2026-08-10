@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lcylpzls/webx/v2/internal/core"
+	"github.com/lcylpzls/webx/internal/core"
 )
 
 func TestMetricsHandler(t *testing.T) {

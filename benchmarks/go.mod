@@ -10,7 +10,7 @@ require (
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/lcylpzls/logx v1.0.0
 	github.com/lcylpzls/testx v1.2.0
-	github.com/lcylpzls/webx/v2 v2.0.0
+	github.com/lcylpzls/webx v1.3.0
 	github.com/quic-go/quic-go v0.61.0
 	github.com/valyala/fasthttp v1.73.0
 )
@@ -65,4 +65,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/lcylpzls/webx/v2 => ..
+replace github.com/lcylpzls/webx => ..

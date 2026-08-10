@@ -2,6 +2,20 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v1.3.0] - 2026-08-10
+
+### 变更
+
+- 模块路径统一为 `github.com/lcylpzls/webx`（**移除 `/v2` 后缀**），
+  全家族永久不采用 `/vN` 模块路径，v1.*.* 内允许破坏性变更；
+- 根包、子包与示例内部引用全部同步为无后缀路径；
+- examples / benchmarks 子模块依赖同步升级到 `webx v1.3.0`。
+
+### 质量
+
+- 根包与全部子包语句覆盖率保持 100%；race / vet / staticcheck /
+  govulncheck 全绿。
+
 ## [v2.2.1] - 2026-08-10
 
 ### 变更
@@ -39,13 +53,13 @@
 ### 修复
 
 - 与 v2.0.0 内容一致，重新发布以确保模块代理缓存正确的
-  `github.com/lcylpzls/webx/v2` module path。
+  `github.com/lcylpzls/webx` module path。
 
 ## [v2.0.0] - 2026-08-10
 
 ### 破坏性变更
 
-- Go 模块路径升级为 `github.com/lcylpzls/webx/v2`（v2 主版本规范），
+- Go 模块路径升级为 `github.com/lcylpzls/webx`（v2 主版本规范），
   所有导入需追加 `/v2` 后缀；
 - 移除内置 Prometheus 指标端点：`EnableMetricsEndpoint`、
   配置项 `metrics_enabled` / `metrics_path` 与 `/metrics` 文本渲染全部删除；

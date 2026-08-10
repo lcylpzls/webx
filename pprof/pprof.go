@@ -4,7 +4,7 @@ package pprof
 import (
 	"net/http/pprof"
 
-	"github.com/lcylpzls/webx/v2"
+	"github.com/lcylpzls/webx"
 )
 
 // Registrar 抽象路由注册能力（*webx.Server 满足）。

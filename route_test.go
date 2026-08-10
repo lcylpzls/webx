@@ -4,7 +4,7 @@ import (
 	testx "github.com/lcylpzls/testx"
 	"testing"
 
-	"github.com/lcylpzls/webx/v2/internal/core"
+	"github.com/lcylpzls/webx/internal/core"
 )
 
 func TestRouteGroupMethods(t *testing.T) {

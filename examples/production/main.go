@@ -11,7 +11,7 @@ import (
 	"github.com/lcylpzls/clix"
 	"github.com/lcylpzls/logx"
 	"github.com/lcylpzls/metricsx"
-	"github.com/lcylpzls/webx/v2"
+	"github.com/lcylpzls/webx"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 

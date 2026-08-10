@@ -3,7 +3,7 @@ package main
 
 import (
 	"github.com/lcylpzls/logx"
-	"github.com/lcylpzls/webx/v2"
+	"github.com/lcylpzls/webx"
 )
 
 func main() {

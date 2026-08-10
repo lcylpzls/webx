@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/lcylpzls/errx"
-	"github.com/lcylpzls/webx/v2/internal/core"
+	"github.com/lcylpzls/webx/internal/core"
 )
 
 func TestStatusForError(t *testing.T) {

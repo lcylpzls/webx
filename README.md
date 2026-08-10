@@ -9,7 +9,7 @@
 > 当前状态：**v2.0.0 已发布（破坏性变更）**。各包语句覆盖率 100%，
 > 三平台 CI + race + fuzz + apidiff 全绿。
 
-> 模块路径：`github.com/lcylpzls/webx/v2`（v2 主版本规范）。
+> 模块路径：`github.com/lcylpzls/webx`（v2 主版本规范）。
 
 ## 技术栈
 

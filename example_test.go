@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/lcylpzls/errx"
-	"github.com/lcylpzls/webx/v2"
+	"github.com/lcylpzls/webx"
 )
 
 func ExampleRespondError() {

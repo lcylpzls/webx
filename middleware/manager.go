@@ -6,7 +6,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/lcylpzls/webx/v2/internal/core"
+	"github.com/lcylpzls/webx/internal/core"
 )
 
 // Manager 管理内置中间件的注册表、执行顺序和启用状态。
