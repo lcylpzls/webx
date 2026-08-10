@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	testx "github.com/lcylpzls/testx"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,9 +20,8 @@ func TestRecoveryPanic(t *testing.T) {
 		func(c *core.Context) { panic("boom") },
 	})
 	c.Run()
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("panic 应返回 500：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusInternalServerError)
+
 	if !strings.Contains(rec.Body.String(), "服务器内部错误") {
 		t.Errorf("500 响应体不符：%s", rec.Body.String())
 	}
@@ -41,9 +41,8 @@ func TestRecoveryNormal(t *testing.T) {
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
-	if rec.Code != http.StatusOK {
-		t.Errorf("正常请求应通过：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusOK)
+
 	if _, ok := c.Get("recoveryError"); ok {
 		t.Error("正常请求不应有 recoveryError")
 	}
@@ -66,9 +65,8 @@ func TestRecoveryWithMetrics(t *testing.T) {
 func TestRecoveryWithLogger(t *testing.T) {
 	var buf bytes.Buffer
 	logger, err := logx.NewBuilder().EnableWriter(&buf, logx.ErrorLevel).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	defer logger.Close()
 
 	rec := httptest.NewRecorder()

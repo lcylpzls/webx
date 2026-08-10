@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	testx "github.com/lcylpzls/testx"
 	"net"
 	"net/http"
 	"os"
@@ -20,9 +21,8 @@ func TestGracefulShutdownSignal(t *testing.T) {
 	quit := make(chan os.Signal, 1)
 	quit <- os.Interrupt
 	err := gracefulShutdown(context.Background(), logger, nil, nil, time.Second, "", nil, quit)
-	if err != nil {
-		t.Errorf("信号关闭应成功：%v", err)
-	}
+	testx.NoError(t, err)
+
 }
 
 func TestGracefulShutdownContextCanceled(t *testing.T) {
@@ -31,9 +31,8 @@ func TestGracefulShutdownContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	err := gracefulShutdown(ctx, logger, nil, nil, time.Second, "", nil, make(chan os.Signal))
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("取消上下文应返回 Canceled：%v", err)
-	}
+	testx.ErrorIs(t, err, context.Canceled)
+
 }
 
 func TestGracefulShutdownPublic(t *testing.T) {
@@ -48,9 +47,8 @@ func TestGracefulShutdownPublic(t *testing.T) {
 	cancel()
 	select {
 	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
-			t.Errorf("GracefulShutdown 应返回 Canceled：%v", err)
-		}
+		testx.ErrorIs(t, err, context.Canceled)
+
 	case <-time.After(2 * time.Second):
 		t.Fatal("GracefulShutdown 未返回")
 	}
@@ -68,9 +66,8 @@ func runBlockedServer(t *testing.T, logger logx.Logger, closeFn func(*http.Serve
 		<-release
 	})}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	go func() { _ = srv.Serve(ln) }()
 
 	done := make(chan struct{})
@@ -119,15 +116,13 @@ func TestShutdownServersErrors(t *testing.T) {
 	// 非空目录（os.Remove 失败）、清理函数
 	block := make(chan struct{})
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	srv := &http.Server{Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-block })}
 	go srv.Serve(ln)
 	conn, err := net.Dial("tcp", ln.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	if _, err := fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: x\r\n\r\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -144,9 +139,8 @@ func TestShutdownServersErrors(t *testing.T) {
 	cancel()
 	close(block)
 	conn.Close()
-	if err == nil {
-		t.Error("超时/监听器/文件清理错误应被聚合返回")
-	}
+	testx.Error(t, err)
+
 	if called != 1 {
 		t.Errorf("清理函数应执行：%d", called)
 	}
@@ -172,9 +166,8 @@ func TestShutdownServersClean(t *testing.T) {
 	called := 0
 	err := shutdownServers(context.Background(), logger, nil, nil, time.Second, path,
 		[]func(){func() { called++ }})
-	if err != nil {
-		t.Errorf("清理关闭应成功：%v", err)
-	}
+	testx.NoError(t, err)
+
 	if called != 1 {
 		t.Errorf("清理函数应执行：%d", called)
 	}

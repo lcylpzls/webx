@@ -2,6 +2,7 @@ package webx
 
 import (
 	"fmt"
+	testx "github.com/lcylpzls/testx"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -112,9 +113,8 @@ func TestRouterMethodNotAllowed(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/x", nil))
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("405 状态不符：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusMethodNotAllowed)
+
 	if rec.Header().Get("Allow") != "GET, HEAD, POST" {
 		t.Errorf("Allow 头不符：%s", rec.Header().Get("Allow"))
 	}
@@ -132,9 +132,8 @@ func TestRouterHeadOnGetRoute(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodHead, "/api/x", nil))
-	if rec.Code != http.StatusOK {
-		t.Errorf("HEAD 应命中 GET 路由：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusOK)
+
 }
 
 func TestRouterAutoOptions(t *testing.T) {
@@ -144,9 +143,8 @@ func TestRouterAutoOptions(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodOptions, "/api/x", nil))
-	if rec.Code != http.StatusNoContent {
-		t.Errorf("自动 OPTIONS 应 204：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNoContent)
+
 	if rec.Header().Get("Allow") != "GET, HEAD" {
 		t.Errorf("Allow 头不符：%s", rec.Header().Get("Allow"))
 	}
@@ -166,9 +164,8 @@ func TestRouterSpecificityMethodDecision(t *testing.T) {
 	// 最具体模式（POST 参数路由）不允许 GET → 405，而非落到静态根
 	rec := httptest.NewRecorder()
 	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/42", nil))
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("最具体模式方法判定不符：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusMethodNotAllowed)
+
 	if rec.Header().Get("Allow") != "POST" {
 		t.Errorf("Allow 头不符：%s", rec.Header().Get("Allow"))
 	}
@@ -188,9 +185,8 @@ func TestRouterExactNoPrefixMatch(t *testing.T) {
 	for _, path := range []string{"/api/users/42/extra", "/api/users/42/"} {
 		rec := httptest.NewRecorder()
 		rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
-		if rec.Code != http.StatusNotFound {
-			t.Errorf("精确路由不应前缀匹配 %s：%d", path, rec.Code)
-		}
+		testx.Equal(t, rec.Code, http.StatusNotFound)
+
 	}
 }
 
@@ -217,9 +213,8 @@ func TestRouterNotFoundAndRedirect(t *testing.T) {
 	// 子树模式精确命中（尾斜杠）
 	rec = httptest.NewRecorder()
 	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/static/", nil))
-	if rec.Code != http.StatusOK {
-		t.Errorf("子树模式尾斜杠应命中：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusOK)
+
 	// 尾斜杠重定向
 	rec = httptest.NewRecorder()
 	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/static", nil))
@@ -229,9 +224,8 @@ func TestRouterNotFoundAndRedirect(t *testing.T) {
 	// 静态目录 405
 	rec = httptest.NewRecorder()
 	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/static/a.txt", nil))
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("静态 405 不符：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusMethodNotAllowed)
+
 }
 
 func TestRouterHandleErrors(t *testing.T) {
@@ -302,9 +296,8 @@ func TestRouterStaticRootAndShortWildcard(t *testing.T) {
 	// 通配模式路径过短 → 404
 	rec = httptest.NewRecorder()
 	rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/a", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("通配模式路径过短应 404：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNotFound)
+
 }
 
 func TestRouterStaticOptions(t *testing.T) {
@@ -331,9 +324,8 @@ func TestRouterStaticOptions(t *testing.T) {
 	}
 	rec = httptest.NewRecorder()
 	rt2.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s2/sub/", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("禁用索引目录应 404：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNotFound)
+
 	// 有 index.html 的目录仍可访问
 	rec = httptest.NewRecorder()
 	rt2.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s2/", nil))
@@ -354,9 +346,8 @@ func TestRouterStaticOptions(t *testing.T) {
 	}
 	rec = httptest.NewRecorder()
 	rt3.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s3/sub/", nil))
-	if rec.Code != http.StatusOK {
-		t.Errorf("默认应允许目录索引：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusOK)
+
 }
 
 func TestRouterCustomFallbacks(t *testing.T) {

@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"errors"
+	testx "github.com/lcylpzls/testx"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -98,9 +99,8 @@ func TestBindFormUnexportedField(t *testing.T) {
 	if err := c.BindForm(&m); err != nil {
 		t.Fatalf("BindForm 失败：%v", err)
 	}
-	if m.hidden != "" {
-		t.Error("未导出字段不应被绑定")
-	}
+	testx.Equal(t, m.hidden, "")
+
 }
 
 func TestBindFormMultipart(t *testing.T) {
@@ -229,9 +229,8 @@ func TestBindQueryUnexportedField(t *testing.T) {
 	if err := c.BindQuery(&m); err != nil {
 		t.Fatalf("BindQuery 失败：%v", err)
 	}
-	if m.hidden != "" {
-		t.Error("未导出字段不应被绑定")
-	}
+	testx.Equal(t, m.hidden, "")
+
 }
 
 type defaultQueryModel struct {
@@ -430,9 +429,8 @@ func TestBindQueryNestedCycle(t *testing.T) {
 	if err := c.BindQuery(&n); err != nil {
 		t.Fatalf("循环引用应安全跳过：%v", err)
 	}
-	if n.Name != "x" {
-		t.Errorf("循环引用绑定不符：%+v", n)
-	}
+	testx.Equal(t, n.Name, "x")
+
 }
 
 func TestBindQueryPtrScalarError(t *testing.T) {
@@ -468,9 +466,8 @@ func TestFormFileAndSave(t *testing.T) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	part, err := mw.CreateFormFile("file", "a.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	if _, err := part.Write([]byte("文件内容")); err != nil {
 		t.Fatal(err)
 	}
@@ -479,20 +476,17 @@ func TestFormFileAndSave(t *testing.T) {
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	c := NewContext(httptest.NewRecorder(), req)
 	fh, err := c.FormFile("file")
-	if err != nil {
-		t.Fatalf("FormFile 失败：%v", err)
-	}
-	if fh.Filename != "a.txt" {
-		t.Errorf("文件名不符：%s", fh.Filename)
-	}
+	testx.RequireNoError(t, err)
+
+	testx.Equal(t, fh.Filename, "a.txt")
+
 	dest := filepath.Join(t.TempDir(), "out.txt")
 	if err := c.SaveUploadedFile(fh, dest); err != nil {
 		t.Fatalf("SaveUploadedFile 失败：%v", err)
 	}
 	got, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	if string(got) != "文件内容" {
 		t.Errorf("落盘内容不符：%s", got)
 	}
@@ -538,9 +532,7 @@ func TestSaveUploadedFileErrors(t *testing.T) {
 	}
 	err := c.SaveUploadedFile(&multipart.FileHeader{}, filepath.Join(t.TempDir(), "x"))
 	openMultipartFile = origOpen
-	if err == nil {
-		t.Error("打开失败应报错")
-	}
+	testx.Error(t, err)
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -551,9 +543,8 @@ func TestSaveUploadedFileErrors(t *testing.T) {
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	c2 := NewContext(httptest.NewRecorder(), req)
 	fh, err := c2.FormFile("file")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	dir := t.TempDir()
 	if err := c2.SaveUploadedFile(fh, dir); err == nil {
 		t.Error("目标为目录应报错")
@@ -563,7 +554,6 @@ func TestSaveUploadedFileErrors(t *testing.T) {
 	copyFile = func(io.Writer, io.Reader) (int64, error) { return 0, errors.New("复制失败") }
 	err = c2.SaveUploadedFile(fh, filepath.Join(dir, "out.txt"))
 	copyFile = origCopy
-	if err == nil {
-		t.Error("复制失败应报错")
-	}
+	testx.Error(t, err)
+
 }

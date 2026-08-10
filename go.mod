@@ -1,13 +1,14 @@
 module github.com/lcylpzls/webx/v2
 
-go 1.26.0
+go 1.26.5
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/lcylpzls/confx v0.3.1
-	github.com/lcylpzls/errx v1.3.1
+	github.com/lcylpzls/errx v1.4.0
 	github.com/lcylpzls/logx v1.0.0
 	github.com/lcylpzls/metricsx v1.1.0
+	github.com/lcylpzls/testx v1.2.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/quic-go/quic-go v0.61.0
 )

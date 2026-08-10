@@ -1,6 +1,7 @@
 package pprof
 
 import (
+	testx "github.com/lcylpzls/testx"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -32,8 +33,7 @@ func TestRegister(t *testing.T) {
 	for _, path := range []string{"/debug/pprof", "/debug/pprof/cmdline", "/debug/pprof/symbol"} {
 		rec := httptest.NewRecorder()
 		rt.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
-		if rec.Code != http.StatusOK {
-			t.Errorf("%s 状态不符：%d", path, rec.Code)
-		}
+		testx.Equal(t, rec.Code, http.StatusOK)
+
 	}
 }

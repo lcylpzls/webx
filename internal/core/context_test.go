@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	testx "github.com/lcylpzls/testx"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -79,9 +80,8 @@ func TestContextAccessors(t *testing.T) {
 func mustParseCIDR(t *testing.T, cidr string) *net.IPNet {
 	t.Helper()
 	_, ipNet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	return ipNet
 }
 
@@ -157,9 +157,8 @@ func TestContextStatusAndHeader(t *testing.T) {
 	}
 	c.Status(http.StatusCreated)
 	c.Status(http.StatusInternalServerError) // 二次写入无效
-	if rec.Code != http.StatusCreated {
-		t.Errorf("状态码不符：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusCreated)
+
 	if got := c.StatusCode(); got != http.StatusCreated {
 		t.Errorf("StatusCode 不符：%d", got)
 	}
@@ -245,9 +244,8 @@ func TestContextRedirect(t *testing.T) {
 	rec = httptest.NewRecorder()
 	c = NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.Redirect(http.StatusOK, "/coerced") // 非 3xx 强制转 302
-	if rec.Code != http.StatusFound {
-		t.Errorf("非 3xx 状态码应转为 302：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusFound)
+
 }
 
 func TestContextCookie(t *testing.T) {
@@ -314,25 +312,20 @@ func TestContextFile(t *testing.T) {
 
 	// 304：If-Modified-Since 命中
 	info, err := os.Stat(filePath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/a.txt", nil)
 	req.Header.Set("If-Modified-Since", info.ModTime().UTC().Format(http.TimeFormat))
 	c = NewContext(rec, req)
 	c.File(filePath)
-	if rec.Code != http.StatusNotModified {
-		t.Errorf("命中条件请求应 304：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNotModified)
 
 	// 文件不存在 → 404
 	rec = httptest.NewRecorder()
 	c = NewContext(rec, httptest.NewRequest(http.MethodGet, "/missing", nil))
 	c.File(filepath.Join(dir, "missing.txt"))
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("缺失文件应 404：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNotFound)
 
 	// stat 失败 → 500
 	origStat := statFile
@@ -341,9 +334,8 @@ func TestContextFile(t *testing.T) {
 	c = NewContext(rec, httptest.NewRequest(http.MethodGet, "/a.txt", nil))
 	c.File(filePath)
 	statFile = origStat
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("stat 失败应 500：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusInternalServerError)
+
 }
 
 func TestStatusRecorder(t *testing.T) {
@@ -351,12 +343,10 @@ func TestStatusRecorder(t *testing.T) {
 	sw := &statusRecorder{ResponseWriter: rec}
 	sw.WriteHeader(http.StatusCreated)
 	sw.WriteHeader(http.StatusInternalServerError)
-	if sw.status != http.StatusCreated {
-		t.Errorf("状态码应记录首次写入：%d", sw.status)
-	}
-	if rec.Code != http.StatusCreated {
-		t.Errorf("透传状态码不符：%d", rec.Code)
-	}
+	testx.Equal(t, sw.status, http.StatusCreated)
+
+	testx.Equal(t, rec.Code, http.StatusCreated)
+
 }
 
 func TestContextJSON(t *testing.T) {

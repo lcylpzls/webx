@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	testx "github.com/lcylpzls/testx"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -23,9 +24,7 @@ func TestHandler(t *testing.T) {
 	}))
 	defer target.Close()
 	tu, err := url.Parse(target.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "http://webx/path?q=1", nil)
@@ -96,9 +95,8 @@ func TestHandlerErrorResponse(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://webx/", nil)
 	c := webx.NewContext(rec, req)
 	Handler(tu)(c)
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("上游不可用应 502：%d", rec.Code)
-	}
+	testx.RequireEqual(t, rec.Code, http.StatusBadGateway)
+
 	var body map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("响应体不是 JSON：%v", err)
@@ -169,9 +167,8 @@ func TestWithDirectorAndModifyResponse(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "http://webx/", nil)
 	rp.ServeHTTP(rec, req)
-	if upstreamHeader != "1" {
-		t.Errorf("WithDirector 未注入上游请求头：%s", upstreamHeader)
-	}
+	testx.Equal(t, upstreamHeader, "1")
+
 	if rec.Header().Get("X-Modified") != "1" {
 		t.Errorf("WithModifyResponse 未改写响应头：%v", rec.Header())
 	}
@@ -235,9 +232,8 @@ func TestWithModifyResponseErrorPropagation(t *testing.T) {
 	)
 	rec := httptest.NewRecorder()
 	rp.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://webx/", nil))
-	if rec.Code != http.StatusBadGateway {
-		t.Errorf("改写失败应输出 502：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusBadGateway)
+
 	if rec.Header().Get("X-Never") != "" {
 		t.Error("前置改写失败后不应继续执行")
 	}
@@ -258,9 +254,8 @@ func TestWithTimeout(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "http://webx/", nil)
 	rp.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("超时应输出 502：%d", rec.Code)
-	}
+	testx.RequireEqual(t, rec.Code, http.StatusBadGateway)
+
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Errorf("超时未生效：%v", elapsed)
 	}

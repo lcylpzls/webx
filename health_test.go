@@ -3,6 +3,7 @@ package webx
 import (
 	"context"
 	"errors"
+	testx "github.com/lcylpzls/testx"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -36,9 +37,8 @@ func TestHealthHandler(t *testing.T) {
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
 	c.SetHandlers([]core.HandlerFunc{healthHandler(start, nil, nil)})
 	c.Run()
-	if rec.Code != http.StatusOK {
-		t.Errorf("健康检查状态不符：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusOK)
+
 	body := rec.Body.String()
 	for _, want := range []string{"运行中", "2分钟", "code"} {
 		if !strings.Contains(body, want) {
@@ -57,9 +57,8 @@ func TestHealthHandlerWithChecks(t *testing.T) {
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
 	c.SetHandlers([]core.HandlerFunc{healthHandler(start, checks, nil)})
 	c.Run()
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("检查失败应 503：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusServiceUnavailable)
+
 	body := rec.Body.String()
 	if !strings.Contains(body, "异常") || !strings.Contains(body, "redis") || !strings.Contains(body, "连接失败") {
 		t.Errorf("检查结果不符：%s", body)
@@ -72,9 +71,8 @@ func TestHealthHandlerShuttingDown(t *testing.T) {
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	c.SetHandlers([]core.HandlerFunc{healthHandler(start, nil, func() bool { return true })})
 	c.Run()
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("关闭中就绪探针应 503：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusServiceUnavailable)
+
 	if !strings.Contains(rec.Body.String(), "关闭中") {
 		t.Errorf("关闭中响应体不符：%s", rec.Body.String())
 	}

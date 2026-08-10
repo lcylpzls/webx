@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	testx "github.com/lcylpzls/testx"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,7 +35,6 @@ func TestHooksNil(t *testing.T) {
 		func(c *core.Context) { called = true; c.Success("ok", nil) },
 	})
 	c.Run()
-	if !called {
-		t.Error("nil 回调应直接放行")
-	}
+	testx.True(t, called)
+
 }

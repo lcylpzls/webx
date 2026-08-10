@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"compress/gzip"
+	testx "github.com/lcylpzls/testx"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,16 +22,14 @@ func TestGzipCompresses(t *testing.T) {
 		func(c *core.Context) { _ = c.String(http.StatusOK, "压缩内容") },
 	})
 	c.Run()
-	if rec.Code != http.StatusOK {
-		t.Fatalf("状态不符：%d", rec.Code)
-	}
+	testx.RequireEqual(t, rec.Code, http.StatusOK)
+
 	if rec.Header().Get("Content-Encoding") != "gzip" || rec.Header().Get("Vary") != "Accept-Encoding" {
 		t.Errorf("响应头不符：%v", rec.Header())
 	}
 	zr, err := gzip.NewReader(rec.Body)
-	if err != nil {
-		t.Fatalf("响应体不是合法 gzip：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	got, _ := io.ReadAll(zr)
 	zr.Close()
 	if string(got) != "压缩内容" {
@@ -52,9 +51,8 @@ func TestGzipCustomLevel(t *testing.T) {
 		t.Fatalf("自定义级别未启用 gzip：%v", rec.Header())
 	}
 	zr, err := gzip.NewReader(rec.Body)
-	if err != nil {
-		t.Fatalf("响应体不是合法 gzip：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	got, _ := io.ReadAll(zr)
 	zr.Close()
 	if string(got) != "自定义级别压缩内容" {
@@ -76,9 +74,8 @@ func TestGzipInvalidLevelNormalized(t *testing.T) {
 		t.Fatalf("非法级别应回退默认并压缩：%v", rec.Header())
 	}
 	zr, err := gzip.NewReader(rec.Body)
-	if err != nil {
-		t.Fatalf("响应体不是合法 gzip：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	got, _ := io.ReadAll(zr)
 	zr.Close()
 	if string(got) != "非法级别回退默认" {
@@ -135,13 +132,11 @@ func TestGzipWriterMethods(t *testing.T) {
 	w.WriteHeader(http.StatusOK) // 二次写入无效
 	w.Flush()
 	_, err := w.Write([]byte("x"))
-	if err != nil {
-		t.Fatalf("Write 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	gz.Close()
-	if rec.Code != http.StatusCreated {
-		t.Errorf("状态码不符：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusCreated)
+
 	if w.Unwrap() != rec {
 		t.Error("Unwrap 不符")
 	}
@@ -210,9 +205,8 @@ func TestGzipMinSize(t *testing.T) {
 		t.Fatalf("大响应应压缩：%v", rec.Header())
 	}
 	zr, err := gzip.NewReader(rec.Body)
-	if err != nil {
-		t.Fatalf("响应体不是 gzip：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	got, _ := io.ReadAll(zr)
 	zr.Close()
 	if len(got) != 2048 {
@@ -242,9 +236,8 @@ func TestGzipFlushStarts(t *testing.T) {
 		t.Fatalf("Flush 应启动压缩：%v", rec.Header())
 	}
 	zr, err := gzip.NewReader(rec.Body)
-	if err != nil {
-		t.Fatalf("响应体不是 gzip：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	got, _ := io.ReadAll(zr)
 	zr.Close()
 	if string(got) != "abcd" {

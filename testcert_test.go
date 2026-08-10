@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	testx "github.com/lcylpzls/testx"
 	"math/big"
 	"net"
 	"os"
@@ -18,6 +19,7 @@ import (
 type testHelper interface {
 	Helper()
 	TempDir() string
+	Errorf(format string, args ...any)
 	Fatalf(format string, args ...any)
 	Cleanup(func())
 }
@@ -26,9 +28,8 @@ type testHelper interface {
 func writeTestCert(t testHelper) (string, string) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("生成测试密钥失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: "webx-test"},
@@ -40,14 +41,12 @@ func writeTestCert(t testHelper) (string, string) {
 		DNSNames:     []string{"localhost"},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	if err != nil {
-		t.Fatalf("创建测试证书失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyDER, err := x509.MarshalECPrivateKey(key)
-	if err != nil {
-		t.Fatalf("编码测试私钥失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
 
 	dir := t.TempDir()

@@ -3,6 +3,7 @@ package benchmarks
 import (
 	"context"
 	"crypto/tls"
+	testx "github.com/lcylpzls/testx"
 	"io"
 	"net"
 	"net/http"
@@ -40,18 +41,16 @@ func TestHertzTLSProtocol(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if proto != "HTTP/2.0" {
-		t.Fatalf("hertz h2 基准未协商到 HTTP/2，实际协议=%q", proto)
-	}
+	testx.RequireEqual(t, proto, "HTTP/2.0")
+
 }
 
 // startHertzTLS 启动 hertz TLS 服务（HTTP/1.1 或 HTTP/2），返回 HTTPS 地址与关闭函数。
 func startHertzTLS(b testing.TB, cert tls.Certificate, enableH2 bool) (string, func()) {
 	b.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		b.Fatal(err)
-	}
+	testx.RequireNoError(b, err)
+
 	cfg := &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS12,
@@ -186,9 +185,8 @@ func TestWebxH3Protocol(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	if base == "" {
-		t.Fatal("webx HTTP/3 启动超时")
-	}
+	testx.RequireNotEqual(t, base, "")
+
 	client, closeClient := newBenchClientH3()
 	defer closeClient()
 	var proto string
@@ -202,9 +200,8 @@ func TestWebxH3Protocol(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if proto != "HTTP/3.0" {
-		t.Fatalf("webx HTTP/3 基准未协商到 HTTP/3，实际协议=%q", proto)
-	}
+	testx.RequireEqual(t, proto, "HTTP/3.0")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = s.Stop(ctx)

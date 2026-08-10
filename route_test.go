@@ -1,6 +1,7 @@
 package webx
 
 import (
+	testx "github.com/lcylpzls/testx"
 	"testing"
 
 	"github.com/lcylpzls/webx/v2/internal/core"
@@ -67,9 +68,8 @@ func TestRouteGroupNested(t *testing.T) {
 		t.Fatalf("嵌套路由数量不符：%d", len(routes))
 	}
 	r := routes[0]
-	if r.Path != "/admin/users" {
-		t.Errorf("嵌套前缀不符：%s", r.Path)
-	}
+	testx.Equal(t, r.Path, "/admin/users")
+
 	if len(r.Middleware) != 2 {
 		t.Errorf("嵌套中间件继承不符：%d", len(r.Middleware))
 	}

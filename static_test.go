@@ -2,6 +2,7 @@ package webx
 
 import (
 	"errors"
+	testx "github.com/lcylpzls/testx"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -43,9 +44,8 @@ func TestSPANoRouteServeFileAndFallback(t *testing.T) {
 	c = core.NewContext(rec, httptest.NewRequest(http.MethodPost, "/route/x", nil))
 	c.SetHandlers([]core.HandlerFunc{h})
 	c.Run()
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("非 GET 应 404：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNotFound)
+
 }
 
 func TestSPANoRouteIndexMissing(t *testing.T) {
@@ -55,9 +55,8 @@ func TestSPANoRouteIndexMissing(t *testing.T) {
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
 	c.SetHandlers([]core.HandlerFunc{h})
 	c.Run()
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("index 缺失应 404：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNotFound)
+
 }
 
 func TestSPANoRouteStatError(t *testing.T) {
@@ -66,9 +65,8 @@ func TestSPANoRouteStatError(t *testing.T) {
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
 	c.SetHandlers([]core.HandlerFunc{h})
 	c.Run()
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("Stat 失败应 404：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNotFound)
+
 }
 
 // errStatFS 返回 Stat 失败的假文件系统。
@@ -112,9 +110,8 @@ func TestSPANoRouteRequestPathIsDir(t *testing.T) {
 	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
 	c.SetHandlers([]core.HandlerFunc{h2})
 	c.Run()
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("index 为目录应 404：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNotFound)
+
 }
 
 func TestServeStaticDirAndFS(t *testing.T) {
@@ -164,9 +161,8 @@ func TestServeStaticETag(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/f.txt", nil)
 	req.Header.Set("If-None-Match", etag)
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotModified {
-		t.Errorf("If-None-Match 命中应 304：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNotModified)
+
 	if rec.Body.Len() != 0 {
 		t.Errorf("304 不应携带响应体：%s", rec.Body.String())
 	}
@@ -174,9 +170,7 @@ func TestServeStaticETag(t *testing.T) {
 	// 缺失文件 → 回退 FileServer 404
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/missing.txt", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("缺失文件应 404：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNotFound)
 
 	// 目录请求 → 回退 FileServer，不生成 ETag
 	_ = os.WriteFile(filepath.Join(dir, "index.html"), []byte("index"), 0o600)
@@ -190,9 +184,8 @@ func TestServeStaticETag(t *testing.T) {
 	rec = httptest.NewRecorder()
 	staticOptionsFileServer(errStatFS{}, StaticOptions{EnableETag: true}).
 		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("Stat 失败回退 FileServer 应 500：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusInternalServerError)
+
 }
 
 func TestWeakETag(t *testing.T) {

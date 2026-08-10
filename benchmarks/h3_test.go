@@ -2,6 +2,7 @@ package benchmarks
 
 import (
 	"crypto/tls"
+	testx "github.com/lcylpzls/testx"
 	"io"
 	"net"
 	"net/http"
@@ -18,9 +19,8 @@ import (
 func startH3Handler(b testing.TB, handler http.Handler, cert tls.Certificate) (string, func()) {
 	b.Helper()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		b.Fatal(err)
-	}
+	testx.RequireNoError(b, err)
+
 	srv := &http3.Server{
 		Handler: handler,
 		TLSConfig: &tls.Config{
@@ -97,7 +97,6 @@ func TestStdH3Protocol(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if proto != "HTTP/3.0" {
-		t.Fatalf("标准库阵营 h3 基准未协商到 HTTP/3，实际协议=%q", proto)
-	}
+	testx.RequireEqual(t, proto, "HTTP/3.0")
+
 }

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	testx "github.com/lcylpzls/testx"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,9 +17,8 @@ func TestCORSAllowAll(t *testing.T) {
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{CORS(cfg), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
-	if rec.Code != http.StatusNoContent {
-		t.Errorf("OPTIONS 预检应返回 204：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusNoContent)
+
 	if rec.Header().Get("Access-Control-Allow-Origin") != "*" {
 		t.Error("Allow-Origin 不符")
 	}
@@ -58,9 +58,8 @@ func TestCORSAllowedOrigin(t *testing.T) {
 	if rec.Header().Get("Access-Control-Max-Age") != "60" {
 		t.Error("Max-Age 头不符")
 	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("非预检应放行：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusOK)
+
 }
 
 func TestCORSDisallowedAndNoOrigin(t *testing.T) {

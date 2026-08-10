@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	testx "github.com/lcylpzls/testx"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,9 +31,8 @@ func TestTimeoutTriggers(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("处理超时")
 	}
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("超时应返回 503：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusServiceUnavailable)
+
 	if !contains(rec.Body.String(), "请求处理超时") {
 		t.Errorf("503 响应体不符：%s", rec.Body.String())
 	}
@@ -66,9 +66,8 @@ func TestTimeoutWroteHeaderBeforeExpiry(t *testing.T) {
 		},
 	})
 	c.Run()
-	if rec.Code != http.StatusOK {
-		t.Errorf("已写状态码后不应返回 503：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusOK)
+
 }
 
 func TestTimeoutWritesBeforeExpiry(t *testing.T) {

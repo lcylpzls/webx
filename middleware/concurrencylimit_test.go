@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	testx "github.com/lcylpzls/testx"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -72,9 +73,8 @@ func TestConcurrencyLimitMiddleware(t *testing.T) {
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c2.Run()
-	if rec2.Code != http.StatusServiceUnavailable {
-		t.Errorf("额度已满应 503：%d", rec2.Code)
-	}
+	testx.Equal(t, rec2.Code, http.StatusServiceUnavailable)
+
 	if got := rec2.Header().Get("Retry-After"); got != "1" {
 		t.Errorf("应携带 Retry-After：%s", got)
 	}
@@ -87,9 +87,8 @@ func TestConcurrencyLimitMiddleware(t *testing.T) {
 	if got := l.Active(); got != 0 {
 		t.Errorf("处理完成后额度应释放：%d", got)
 	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("未超限应放行：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusOK)
+
 }
 
 func TestConcurrencyLimitCustomMessage(t *testing.T) {

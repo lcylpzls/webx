@@ -1,6 +1,7 @@
 package webx
 
 import (
+	testx "github.com/lcylpzls/testx"
 	"io"
 	"net/http"
 	"strings"
@@ -81,9 +82,8 @@ func TestServerExternalMetrics(t *testing.T) {
 	base := "https://" + s.ListenerAddr()
 	for i := 0; i < 2; i++ {
 		resp, err := client.Get(base + "/ok")
-		if err != nil {
-			t.Fatalf("业务请求失败：%v", err)
-		}
+		testx.RequireNoError(t, err)
+
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}
@@ -98,14 +98,12 @@ func TestServerExternalMetrics(t *testing.T) {
 	}
 	// v2 不再内置 /metrics 端点，请求应 404。
 	resp, err := client.Get(base + "/metrics")
-	if err != nil {
-		t.Fatalf("GET /metrics 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("v2 不应内置 /metrics 端点：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusNotFound)
+
 }
 
 func TestServerExternalMetricsRateLimited(t *testing.T) {
@@ -128,16 +126,14 @@ func TestServerExternalMetricsRateLimited(t *testing.T) {
 	var last int
 	for i := 0; i < 2; i++ {
 		resp, err := client.Get(base + "/ok")
-		if err != nil {
-			t.Fatalf("请求失败：%v", err)
-		}
+		testx.RequireNoError(t, err)
+
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 		last = resp.StatusCode
 	}
-	if last != http.StatusTooManyRequests {
-		t.Fatalf("第二次请求应 429：%d", last)
-	}
+	testx.RequireEqual(t, last, http.StatusTooManyRequests)
+
 	if got := sink.counterCount("webx.rate_limited"); got < 1 {
 		t.Errorf("外部应收到限流拒绝事件：%d", got)
 	}

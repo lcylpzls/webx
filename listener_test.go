@@ -3,6 +3,7 @@ package webx
 import (
 	"crypto/tls"
 	"errors"
+	testx "github.com/lcylpzls/testx"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,9 +17,8 @@ func testGetCert(cert, key string) func(*tls.ClientHelloInfo) (*tls.Certificate,
 func TestCreateTLSListener(t *testing.T) {
 	cert, key := writeTestCert(t)
 	ln, err := createTLSListener("127.0.0.1:0", testGetCert(cert, key), tls.VersionTLS12)
-	if err != nil {
-		t.Fatalf("TLS 监听失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	defer ln.Close()
 	if ln.Addr() == nil {
 		t.Error("监听地址为空")
@@ -34,9 +34,8 @@ func TestCreateTLSListener(t *testing.T) {
 func TestCreateQUICListener(t *testing.T) {
 	cert, key := writeTestCert(t)
 	qln, err := createQUICListener("127.0.0.1:0", testGetCert(cert, key), tls.VersionTLS13, 30*time.Second, 100)
-	if err != nil {
-		t.Fatalf("QUIC 监听失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	defer qln.Close()
 	if _, err := createQUICListener("bad-addr", testGetCert(cert, key), tls.VersionTLS13, 30*time.Second, 100); err == nil {
 		t.Error("非法地址应报错")
@@ -54,13 +53,11 @@ func TestCertificateProviderReload(t *testing.T) {
 
 	p := newCertificateProvider(certFile, keyFile)
 	first, err := p.getCertificate(nil)
-	if err != nil {
-		t.Fatalf("首次加载失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	cached, err := p.getCertificate(nil)
-	if err != nil {
-		t.Fatalf("缓存加载失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	if string(first.Certificate[0]) != string(cached.Certificate[0]) {
 		t.Error("缓存证书应一致")
 	}
@@ -69,9 +66,8 @@ func TestCertificateProviderReload(t *testing.T) {
 	copyFile(t, cert2, certFile)
 	copyFile(t, key2, keyFile)
 	reloaded, err := p.getCertificate(nil)
-	if err != nil {
-		t.Fatalf("重载失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	if string(first.Certificate[0]) == string(reloaded.Certificate[0]) {
 		t.Error("证书文件变化后应重载为新证书")
 	}
@@ -90,9 +86,8 @@ func TestCertificateProviderReload(t *testing.T) {
 func copyFile(t *testing.T, src, dst string) {
 	t.Helper()
 	data, err := os.ReadFile(src)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	if err := os.WriteFile(dst, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -104,9 +99,8 @@ func TestCreateUnixListener(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "test.sock")
 	ln, err := createUnixListener(path, 0o600)
-	if err != nil {
-		t.Fatalf("Unix 监听失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	ln.Close()
 	os.Remove(path)
 
@@ -120,9 +114,8 @@ func TestCreateUnixListener(t *testing.T) {
 		t.Fatal(err)
 	}
 	ln2, err := createUnixListener(stale, 0o600)
-	if err != nil {
-		t.Fatalf("残留清理后监听失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	ln2.Close()
 	os.Remove(stale)
 

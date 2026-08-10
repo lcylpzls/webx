@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	testx "github.com/lcylpzls/testx"
 	"io"
 	"net"
 	"net/http"
@@ -31,9 +32,8 @@ import (
 func newTestLogger(t testHelper) logx.Logger {
 	t.Helper()
 	l, err := logx.NewBuilder().EnableWriter(io.Discard, logx.InfoLevel).Build()
-	if err != nil {
-		t.Fatalf("构建测试日志器失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	t.Cleanup(func() { _ = l.Close() })
 	return l
 }
@@ -87,9 +87,8 @@ func testHTTPClient() *http.Client {
 
 func TestServerChainAPI(t *testing.T) {
 	s := newTestServer(t, validConfig(t))
-	if s == nil {
-		t.Fatal("NewServer 返回 nil")
-	}
+	testx.RequireNotNil(t, s)
+
 	if got := s.WithLogger(newTestLogger(t)); got != s {
 		t.Error("链式方法应返回自身")
 	}
@@ -300,19 +299,16 @@ func TestServerMaxBodyBytes(t *testing.T) {
 
 	resp, err := client.Post(base+"/echo", "application/json",
 		strings.NewReader(`{"data":"这是一个超过十六字节的请求体内容"}`))
-	if err != nil {
-		t.Fatalf("POST 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Errorf("超大请求体应 413：%d %s", resp.StatusCode, body)
 	}
-
 	resp, err = client.Post(base+"/echo", "application/json", strings.NewReader(`{"a":"b"}`))
-	if err != nil {
-		t.Fatalf("POST 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ = io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"a":"b"`) {
@@ -382,9 +378,8 @@ func TestServerIntegration(t *testing.T) {
 
 	// 正常路由 + 请求 ID
 	resp, err := client.Get(base + "/ping")
-	if err != nil {
-		t.Fatalf("GET /ping 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "pong") {
@@ -396,20 +391,16 @@ func TestServerIntegration(t *testing.T) {
 
 	// 路由组
 	resp, err = client.Get(base + "/api/v2/items")
-	if err != nil {
-		t.Fatalf("GET /api/v2/items 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("/api/v2/items 状态不符：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusOK)
 
 	// 健康检查
 	resp, err = client.Get(base + "/health")
-	if err != nil {
-		t.Fatalf("GET /health 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	hb, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(hb), "运行中") {
@@ -418,19 +409,16 @@ func TestServerIntegration(t *testing.T) {
 
 	// 404 / 405
 	resp, err = client.Get(base + "/nope")
-	if err != nil {
-		t.Fatalf("GET /nope 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("404 状态不符：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusNotFound)
+
 	req, _ := http.NewRequest(http.MethodPost, base+"/ping", nil)
 	resp, err = client.Do(req)
-	if err != nil {
-		t.Fatalf("POST /ping 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusMethodNotAllowed || resp.Header.Get("Allow") != "GET, HEAD" {
@@ -439,9 +427,8 @@ func TestServerIntegration(t *testing.T) {
 
 	// 静态文件
 	resp, err = client.Get(base + "/static/a.txt")
-	if err != nil {
-		t.Fatalf("静态文件请求失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	sb, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if string(sb) != "hello-webx" {
@@ -508,34 +495,28 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 	// 放行两次 /ok（消耗限流令牌，验证正常路由统计）
 	for i := 0; i < 2; i++ {
 		resp, err := client.Get(base + "/ok")
-		if err != nil {
-			t.Fatalf("GET /ok 失败：%v", err)
-		}
+		testx.RequireNoError(t, err)
+
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("放行请求应 200：%d", resp.StatusCode)
-		}
+		testx.Equal(t, resp.StatusCode, http.StatusOK)
+
 	}
 
 	// /boom 消耗最后一枚令牌并触发 panic
 	resp, err := client.Get(base + "/boom")
-	if err != nil {
-		t.Fatalf("GET /boom 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Errorf("panic 应 500：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusInternalServerError)
 
 	// 限流：令牌耗尽后应 429
 	resp, _ = client.Get(base + "/ok")
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusTooManyRequests {
-		t.Errorf("限流应 429：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusTooManyRequests)
+
 	if got := resp.Header.Get("Retry-After"); got != "1" {
 		t.Errorf("限流响应应带 Retry-After：%s", got)
 	}
@@ -591,9 +572,8 @@ func TestServerRouteGroupStats(t *testing.T) {
 	base := "https://" + s.ListenerAddr()
 	for _, path := range []string{"/api/users/1", "/api/users/2", "/api/admin", "/ping"} {
 		resp, err := client.Get(base + path)
-		if err != nil {
-			t.Fatalf("GET %s 失败：%v", path, err)
-		}
+		testx.RequireNoError(t, err)
+
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}
@@ -646,28 +626,23 @@ func TestServerRateLimitKeyFunc(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		resp, err := client.Get(base + "a")
-		if err != nil {
-			t.Fatalf("GET 失败：%v", err)
-		}
+		testx.RequireNoError(t, err)
+
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 		want := http.StatusOK
 		if i == 1 {
 			want = http.StatusTooManyRequests
 		}
-		if resp.StatusCode != want {
-			t.Errorf("用户 a 第 %d 次状态不符：%d", i+1, resp.StatusCode)
-		}
+		testx.Equal(t, resp.StatusCode, want)
+
 	}
 	resp, err := client.Get(base + "b")
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("不同用户应放行：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusOK)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -704,16 +679,14 @@ func TestServerGzipAndMetrics(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodGet, base+"/ok", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	if resp.Header.Get("Content-Encoding") != "gzip" {
 		t.Fatalf("应返回 gzip：%v", resp.Header)
 	}
 	zr, err := gzip.NewReader(resp.Body)
-	if err != nil {
-		t.Fatalf("响应体不是 gzip：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	got, _ := io.ReadAll(zr)
 	zr.Close()
 	resp.Body.Close()
@@ -733,9 +706,8 @@ func TestServerGzipAndMetrics(t *testing.T) {
 	resp, _ = client.Get(base + "/err")
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Errorf("错误路由应 500：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusInternalServerError)
+
 	m := s.Metrics()
 	if m.Requests < 3 || m.Errors5xx < 1 {
 		t.Errorf("Metrics 不符：%+v", m)
@@ -771,9 +743,8 @@ func TestMetricsProtocolHTTP2(t *testing.T) {
 		},
 	}
 	resp, err := client.Get("https://" + s.ListenerAddr() + "/ok")
-	if err != nil {
-		t.Fatalf("HTTP/2 请求失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	if resp.ProtoMajor != 2 {
@@ -801,9 +772,8 @@ func TestMetricsActiveConnections(t *testing.T) {
 	})
 	startServer(t, s)
 	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/ok")
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	if m := s.Metrics(); m.ActiveConnections < 1 {
@@ -833,9 +803,8 @@ func TestServerConnContextAndOnShutdown(t *testing.T) {
 	})
 	startServer(t, s)
 	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/ctx")
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if string(body) != "conn-value" {
@@ -870,9 +839,8 @@ func TestServerSecurityHeaders(t *testing.T) {
 	})
 	startServer(t, s)
 	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/ok")
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	if resp.Header.Get("X-Content-Type-Options") != "nosniff" ||
@@ -903,14 +871,12 @@ func TestServerCORSPNA(t *testing.T) {
 	})
 	startServer(t, s)
 	req, err := http.NewRequest(http.MethodGet, "https://"+s.ListenerAddr()+"/ok", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	req.Header.Set("Origin", "https://a.com")
 	resp, err := testHTTPClient().Do(req)
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	if got := resp.Header.Get("Access-Control-Allow-Private-Network"); got != "true" {
@@ -943,9 +909,8 @@ func TestServerTrustedProxies(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodGet, "https://"+s.ListenerAddr()+"/ip", nil)
 	req.Header.Set("X-Forwarded-For", "203.0.113.9")
 	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if !strings.Contains(string(body), "127.0.0.1") {
@@ -965,9 +930,8 @@ func TestServerTrustedProxies(t *testing.T) {
 	req, _ = http.NewRequest(http.MethodGet, "https://"+s2.ListenerAddr()+"/ip", nil)
 	req.Header.Set("X-Forwarded-For", "203.0.113.9")
 	resp, err = client.Do(req)
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ = io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if !strings.Contains(string(body), "203.0.113.9") {
@@ -1003,16 +967,14 @@ func TestServerMiddlewareCombo(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodGet, base+"/ok", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	if resp.Header.Get("X-Request-ID") == "" || resp.Header.Get("Content-Encoding") != "gzip" {
 		t.Fatalf("组合响应头不符：%v", resp.Header)
 	}
 	zr, err := gzip.NewReader(resp.Body)
-	if err != nil {
-		t.Fatalf("响应体不是 gzip：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	got, _ := io.ReadAll(zr)
 	zr.Close()
 	resp.Body.Close()
@@ -1050,13 +1012,11 @@ func TestServerSSEFlush(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodGet, "https://"+s.ListenerAddr()+"/sse", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("SSE 请求失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	zr, err := gzip.NewReader(resp.Body)
-	if err != nil {
-		t.Fatalf("响应体不是 gzip：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	got, _ := io.ReadAll(zr)
 	zr.Close()
 	resp.Body.Close()
@@ -1140,14 +1100,12 @@ func TestServerSetCertificateLoader(t *testing.T) {
 	})
 	startServer(t, s)
 	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/ping")
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("自定义证书加载器服务不符：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusOK)
+
 	// 启动后设置不生效（仅告警）
 	if got := s.SetCertificateLoader(nil); got != s {
 		t.Error("SetCertificateLoader 应返回自身")
@@ -1172,26 +1130,22 @@ func TestServerSNICertificates(t *testing.T) {
 	}
 	getCert := s.buildGetCertificate()
 	ca, err := getCert(&tls.ClientHelloInfo{ServerName: "a.example.com"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	cb, err := getCert(&tls.ClientHelloInfo{ServerName: "b.example.com"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	if string(ca.Certificate[0]) == string(cb.Certificate[0]) {
 		t.Error("不同 SNI 应返回不同证书")
 	}
 	defCert := newCertificateProvider(cfg.TLSCertFile, cfg.TLSKeyFile)
 	// 未匹配 SNI 回退默认证书
 	fallback, err := getCert(&tls.ClientHelloInfo{ServerName: "unknown.example.com"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	defaultLoaded, err := defCert.getCertificate(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	if string(fallback.Certificate[0]) != string(defaultLoaded.Certificate[0]) {
 		t.Error("未匹配 SNI 应回退默认证书")
 	}
@@ -1276,9 +1230,8 @@ func TestServerRequestIDOptions(t *testing.T) {
 	})
 	startServer(t, s)
 	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/ok")
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || resp.Header.Get("X-Trace-ID") != "trace-abc" {
@@ -1325,14 +1278,12 @@ func TestServerMaxConcurrentRequests(t *testing.T) {
 	<-entered
 
 	resp, err := client.Get(base + "/slow")
-	if err != nil {
-		t.Fatalf("超限请求失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Errorf("超限应 503：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusServiceUnavailable)
+
 	if got := resp.Header.Get("Retry-After"); got != "1" {
 		t.Errorf("应携带 Retry-After：%s", got)
 	}
@@ -1343,14 +1294,11 @@ func TestServerMaxConcurrentRequests(t *testing.T) {
 	<-slowDone
 
 	resp, err = client.Get(base + "/slow")
-	if err != nil {
-		t.Fatalf("恢复后请求失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("恢复后应放行：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusOK)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -1410,29 +1358,25 @@ func TestServerErrorMessages(t *testing.T) {
 	}
 
 	resp, err := client.Get(base + "/missing")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	check("404", resp, http.StatusNotFound, "流式 404")
 
 	patchReq, _ := http.NewRequest(http.MethodPatch, base+"/ok", nil)
 	resp, err = client.Do(patchReq)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	check("405", resp, http.StatusMethodNotAllowed, "自定义 405")
 
 	resp, err = client.Post(base+"/ok", "application/json", strings.NewReader(strings.Repeat("x", 100)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	check("413", resp, http.StatusRequestEntityTooLarge, "自定义 413")
 
 	for i := 0; i < 3; i++ {
 		resp, err = client.Get(base + "/ok")
-		if err != nil {
-			t.Fatal(err)
-		}
+		testx.RequireNoError(t, err)
+
 		if i == 2 {
 			check("429", resp, http.StatusTooManyRequests, "自定义 429")
 		} else {
@@ -1453,16 +1397,14 @@ func TestServerErrorMessages(t *testing.T) {
 	}()
 	time.Sleep(100 * time.Millisecond)
 	resp, err = client.Get(base + "/slow")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	check("503 繁忙", resp, http.StatusServiceUnavailable, "自定义 503 繁忙")
 	<-slowDone
 
 	resp, err = client.Get(base + "/slow")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	check("503 超时", resp, http.StatusServiceUnavailable, "自定义 503 超时")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1484,9 +1426,8 @@ func TestServerMiddlewareOrder(t *testing.T) {
 	})
 	startServer(t, s)
 	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/ok")
-	if err != nil {
-		t.Fatalf("GET 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || resp.Header.Get("X-Request-ID") == "" {
@@ -1514,9 +1455,8 @@ func TestServerHTTP3(t *testing.T) {
 	defer transport.Close()
 	client := &http.Client{Transport: transport, Timeout: 10 * time.Second}
 	resp, err := client.Get("https://" + h3Addr + "/ping")
-	if err != nil {
-		t.Fatalf("HTTP/3 请求失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "h3") {
@@ -1571,9 +1511,8 @@ func TestServerUnixSocket(t *testing.T) {
 		},
 	}
 	resp, err := client.Get("http://unix/ping")
-	if err != nil {
-		t.Fatalf("Unix Socket 请求失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "unix") {
@@ -1624,9 +1563,8 @@ func TestServerHealthUserRegistered(t *testing.T) {
 	})
 	startServer(t, s)
 	resp, err := testHTTPClient().Get("https://" + s.ListenerAddr() + "/health")
-	if err != nil {
-		t.Fatalf("GET /health 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if string(body) != "custom-health" {
@@ -1645,9 +1583,8 @@ func TestServerHealthUserRegistered(t *testing.T) {
 	})
 	startServer(t, s2)
 	resp, err = testHTTPClient().Get("https://" + s2.ListenerAddr() + "/health")
-	if err != nil {
-		t.Fatalf("GET /health 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ = io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if string(body) != "group-health" {
@@ -1666,14 +1603,12 @@ func TestServerHealthChecks(t *testing.T) {
 	startServer(t, s)
 	client := testHTTPClient()
 	resp, err := client.Get("https://" + s.ListenerAddr() + "/health")
-	if err != nil {
-		t.Fatalf("GET /health 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Errorf("检查失败应 503：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusServiceUnavailable)
+
 	if !strings.Contains(string(body), "redis") || !strings.Contains(string(body), "连接失败") {
 		t.Errorf("检查结果不符：%s", body)
 	}
@@ -1702,9 +1637,8 @@ func TestServerLivenessReadiness(t *testing.T) {
 	base := "https://" + s.ListenerAddr()
 
 	resp, err := client.Get(base + "/healthz")
-	if err != nil {
-		t.Fatalf("GET /healthz 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "运行中") {
@@ -1712,9 +1646,8 @@ func TestServerLivenessReadiness(t *testing.T) {
 	}
 
 	resp, err = client.Get(base + "/readyz")
-	if err != nil {
-		t.Fatalf("GET /readyz 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	body, _ = io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusServiceUnavailable || !strings.Contains(string(body), "数据库未就绪") {
@@ -1722,14 +1655,11 @@ func TestServerLivenessReadiness(t *testing.T) {
 	}
 
 	resp, err = client.Get(base + "/health")
-	if err != nil {
-		t.Fatalf("GET /health 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("/health 聚合探针不符：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusOK)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -1814,9 +1744,8 @@ func TestServerUnixServeErrorLogged(t *testing.T) {
 	s.closeListeners()
 	select {
 	case err := <-errCh:
-		if err != nil {
-			t.Errorf("Start 应正常返回：%v", err)
-		}
+		testx.NoError(t, err)
+
 	case <-time.After(2 * time.Second):
 		t.Fatal("服务未退出")
 	}
@@ -1880,9 +1809,7 @@ func TestServerStaticAndSPA(t *testing.T) {
 	resp, _ = client.Do(req)
 	_, _ = io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("SPA 非 GET 应 404：%d", resp.StatusCode)
-	}
+	testx.Equal(t, resp.StatusCode, http.StatusNotFound)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -1926,9 +1853,8 @@ func TestServerWaitSignal(t *testing.T) {
 func freeUDPAddr(t *testing.T) string {
 	t.Helper()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	addr := pc.LocalAddr().String()
 	pc.Close()
 	return addr
@@ -1950,22 +1876,18 @@ func TestGlobalMiddlewareCoversFallbacks(t *testing.T) {
 
 	base := "https://" + s.ListenerAddr()
 	resp, err := testHTTPClient().Get(base + "/missing")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("404 状态不符：%d", resp.StatusCode)
-	}
+	testx.RequireEqual(t, resp.StatusCode, http.StatusNotFound)
+
 	req, _ := http.NewRequest(http.MethodPost, base+"/hello", nil)
 	resp2, err := testHTTPClient().Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	_ = resp2.Body.Close()
-	if resp2.StatusCode != http.StatusMethodNotAllowed {
-		t.Fatalf("405 状态不符：%d", resp2.StatusCode)
-	}
+	testx.RequireEqual(t, resp2.StatusCode, http.StatusMethodNotAllowed)
+
 	if hits.Load() != 2 {
 		t.Fatalf("全局中间件应覆盖 404/405，实际命中：%d", hits.Load())
 	}

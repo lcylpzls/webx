@@ -3,6 +3,7 @@ package webx
 import (
 	"crypto/tls"
 	"errors"
+	testx "github.com/lcylpzls/testx"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,9 +99,8 @@ func TestConfigValidateExplicitLevelAndCORS(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate 失败：%v", err)
 	}
-	if cfg.LogLevel != "debug" {
-		t.Errorf("显式日志级别被覆盖：%s", cfg.LogLevel)
-	}
+	testx.Equal(t, cfg.LogLevel, "debug")
+
 	if len(cfg.CORSAllowedOrigins) != 1 || cfg.CORSAllowedOrigins[0] != "https://example.com" {
 		t.Errorf("显式 CORS 配置被覆盖：%v", cfg.CORSAllowedOrigins)
 	}
@@ -187,9 +187,8 @@ not_found = "页面不存在"
 		t.Fatal(err)
 	}
 	cfg, err := LoadConfig(path)
-	if err != nil {
-		t.Fatalf("LoadConfig 失败：%v", err)
-	}
+	testx.RequireNoError(t, err)
+
 	if cfg.HealthPath != "/ready" || cfg.LogLevel != "debug" || cfg.ReadTimeout != 5*time.Second {
 		t.Errorf("配置加载不符：%+v", cfg)
 	}

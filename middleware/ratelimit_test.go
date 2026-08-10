@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	testx "github.com/lcylpzls/testx"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -98,18 +99,16 @@ func TestRateLimiterCleanup(t *testing.T) {
 	rl.mu.Lock()
 	_, ok := rl.buckets["1.1.1.1"]
 	rl.mu.Unlock()
-	if ok {
-		t.Error("过期桶应被清理")
-	}
+	testx.False(t, ok)
+
 	// 活跃桶不应被清理
 	rl.Allow("2.2.2.2")
 	rl.Cleanup(time.Hour)
 	rl.mu.Lock()
 	_, ok = rl.buckets["2.2.2.2"]
 	rl.mu.Unlock()
-	if !ok {
-		t.Error("活跃桶不应被清理")
-	}
+	testx.True(t, ok)
+
 }
 
 func TestRateLimitMiddleware(t *testing.T) {
@@ -173,9 +172,8 @@ func TestRateLimitMiddlewareNoRetryAfter(t *testing.T) {
 	}
 	run("1.1.1.1")
 	rec := run("2.2.2.2")
-	if rec.Code != http.StatusTooManyRequests {
-		t.Errorf("桶上限拒绝应 429：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusTooManyRequests)
+
 	if got := rec.Header().Get("Retry-After"); got != "" {
 		t.Errorf("无桶时不应设置 Retry-After：%s", got)
 	}

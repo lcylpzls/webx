@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	testx "github.com/lcylpzls/testx"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -118,9 +119,8 @@ func BenchmarkServerRequest(b *testing.B) {
 	url := "https://" + s.ListenerAddr() + "/ping"
 	// 预热并建立连接
 	resp, err := client.Get(url)
-	if err != nil {
-		b.Fatalf("预热请求失败：%v", err)
-	}
+	testx.RequireNoError(b, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 
@@ -128,9 +128,8 @@ func BenchmarkServerRequest(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		resp, err := client.Get(url)
-		if err != nil {
-			b.Fatalf("请求失败：%v", err)
-		}
+		testx.RequireNoError(b, err)
+
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}
@@ -190,9 +189,8 @@ func BenchmarkServerRequestFull(b *testing.B) {
 	}
 	url := "https://" + s.ListenerAddr() + "/ping"
 	resp, err := client.Get(url)
-	if err != nil {
-		b.Fatalf("预热请求失败：%v", err)
-	}
+	testx.RequireNoError(b, err)
+
 	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 
@@ -200,9 +198,8 @@ func BenchmarkServerRequestFull(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		resp, err := client.Get(url)
-		if err != nil {
-			b.Fatalf("请求失败：%v", err)
-		}
+		testx.RequireNoError(b, err)
+
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}

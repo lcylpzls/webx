@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"crypto/tls"
+	testx "github.com/lcylpzls/testx"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,9 +17,8 @@ import (
 func TestAccessLogSuccessOnly(t *testing.T) {
 	var buf bytes.Buffer
 	logger, err := logx.NewBuilder().EnableWriter(&buf, logx.InfoLevel).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	defer logger.Close()
 
 	// 成功请求且 successOnly=false：不记录
@@ -66,9 +66,8 @@ func TestAccessLogSuccessOnly(t *testing.T) {
 func TestAccessLogLogAll(t *testing.T) {
 	var buf bytes.Buffer
 	logger, err := logx.NewBuilder().EnableWriter(&buf, logx.InfoLevel).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	defer logger.Close()
 
 	rec := httptest.NewRecorder()
@@ -89,9 +88,8 @@ func TestAccessLogLogAll(t *testing.T) {
 func TestAccessLogRedaction(t *testing.T) {
 	var buf bytes.Buffer
 	logger, err := logx.NewBuilder().EnableWriter(&buf, logx.InfoLevel).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	defer logger.Close()
 
 	req := httptest.NewRequest(http.MethodGet, "/s?token=abc123&name=ok", nil)
@@ -113,9 +111,8 @@ func TestAccessLogRedaction(t *testing.T) {
 func TestAccessLogSampling(t *testing.T) {
 	var buf bytes.Buffer
 	logger, err := logx.NewBuilder().EnableWriter(&buf, logx.InfoLevel).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	defer logger.Close()
 
 	origRand := sampleRand
@@ -153,9 +150,8 @@ func TestAccessLogSampling(t *testing.T) {
 func TestAccessLogSlowThreshold(t *testing.T) {
 	var buf bytes.Buffer
 	logger, err := logx.NewBuilder().EnableWriter(&buf, logx.InfoLevel).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	defer logger.Close()
 
 	rec := httptest.NewRecorder()
@@ -194,9 +190,8 @@ func TestAccessLogSlowThreshold(t *testing.T) {
 func TestAccessLogHeaderWhitelist(t *testing.T) {
 	var buf bytes.Buffer
 	logger, err := logx.NewBuilder().EnableWriter(&buf, logx.InfoLevel).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testx.RequireNoError(t, err)
+
 	defer logger.Close()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

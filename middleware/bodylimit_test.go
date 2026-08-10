@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	testx "github.com/lcylpzls/testx"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,12 +21,10 @@ func TestBodyLimitOverContentLength(t *testing.T) {
 		func(c *core.Context) { aborted = false },
 	})
 	c.Run()
-	if rec.Code != http.StatusRequestEntityTooLarge {
-		t.Errorf("超限应 413：%d", rec.Code)
-	}
-	if !aborted {
-		t.Error("超限应终止链")
-	}
+	testx.Equal(t, rec.Code, http.StatusRequestEntityTooLarge)
+
+	testx.True(t, aborted)
+
 }
 
 func TestBodyLimitCustomMessage(t *testing.T) {
@@ -55,9 +54,8 @@ func TestBodyLimitChunkedWrapped(t *testing.T) {
 		},
 	})
 	c.Run()
-	if readErr == nil {
-		t.Error("chunked 超限读取应报错")
-	}
+	testx.NotNil(t, readErr)
+
 }
 
 func TestBodyLimitUnderLimit(t *testing.T) {
@@ -69,9 +67,8 @@ func TestBodyLimitUnderLimit(t *testing.T) {
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
-	if rec.Code != http.StatusOK {
-		t.Errorf("未超限应放行：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusOK)
+
 }
 
 func TestBodyLimitDisabledAndNilBody(t *testing.T) {
@@ -82,9 +79,7 @@ func TestBodyLimitDisabledAndNilBody(t *testing.T) {
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
-	if rec.Code != http.StatusOK {
-		t.Errorf("禁用时应放行：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusOK)
 
 	rec = httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -95,7 +90,6 @@ func TestBodyLimitDisabledAndNilBody(t *testing.T) {
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
-	if rec.Code != http.StatusOK {
-		t.Errorf("nil body 应放行：%d", rec.Code)
-	}
+	testx.Equal(t, rec.Code, http.StatusOK)
+
 }

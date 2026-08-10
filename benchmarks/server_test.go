@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	testx "github.com/lcylpzls/testx"
 	"io"
 	"log"
 	"math/big"
@@ -31,9 +32,8 @@ import (
 func writeBenchCert(tb testing.TB) (certFile, keyFile string, cert tls.Certificate) {
 	tb.Helper()
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		tb.Fatal(err)
-	}
+	testx.RequireNoError(tb, err)
+
 	tmpl := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: "localhost"},
@@ -45,13 +45,11 @@ func writeBenchCert(tb testing.TB) (certFile, keyFile string, cert tls.Certifica
 		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &priv.PublicKey, priv)
-	if err != nil {
-		tb.Fatal(err)
-	}
+	testx.RequireNoError(tb, err)
+
 	keyDER, err := x509.MarshalECPrivateKey(priv)
-	if err != nil {
-		tb.Fatal(err)
-	}
+	testx.RequireNoError(tb, err)
+
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
 	dir := tb.TempDir()
@@ -64,9 +62,8 @@ func writeBenchCert(tb testing.TB) (certFile, keyFile string, cert tls.Certifica
 		tb.Fatal(err)
 	}
 	cert, err = tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		tb.Fatal(err)
-	}
+	testx.RequireNoError(tb, err)
+
 	return certFile, keyFile, cert
 }
 
@@ -154,9 +151,8 @@ func runBenchRequestsWithClient(b *testing.B, base string, warmup int, client *h
 func startStdTLS(b testing.TB, handler http.Handler, cert tls.Certificate) (string, func()) {
 	b.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		b.Fatal(err)
-	}
+	testx.RequireNoError(b, err)
+
 	// 使用 ServeTLS + TLSConfig：标准库会在此路径上自动启用 HTTP/2（ALPN h2），
 	// 同时保持 TLS 1.2 下限与外部 tls.Listen 行为一致。
 	srv := &http.Server{
@@ -200,9 +196,8 @@ func BenchmarkServerTLSWebx(b *testing.B) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	if base == "" {
-		b.Fatal("webx 启动超时")
-	}
+	testx.RequireNotEqual(b, base, "")
+
 	runBenchRequests(b, base, 200)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -249,9 +244,8 @@ func BenchmarkServerTLSWebxFull(b *testing.B) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	if base == "" {
-		b.Fatal("webx 启动超时")
-	}
+	testx.RequireNotEqual(b, base, "")
+
 	runBenchRequests(b, base, 200)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -343,9 +337,8 @@ func TestStdTLSServeMuxH2(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if proto != "HTTP/2.0" {
-		t.Fatalf("标准库 h2 基准未协商到 HTTP/2，实际协议=%q", proto)
-	}
+	testx.RequireEqual(t, proto, "HTTP/2.0")
+
 }
 
 func BenchmarkServerTLSFasthttp(b *testing.B) {
@@ -354,9 +347,8 @@ func BenchmarkServerTLSFasthttp(b *testing.B) {
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS12,
 	})
-	if err != nil {
-		b.Fatal(err)
-	}
+	testx.RequireNoError(b, err)
+
 	fs := &fasthttp.Server{Handler: func(ctx *fasthttp.RequestCtx) {
 		_, _ = ctx.WriteString("hello")
 	}, Logger: discardLogger{}}
