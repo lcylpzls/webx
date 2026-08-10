@@ -1,7 +1,10 @@
 package middleware
 
 import (
-	"github.com/google/uuid"
+	"fmt"
+	"time"
+
+	"github.com/lcylpzls/idgenx"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
@@ -27,7 +30,7 @@ func RequestIDWithOptions(opts RequestIDOptions) core.HandlerFunc {
 	}
 	generator := opts.Generator
 	if generator == nil {
-		generator = newUUIDV7
+		generator = newRequestID
 	}
 	canonical := core.CanonicalHeaderKey(header)
 	return func(c *core.Context) {
@@ -43,7 +46,15 @@ func RequestIDWithOptions(opts RequestIDOptions) core.HandlerFunc {
 	}
 }
 
-// newUUIDV7 生成 UUID v7（时间有序，适合分布式链路 ID）。
-func newUUIDV7() string {
-	return uuid.Must(uuid.NewV7()).String()
+// requestIDRand 可替换的随机 ID 生成函数（测试注入失败场景用）。
+var requestIDRand = idgenx.RandomHex
+
+// newRequestID 生成 16 字节随机十六进制请求 ID（32 位小写 hex）。
+// 随机源失败时回退时间戳前缀，保证请求 ID 始终可用。
+func newRequestID() string {
+	id, err := requestIDRand(16)
+	if err != nil {
+		return fmt.Sprintf("req-%d", time.Now().UnixNano())
+	}
+	return id
 }

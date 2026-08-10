@@ -2,6 +2,21 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v1.4.0] - 2026-08-10
+
+### 变更
+
+- 请求 ID 生成从 `google/uuid`（UUID v7）迁移到家族 `idgenx`：
+  - 默认请求 ID 改为 `idgenx.RandomHex(16)`（32 位小写 hex）；
+  - 随机源失败时回退时间戳前缀（`req-<纳秒>`），保证中间件始终可用；
+  - 移除 `google/uuid` 第三方依赖；
+  - `Generator func() string` 自定义生成器 API 保持不变。
+
+### 质量
+
+- 根包与全部子包语句覆盖率保持 100%；race / vet / staticcheck /
+  govulncheck 全绿。
+
 ## [v1.3.0] - 2026-08-10
 
 ### 变更

@@ -1,15 +1,17 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/lcylpzls/webx/internal/core"
 )
 
-var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+var requestIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 func TestRequestIDFromHeader(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -37,8 +39,8 @@ func TestRequestIDGenerated(t *testing.T) {
 	c.SetHandlers([]core.HandlerFunc{
 		RequestID(),
 		func(c *core.Context) {
-			if !uuidPattern.MatchString(c.RequestID()) {
-				t.Errorf("生成的 UUID v7 格式不符：%s", c.RequestID())
+			if !requestIDPattern.MatchString(c.RequestID()) {
+				t.Errorf("生成的随机请求 ID 格式不符：%s", c.RequestID())
 			}
 			if got := req.Header.Get("X-Request-ID"); got != c.RequestID() {
 				t.Errorf("出站请求头未透传：%s", got)
@@ -87,11 +89,21 @@ func TestRequestIDWithOptions(t *testing.T) {
 	c.Run()
 }
 
-func TestNewUUIDV7(t *testing.T) {
+func TestNewRequestID(t *testing.T) {
 	for i := 0; i < 100; i++ {
-		id := newUUIDV7()
-		if !uuidPattern.MatchString(id) {
-			t.Fatalf("newUUIDV7 格式不符：%s", id)
+		id := newRequestID()
+		if !requestIDPattern.MatchString(id) {
+			t.Fatalf("newRequestID 格式不符：%s", id)
 		}
+	}
+}
+
+func TestNewRequestIDFallback(t *testing.T) {
+	orig := requestIDRand
+	requestIDRand = func(int) (string, error) { return "", errors.New("随机源故障") }
+	defer func() { requestIDRand = orig }()
+	id := newRequestID()
+	if !strings.HasPrefix(id, "req-") {
+		t.Fatalf("随机源失败应回退时间戳前缀：%s", id)
 	}
 }
