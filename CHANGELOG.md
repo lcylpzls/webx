@@ -2,6 +2,16 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v1.5.1] - 2026-08-10
+
+### 变更
+
+- 路由/表单/平台错误统一 errx 化：新增 CodeRouteInvalid、CodeFormInvalid（core 包），分组回调 panic 使用 CodePanic，Windows 版本检查使用 CodeConfigInvalid；对外错误带结构化 code/kind，消息保持原语义。
+
+### 质量
+
+- 全部库包语句覆盖率保持 100%；race / vet / staticcheck / fuzz / govulncheck 全绿。
+
 ## [v1.5.0] - 2026-08-10
 
 ### 变更

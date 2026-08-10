@@ -32,6 +32,8 @@ const (
 	CodeShutdownFailed errx.Code = "WEBX_SHUTDOWN_FAILED"
 	// CodePanic 请求处理发生 panic（Recovery 中间件捕获）。
 	CodePanic errx.Code = "WEBX_PANIC"
+	// CodeRouteInvalid 路由注册/解析失败。
+	CodeRouteInvalid errx.Code = "WEBX_ROUTE_INVALID"
 )
 
 func init() {
@@ -47,4 +49,6 @@ func init() {
 	errx.RegisterCodeKind(CodeShutdownFailed, errx.KindUnavailable)
 	errx.RegisterCode(CodePanic, "webx 请求处理发生 panic")
 	errx.RegisterCodeKind(CodePanic, errx.KindInternal)
+	errx.RegisterCode(CodeRouteInvalid, "webx 路由注册/解析失败")
+	errx.RegisterCodeKind(CodeRouteInvalid, errx.KindInvalid)
 }

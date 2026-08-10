@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -845,7 +844,7 @@ func (s *Server) hasRoute(path string) (bool, error) {
 func callRouteGroupFn(fn func(*RouteGroup), rg *RouteGroup) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("webx：路由分组回调 panic：%v", r)
+			err = errx.NewCodef(CodePanic, "webx：路由分组回调 panic：%v", r)
 		}
 	}()
 	fn(rg)

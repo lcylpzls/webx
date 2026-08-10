@@ -10,7 +10,17 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/lcylpzls/errx"
 )
+
+// CodeFormInvalid 表单绑定/文件处理失败。
+const CodeFormInvalid errx.Code = "WEBX_FORM_INVALID"
+
+func init() {
+	errx.RegisterCode(CodeFormInvalid, "webx 表单绑定/文件处理失败")
+	errx.RegisterCodeKind(CodeFormInvalid, errx.KindInvalid)
+}
 
 // openMultipartFile 打开上传文件（测试可替换以覆盖异常分支）。
 var openMultipartFile = func(fh *multipart.FileHeader) (multipart.File, error) {
@@ -56,7 +66,7 @@ func (c *Context) FormFile(name string) (*multipart.FileHeader, error) {
 	}
 	files := c.request.MultipartForm.File[name]
 	if len(files) == 0 {
-		return nil, errors.New("webx：上传文件不存在：" + name)
+		return nil, errx.NewCode(CodeFormInvalid, "webx：上传文件不存在："+name)
 	}
 	return files[0], nil
 }
@@ -64,7 +74,7 @@ func (c *Context) FormFile(name string) (*multipart.FileHeader, error) {
 // SaveUploadedFile 将上传文件保存到 dest（沿用 SetMaxBodyBytes 限制）。
 func (c *Context) SaveUploadedFile(fh *multipart.FileHeader, dest string) error {
 	if fh == nil {
-		return errors.New("webx：上传文件不能为空")
+		return errx.NewCode(CodeFormInvalid, "webx：上传文件不能为空")
 	}
 	if c.maxBody > 0 && fh.Size > c.maxBody {
 		return &http.MaxBytesError{Limit: c.maxBody}
@@ -100,7 +110,7 @@ func bindValues(out any, values url.Values, tagName string) error {
 func bindValuesRec(out any, values url.Values, tagName string, visited map[reflect.Type]bool) error {
 	rv := reflect.ValueOf(out)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
-		return errors.New("webx：绑定目标必须为非空指针")
+		return errx.NewCode(CodeFormInvalid, "webx：绑定目标必须为非空指针")
 	}
 	rv = rv.Elem()
 	rt := rv.Type()
@@ -187,11 +197,11 @@ func bindValuesRec(out any, values url.Values, tagName string, visited map[refle
 			field.SetBool(b)
 		case reflect.Slice:
 			if field.Type().Elem().Kind() != reflect.String {
-				return errors.New("webx：表单切片仅支持 []string")
+				return errx.NewCode(CodeFormInvalid, "webx：表单切片仅支持 []string")
 			}
 			field.Set(reflect.ValueOf(append([]string(nil), vals...)))
 		default:
-			return errors.New("webx：表单字段类型不支持")
+			return errx.NewCode(CodeFormInvalid, "webx：表单字段类型不支持")
 		}
 	}
 	return nil

@@ -1,12 +1,12 @@
 package webx
 
 import (
-	"fmt"
 	"net/http"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/lcylpzls/errx"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
@@ -69,7 +69,7 @@ func (rt *Router) Handle(method, path string, chain []core.HandlerFunc) error {
 		return err
 	}
 	if method == "" {
-		return fmt.Errorf("webx：路由方法不能为空：%s", path)
+		return errx.NewCodef(CodeRouteInvalid, "webx：路由方法不能为空：%s", path)
 	}
 	// translateGinPattern 已保证规范形式合法，这里不再重复校验。
 	segs, _ := parsePattern(translated)
@@ -118,7 +118,7 @@ func (rt *Router) insert(method string, segs []segment, handler requestHandler, 
 				node.wildChild = &routeNode{wildcard: true, param: seg.param, children: map[string]*routeNode{}}
 			}
 			if node.wildChild.param != seg.param {
-				return fmt.Errorf("webx：通配参数名冲突：%s 与 %s", node.wildChild.param, seg.param)
+				return errx.NewCodef(CodeRouteInvalid, "webx：通配参数名冲突：%s 与 %s", node.wildChild.param, seg.param)
 			}
 			node = node.wildChild
 		case seg.param != "":
@@ -126,7 +126,7 @@ func (rt *Router) insert(method string, segs []segment, handler requestHandler, 
 				node.paramChild = &routeNode{param: seg.param, children: map[string]*routeNode{}}
 			}
 			if node.paramChild.param != seg.param {
-				return fmt.Errorf("webx：路由参数名冲突：%s 与 %s", node.paramChild.param, seg.param)
+				return errx.NewCodef(CodeRouteInvalid, "webx：路由参数名冲突：%s 与 %s", node.paramChild.param, seg.param)
 			}
 			node = node.paramChild
 		default:
@@ -140,10 +140,10 @@ func (rt *Router) insert(method string, segs []segment, handler requestHandler, 
 		node.handlers = map[string]requestHandler{}
 	}
 	if _, dup := node.handlers[method]; dup {
-		return fmt.Errorf("webx：路由重复注册：%s", method)
+		return errx.NewCodef(CodeRouteInvalid, "webx：路由重复注册：%s", method)
 	}
 	if len(node.handlers) > 0 && node.subtree != subtree {
-		return fmt.Errorf("webx：精确路由与子树路由冲突")
+		return errx.NewCode(CodeRouteInvalid, "webx：精确路由与子树路由冲突")
 	}
 	node.handlers[method] = handler
 	if subtree {
@@ -305,7 +305,7 @@ func translateGinPattern(path string) (string, []string, error) {
 			}
 			name := path[i+1 : j]
 			if !validParamName(name) {
-				return "", nil, fmt.Errorf("webx：路由参数名非法：%q（路径 %s）", name, path)
+				return "", nil, errx.NewCodef(CodeRouteInvalid, "webx：路由参数名非法：%q（路径 %s）", name, path)
 			}
 			params = append(params, name)
 			b.WriteByte('{')
@@ -319,10 +319,10 @@ func translateGinPattern(path string) (string, []string, error) {
 			}
 			name := path[i+1 : j]
 			if !validParamName(name) {
-				return "", nil, fmt.Errorf("webx：通配参数名非法：%q（路径 %s）", name, path)
+				return "", nil, errx.NewCodef(CodeRouteInvalid, "webx：通配参数名非法：%q（路径 %s）", name, path)
 			}
 			if j < len(path) {
-				return "", nil, fmt.Errorf("webx：通配参数必须是路径最后一段：%s", path)
+				return "", nil, errx.NewCodef(CodeRouteInvalid, "webx：通配参数必须是路径最后一段：%s", path)
 			}
 			params = append(params, name)
 			b.WriteByte('{')
@@ -371,7 +371,7 @@ func parsePattern(pattern string) ([]segment, error) {
 	}
 	for i, s := range segs {
 		if s.wildcard && i != len(segs)-1 {
-			return nil, fmt.Errorf("webx：通配参数必须是路径最后一段：%s", pattern)
+			return nil, errx.NewCodef(CodeRouteInvalid, "webx：通配参数必须是路径最后一段：%s", pattern)
 		}
 	}
 	return segs, nil

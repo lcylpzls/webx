@@ -3,9 +3,10 @@
 package webx
 
 import (
-	"fmt"
 	"syscall"
 	"unsafe"
+
+	"github.com/lcylpzls/errx"
 )
 
 // minWindowsBuild 是支持 AF_UNIX 的最低 Windows build 号（1803）。
@@ -32,7 +33,8 @@ func unixSocketSupported() error {
 // checkWindowsBuild 判断 build 号是否满足 AF_UNIX 最低要求。
 func checkWindowsBuild(build int) error {
 	if build < minWindowsBuild {
-		return fmt.Errorf(
+		return errx.NewCodef(
+			CodeConfigInvalid,
 			"webx：当前 Windows 系统版本过低（build %d），不支持 Unix Socket 监听，"+
 				"需要 Windows 10 build 1803 (10.0.17134) 或更高版本",
 			build,
