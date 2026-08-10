@@ -2,6 +2,17 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v1.5.0] - 2026-08-10
+
+### 变更
+
+- HTTP 请求语义校验（Content-Type / 请求体大小）统一迁移至家族 `validx`：注册 `webx_http_request` 全局规则，中间件判定走 `validx.ValidateField`；
+- 路由 pattern 参数名校验属路由解析器，保留在 router.go；新增 validx v1.2.2 依赖。
+
+### 质量
+
+- 全部库包语句覆盖率保持 100%；race / vet / staticcheck / fuzz / govulncheck 全绿。
+
 ## [v1.4.0] - 2026-08-10
 
 ### 变更

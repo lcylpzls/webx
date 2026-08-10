@@ -3,29 +3,52 @@ package middleware
 import (
 	"net/http"
 
+	"github.com/lcylpzls/errx"
+	"github.com/lcylpzls/validx"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
-// Validation 返回请求参数校验中间件：
-// 校验 Content-Type 是否为 JSON、Content-Length 是否超过 10MB。
+const maxRequestBodyBytes = 10 * 1024 * 1024
+
+// validationInput 是 HTTP 请求语义校验输入。
+type validationInput struct {
+	method      string
+	contentType string
+	contentLen  int64
+}
+
+// init 注册 HTTP 请求语义校验规则到 validx 全局规则表。
+func init() {
+	_ = validx.RegisterRule("webx_http_request", func(value any, param, path string) error {
+		// 内部调用保证 value 为 validationInput。
+		in := value.(validationInput)
+		if in.method == http.MethodGet || in.method == http.MethodHead || in.method == http.MethodOptions {
+			return nil
+		}
+		if in.contentType == "" {
+			return nil
+		}
+		if !isJSONContentType(in.contentType) && !isMultipartForm(in.contentType) {
+			return errx.NewCode(validx.CodeValidationFailed, "请求参数校验失败：Content-Type 必须为 application/json 或 multipart/form-data")
+		}
+		if in.contentLen > maxRequestBodyBytes {
+			return errx.NewCode(validx.CodeValidationFailed, "请求参数校验失败：请求体过大")
+		}
+		return nil
+	})
+}
+
+// Validation 返回请求参数校验中间件：校验 Content-Type 是否为 JSON/
+// multipart、Content-Length 是否超过 10MB（判定统一走 validx 规则）。
 func Validation() core.HandlerFunc {
 	return func(c *core.Context) {
-		method := c.Request().Method
-		if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
-			c.Next()
-			return
-		}
-		contentType := c.GetHeaderCanonical(canonicalContentType)
-		if contentType == "" {
-			c.Next()
-			return
-		}
-		if !isJSONContentType(contentType) && !isMultipartForm(contentType) {
-			c.AbortWithStatusJSON(http.StatusBadRequest, "请求参数校验失败：Content-Type 必须为 application/json 或 multipart/form-data", nil)
-			return
-		}
-		if c.Request().ContentLength > 10*1024*1024 {
-			c.AbortWithStatusJSON(http.StatusBadRequest, "请求参数校验失败：请求体过大", nil)
+		err := validx.ValidateField(validationInput{
+			method:      c.Request().Method,
+			contentType: c.GetHeaderCanonical(canonicalContentType),
+			contentLen:  c.Request().ContentLength,
+		}, "webx_http_request")
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error(), nil)
 			return
 		}
 		c.Next()
