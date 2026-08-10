@@ -38,6 +38,10 @@ jobs:
       - name: Test
         run: go test -count=1 ./...
 
+      - name: Test examples
+        working-directory: examples
+        run: go test -count=1 ./...
+
       - name: Race detector
         shell: bash
         run: |

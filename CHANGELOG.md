@@ -2,6 +2,19 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v2.2.0] - 2026-08-10
+
+### 变更
+
+- production 示例接入 `clix v1.2.0`：配置文件与上传目录改为全局 flag；
+- examples 调整为独立 Go 子模块（`github.com/lcylpzls/webx/examples`），
+  示例依赖不再进入 webx 主模块；
+- CI 增加 examples 子模块测试步骤。
+
+### 质量
+
+- 根包语句覆盖率 100%；race / vet / staticcheck 全绿。
+
 ## [v2.1.0] - 2026-08-10
 
 ### 变更

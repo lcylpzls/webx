@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/lcylpzls/clix"
 	"github.com/lcylpzls/logx"
 	"github.com/lcylpzls/metricsx"
 	"github.com/lcylpzls/webx/v2"
@@ -15,22 +16,39 @@ import (
 )
 
 func main() {
-	logger, err := logx.NewBuilder().EnableConsole(logx.InfoLevel).Build()
+	app, err := clix.New("webx-production", "2.1.0",
+		clix.WithDescription("webx 生产模板示例"),
+		clix.WithIO(os.Stdout, os.Stderr),
+		clix.WithGlobalFlags(
+			clix.StringFlag("config", "配置文件路径（TOML）").Default("config.toml"),
+			clix.StringFlag("uploads", "上传文件保存目录").Default("uploads"),
+		),
+		clix.WithRootAction(run),
+	)
 	if err != nil {
 		panic(err)
 	}
+	os.Exit(app.Execute(context.Background(), os.Args[1:]))
+}
+
+// run 启动生产模板服务（clix 根 Action）。
+func run(_ context.Context, c *clix.Context) error {
+	logger, err := logx.NewBuilder().EnableConsole(logx.InfoLevel).Build()
+	if err != nil {
+		return err
+	}
 	defer logger.Close()
 
-	cfg, err := webx.LoadConfig("config.toml")
+	cfg, err := webx.LoadConfig(c.GlobalString("config"))
 	if err != nil {
 		logger.Error("加载配置失败", logx.Fields(logx.Any("error", err)))
-		return
+		return err
 	}
 
 	metrics, err := metricsx.New(metricsx.WithNamespace("myapp"))
 	if err != nil {
 		logger.Error("创建指标适配器失败", logx.Fields(logx.Any("error", err)))
-		return
+		return err
 	}
 
 	s := webx.NewServer(cfg, logger)
@@ -46,7 +64,8 @@ func main() {
 	s.EnableRateLimit(webx.RateLimitOptions{QPS: 100, Window: time.Second})
 	s.RegisterLivenessCheck("live", func(ctx context.Context) error { return nil })
 	s.RegisterReadinessCheck("db", func(ctx context.Context) error { return nil })
-	_ = os.MkdirAll("uploads", 0o755)
+	uploadDir := c.GlobalString("uploads")
+	_ = os.MkdirAll(uploadDir, 0o755)
 	s.RegisterRouteGroup("/api", func(rg *webx.RouteGroup) {
 		rg.GET("/users/:id", func(c *webx.Context) {
 			c.Success("ok", map[string]string{"id": c.Param("id")})
@@ -57,7 +76,7 @@ func main() {
 				c.Fail(http.StatusBadRequest, http.StatusBadRequest, "缺少上传文件")
 				return
 			}
-			dest := filepath.Join("uploads", fh.Filename)
+			dest := filepath.Join(uploadDir, fh.Filename)
 			if err := c.SaveUploadedFile(fh, dest); err != nil {
 				c.Fail(http.StatusInternalServerError, http.StatusInternalServerError, "保存上传文件失败")
 				return
@@ -67,5 +86,7 @@ func main() {
 	})
 	if err := s.Start(); err != nil {
 		logger.Error("服务异常退出", logx.Fields(logx.Any("error", err)))
+		return err
 	}
+	return nil
 }
