@@ -9,3 +9,5 @@ coverage.out
 .agents/
 .codex/
 AGENTS.md
+coverage
+mw
