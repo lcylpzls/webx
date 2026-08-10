@@ -463,12 +463,8 @@ func TestServerIntegration(t *testing.T) {
 	// 优雅关闭（幂等）
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := s.Stop(ctx); err != nil {
-		t.Fatalf("Stop 失败：%v", err)
-	}
-	if err := s.Stop(ctx); err != nil {
-		t.Errorf("重复 Stop 应成功：%v", err)
-	}
+	testx.RequireNoError(t, s.Stop(ctx))
+	testx.RequireNoError(t, s.Stop(ctx))
 }
 
 func TestServerRecoveryAndRateLimit(t *testing.T) {
@@ -546,9 +542,7 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := s.Stop(ctx); err != nil {
-		t.Fatalf("Stop 失败：%v", err)
-	}
+	testx.RequireNoError(t, s.Stop(ctx))
 }
 
 func TestServerRouteGroupStats(t *testing.T) {
@@ -913,9 +907,7 @@ func TestServerTrustedProxies(t *testing.T) {
 
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if !strings.Contains(string(body), "127.0.0.1") {
-		t.Errorf("未配置可信代理应返回 RemoteAddr：%s", body)
-	}
+	testx.RequireTrue(t, strings.Contains(string(body), "127.0.0.1"))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = s.Stop(ctx)
@@ -934,9 +926,7 @@ func TestServerTrustedProxies(t *testing.T) {
 
 	body, _ = io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if !strings.Contains(string(body), "203.0.113.9") {
-		t.Errorf("配置可信代理后应采用 XFF：%s", body)
-	}
+	testx.RequireTrue(t, strings.Contains(string(body), "203.0.113.9"))
 	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = s2.Stop(ctx)
@@ -1164,9 +1154,7 @@ func TestServerQUICDrain(t *testing.T) {
 	startServer(t, s)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := s.Stop(ctx); err != nil {
-		t.Fatalf("带排空的 Stop 失败：%v", err)
-	}
+	testx.RequireNoError(t, s.Stop(ctx))
 }
 
 func TestSetSNIStartedGuard(t *testing.T) {
@@ -1469,9 +1457,7 @@ func TestServerHTTP3(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := s.Stop(ctx); err != nil {
-		t.Fatalf("Stop 失败：%v", err)
-	}
+	testx.RequireNoError(t, s.Stop(ctx))
 }
 
 func TestServerHTTP3OnlyListenerAddr(t *testing.T) {
@@ -1521,9 +1507,7 @@ func TestServerUnixSocket(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := s.Stop(ctx); err != nil {
-		t.Fatalf("Stop 失败：%v", err)
-	}
+	testx.RequireNoError(t, s.Stop(ctx))
 	if runtime.GOOS != "windows" {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Errorf("Socket 文件应被清理：%v", err)

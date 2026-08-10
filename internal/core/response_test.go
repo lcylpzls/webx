@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"github.com/lcylpzls/testx"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,9 +15,7 @@ func TestStandardizedResponseFormat(t *testing.T) {
 	c := NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.Success("ok", nil)
 	var got map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("响应不是合法 JSON：%v", err)
-	}
+	testx.RequireNoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	if got["code"] != float64(0) || got["msg"] != "ok" || got["timestamp"] == nil {
 		t.Errorf("Success 信封不符：%s", rec.Body.String())
 	}
@@ -46,9 +45,7 @@ func TestStandardizedResponseFormat(t *testing.T) {
 	c.Success(`引号"与<HTML>&`, nil)
 	body := rec.Body.String()
 	for _, want := range []string{`\"`, `\u003c`, `\u003e`, `\u0026`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("转义缺失 %s：%s", want, body)
-		}
+		testx.RequireTrue(t, strings.Contains(body, want))
 	}
 
 	// Fail 业务码与 JSONResponse 状态码

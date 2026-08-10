@@ -216,9 +216,7 @@ func TestAccessLogHeaderWhitelist(t *testing.T) {
 		"header_x_user_id=u1",
 		"header_x_secret=***",
 	} {
-		if !strings.Contains(log, want) {
-			t.Errorf("访问日志缺少请求头字段 %s：%s", want, log)
-		}
+		testx.RequireTrue(t, strings.Contains(log, want))
 	}
 	if strings.Contains(log, "header_x_skip") || strings.Contains(log, "s1") {
 		t.Errorf("白名单外请求头不应记录：%s", log)

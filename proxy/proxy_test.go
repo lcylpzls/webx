@@ -98,9 +98,7 @@ func TestHandlerErrorResponse(t *testing.T) {
 	testx.RequireEqual(t, rec.Code, http.StatusBadGateway)
 
 	var body map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("响应体不是 JSON：%v", err)
-	}
+	testx.RequireNoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	if body["code"] != float64(502) || !strings.Contains(body["msg"].(string), "上游") {
 		t.Errorf("默认错误体不符：%s", rec.Body.String())
 	}

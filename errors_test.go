@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lcylpzls/errx"
+	"github.com/lcylpzls/testx"
 )
 
 func TestErrorCodesRegistered(t *testing.T) {
@@ -16,8 +17,6 @@ func TestErrorCodesRegistered(t *testing.T) {
 		CodePanic:            "webx 请求处理发生 panic",
 	}
 	for code, desc := range cases {
-		if got := errx.Describe(code); got != desc {
-			t.Errorf("错误码 %s 说明不符：got %q, want %q", code, got, desc)
-		}
+		testx.RequireEqual(t, errx.Describe(code), desc)
 	}
 }

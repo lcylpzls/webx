@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lcylpzls/testx"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
@@ -76,14 +77,10 @@ func TestMetricsInFlight(t *testing.T) {
 		close(done)
 	}()
 	<-entered
-	if got := m.InFlight(); got != 1 {
-		t.Errorf("处理中 InFlight 应为 1：%d", got)
-	}
+	testx.RequireEqual(t, m.InFlight(), int64(1))
 	close(release)
 	<-done
-	if got := m.InFlight(); got != 0 {
-		t.Errorf("处理完成 InFlight 应为 0：%d", got)
-	}
+	testx.RequireEqual(t, m.InFlight(), int64(0))
 }
 
 func TestMetricsStatusCodes(t *testing.T) {
@@ -160,9 +157,7 @@ func TestMetricsPanicSampling(t *testing.T) {
 	if s5 != 1 {
 		t.Errorf("panic 应计入 5xx 分布：%d", s5)
 	}
-	if got := m.InFlight(); got != 0 {
-		t.Errorf("panic 后 InFlight 应为 0：%d", got)
-	}
+	testx.RequireEqual(t, m.InFlight(), int64(0))
 	rs := m.RouteStats()
 	if len(rs) != 1 || rs[0].Path != "/boom" || rs[0].Requests != 1 || rs[0].Errors5xx != 1 {
 		t.Errorf("panic 路由统计不符：%+v", rs)
@@ -253,12 +248,8 @@ func TestMetricsRouteAndGroupStats(t *testing.T) {
 
 func TestMetricsZeroValueSafe(t *testing.T) {
 	var m Metrics
-	if got := m.RouteStats(); got != nil {
-		t.Errorf("零值 RouteStats 应为 nil：%+v", got)
-	}
-	if got := m.GroupStats(); got != nil {
-		t.Errorf("零值 GroupStats 应为 nil：%+v", got)
-	}
+	testx.RequireNil(t, m.RouteStats())
+	testx.RequireNil(t, m.GroupStats())
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
 	c.SetRoute("/x")
@@ -267,9 +258,7 @@ func TestMetricsZeroValueSafe(t *testing.T) {
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
-	if got := m.RouteStats(); got != nil {
-		t.Errorf("零值 Metrics 不应产生路由统计：%+v", got)
-	}
+	testx.RequireNil(t, m.RouteStats())
 }
 
 // fakeSink 是外部指标接收器测试替身，同时实现瞬时量接口。
@@ -325,9 +314,7 @@ func TestMetricsHandlerExternalSink(t *testing.T) {
 	if len(sink.counters["webx.requests"]) != 1 {
 		t.Fatalf("外部请求计数缺失：%+v", sink.counters)
 	}
-	if got := sink.counters["webx.requests"][0]; got != "webx.requests:/api/users/:id|/api|2xx|HTTP/2" {
-		t.Errorf("请求标签不符：%s", got)
-	}
+	testx.RequireEqual(t, sink.counters["webx.requests"][0], "webx.requests:/api/users/:id|/api|2xx|HTTP/2")
 	if len(sink.hist["webx.request_duration"]) != 1 {
 		t.Fatalf("外部耗时观测缺失：%+v", sink.hist)
 	}
@@ -356,9 +343,7 @@ func TestMetricsHandlerExternalSinkPanic(t *testing.T) {
 	if len(sink.counters["webx.panics"]) != 1 {
 		t.Errorf("外部 panic 计数缺失：%+v", sink.counters)
 	}
-	if got := sink.counters["webx.requests"][0]; got != "webx.requests:/boom||5xx|HTTP/1" {
-		t.Errorf("panic 请求标签不符：%s", got)
-	}
+	testx.RequireEqual(t, sink.counters["webx.requests"][0], "webx.requests:/boom||5xx|HTTP/1")
 }
 
 func TestMetricsHandlerExternalSinkNoGauge(t *testing.T) {
@@ -390,12 +375,8 @@ func TestStatusClassAndProtocolName(t *testing.T) {
 		{500, "h2c", "5xx", "unknown"},
 	}
 	for _, tc := range cases {
-		if got := statusClass(tc.status); got != tc.class {
-			t.Errorf("statusClass(%d) = %q,want %q", tc.status, got, tc.class)
-		}
-		if got := protocolName(tc.proto); got != tc.pt {
-			t.Errorf("protocolName(%q) = %q,want %q", tc.proto, got, tc.pt)
-		}
+		testx.RequireEqual(t, statusClass(tc.status), tc.class)
+		testx.RequireEqual(t, protocolName(tc.proto), tc.pt)
 	}
 }
 

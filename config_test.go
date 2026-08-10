@@ -17,9 +17,7 @@ import (
 func TestConfigValidateSuccessWithDefaults(t *testing.T) {
 	cert, key := writeTestCert(t)
 	cfg := Config{TLSCertFile: cert, TLSKeyFile: key}
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate 失败：%v", err)
-	}
+	testx.RequireNoError(t, cfg.Validate())
 	if cfg.LogLevel != "info" || cfg.HealthPath != "/health" ||
 		cfg.LivenessPath != "/healthz" || cfg.ReadinessPath != "/readyz" {
 		t.Errorf("默认值未填充：%+v", cfg)
@@ -82,9 +80,7 @@ func TestConfigValidateErrors(t *testing.T) {
 		if !errx.Is(err, CodeConfigInvalid) {
 			t.Errorf("%s：错误码不符：%v", tc.name, err)
 		}
-		if !strings.Contains(err.Error(), tc.msg) {
-			t.Errorf("%s：错误消息不符：%v", tc.name, err)
-		}
+		testx.RequireTrue(t, strings.Contains(err.Error(), tc.msg))
 	}
 }
 
@@ -96,9 +92,7 @@ func TestConfigValidateExplicitLevelAndCORS(t *testing.T) {
 		LogLevel:           "debug",
 		CORSAllowedOrigins: []string{"https://example.com"},
 	}
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate 失败：%v", err)
-	}
+	testx.RequireNoError(t, cfg.Validate())
 	testx.Equal(t, cfg.LogLevel, "debug")
 
 	if len(cfg.CORSAllowedOrigins) != 1 || cfg.CORSAllowedOrigins[0] != "https://example.com" {
@@ -113,9 +107,7 @@ func TestConfigSlowRequestThreshold(t *testing.T) {
 		t.Error("负的慢请求阈值应报错")
 	}
 	cfg.SlowRequestThreshold = time.Second
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("合法慢请求阈值不应报错：%v", err)
-	}
+	testx.RequireNoError(t, cfg.Validate())
 }
 
 func TestConfigGzipLevel(t *testing.T) {
@@ -128,17 +120,13 @@ func TestConfigGzipLevel(t *testing.T) {
 	}
 	cfg := validConfig(t)
 	cfg.GzipLevel = 9
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("GzipLevel=9 不应报错：%v", err)
-	}
+	testx.RequireNoError(t, cfg.Validate())
 }
 
 func TestConfigTrustedProxies(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.TrustedProxies = []string{"10.0.0.0/8", "192.168.1.5"}
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("合法可信代理应通过：%v", err)
-	}
+	testx.RequireNoError(t, cfg.Validate())
 	if len(cfg.trustedNets) != 2 {
 		t.Fatalf("可信代理解析数量不符：%d", len(cfg.trustedNets))
 	}
@@ -280,9 +268,7 @@ func TestIsRegularFile(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "f.txt")
 	_ = os.WriteFile(file, []byte("x"), 0o600)
-	if err := isRegularFile(file); err != nil {
-		t.Errorf("普通文件应通过：%v", err)
-	}
+	testx.RequireNoError(t, isRegularFile(file))
 	if err := isRegularFile(dir); err == nil {
 		t.Error("目录应报错")
 	}

@@ -203,18 +203,14 @@ func TestContextCanonicalHeaders(t *testing.T) {
 func TestContextStringFastPath(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	if err := c.String(http.StatusOK, "hello"); err != nil {
-		t.Fatalf("String 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.String(http.StatusOK, "hello"))
 	if rec.Body.String() != "hello" {
 		t.Errorf("无格式 String 不符：%s", rec.Body.String())
 	}
 
 	rec2 := httptest.NewRecorder()
 	c2 := NewContext(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
-	if err := c2.String(http.StatusOK, "%s", "格式化"); err != nil {
-		t.Fatalf("String 失败：%v", err)
-	}
+	testx.RequireNoError(t, c2.String(http.StatusOK, "%s", "格式化"))
 	if rec2.Body.String() != "格式化" {
 		t.Errorf("带参数 String 不符：%s", rec2.Body.String())
 	}
@@ -352,9 +348,7 @@ func TestStatusRecorder(t *testing.T) {
 func TestContextJSON(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	if err := c.JSON(http.StatusOK, map[string]string{"k": "v"}); err != nil {
-		t.Fatalf("JSON 写入失败：%v", err)
-	}
+	testx.RequireNoError(t, c.JSON(http.StatusOK, map[string]string{"k": "v"}))
 	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/json; charset=utf-8" {
 		t.Errorf("JSON 响应头/状态不符：%d %s", rec.Code, rec.Header().Get("Content-Type"))
 	}
@@ -366,9 +360,7 @@ func TestContextJSON(t *testing.T) {
 func TestContextString(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	if err := c.String(http.StatusOK, "hello %s", "webx"); err != nil {
-		t.Fatalf("String 写入失败：%v", err)
-	}
+	testx.RequireNoError(t, c.String(http.StatusOK, "hello %s", "webx"))
 	if rec.Body.String() != "hello webx" {
 		t.Errorf("String 响应体不符：%s", rec.Body.String())
 	}

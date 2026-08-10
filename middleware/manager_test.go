@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/lcylpzls/testx"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
@@ -24,18 +25,12 @@ func TestManagerRegisterOverrideDisableEnable(t *testing.T) {
 
 	m.RegisterBuiltin("recovery", a)
 	m.RegisterBuiltin("request_id", b)
-	if got := len(m.Build(context.Background())); got != 2 {
-		t.Fatalf("注册后链长度不符：%d", got)
-	}
+	testx.RequireEqual(t, len(m.Build(context.Background())), 2)
 
 	m.Disable("recovery")
-	if got := len(m.Build(context.Background())); got != 1 {
-		t.Fatalf("禁用后链长度不符：%d", got)
-	}
+	testx.RequireEqual(t, len(m.Build(context.Background())), 1)
 	m.Enable("recovery")
-	if got := len(m.Build(context.Background())); got != 2 {
-		t.Fatalf("启用后链长度不符：%d", got)
-	}
+	testx.RequireEqual(t, len(m.Build(context.Background())), 2)
 
 	m.Override("recovery", override)
 	chain := m.Build(context.Background())
@@ -46,9 +41,7 @@ func TestManagerRegisterOverrideDisableEnable(t *testing.T) {
 		t.Error("覆盖未生效")
 	}
 	m.Override("missing", override)
-	if got := len(m.Build(context.Background())); got != 2 {
-		t.Errorf("覆盖未注册键不应改变链：%d", got)
-	}
+	testx.RequireEqual(t, len(m.Build(context.Background())), 2)
 }
 
 func TestManagerRateLimit(t *testing.T) {
@@ -62,17 +55,11 @@ func TestManagerRateLimit(t *testing.T) {
 	// Enable 对 rate_limit 无效
 	m.DisableRateLimit()
 	m.Enable("rate_limit")
-	if got := len(m.Build(context.Background())); got != 0 {
-		t.Errorf("Enable 不应激活 rate_limit：%d", got)
-	}
+	testx.RequireEqual(t, len(m.Build(context.Background())), 0)
 	m.EnableRateLimit(rl)
-	if got := len(m.Build(context.Background())); got != 1 {
-		t.Errorf("重新启用后链长度不符：%d", got)
-	}
+	testx.RequireEqual(t, len(m.Build(context.Background())), 1)
 	m.DisableRateLimit()
-	if got := len(m.Build(context.Background())); got != 0 {
-		t.Errorf("DisableRateLimit 后链长度不符：%d", got)
-	}
+	testx.RequireEqual(t, len(m.Build(context.Background())), 0)
 }
 
 func TestManagerAppendAndOrder(t *testing.T) {
@@ -105,9 +92,7 @@ func TestManagerSetOrder(t *testing.T) {
 		t.Error("自定义顺序未生效")
 	}
 	m.SetOrder()
-	if got := len(m.Build(context.Background())); got != 2 {
-		t.Errorf("空顺序应保持原样：%d", got)
-	}
+	testx.RequireEqual(t, len(m.Build(context.Background())), 2)
 }
 
 // sameFunc 判断两个函数值是否指向同一函数。

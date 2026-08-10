@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lcylpzls/testx"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
@@ -31,39 +32,19 @@ func TestSecurityHeaders(t *testing.T) {
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
-	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
-		t.Error("nosniff 头缺失")
-	}
-	if rec.Header().Get("X-Frame-Options") != "DENY" {
-		t.Error("frame deny 头缺失")
-	}
-	if rec.Header().Get("Referrer-Policy") != "no-referrer" {
-		t.Error("referrer 头缺失")
-	}
+	testx.RequireEqual(t, rec.Header().Get("X-Content-Type-Options"), "nosniff")
+	testx.RequireEqual(t, rec.Header().Get("X-Frame-Options"), "DENY")
+	testx.RequireEqual(t, rec.Header().Get("Referrer-Policy"), "no-referrer")
 	if rec.Header().Get("Strict-Transport-Security") != "max-age=3600; includeSubDomains; preload" {
 		t.Errorf("HSTS 头不符：%s", rec.Header().Get("Strict-Transport-Security"))
 	}
-	if rec.Header().Get("Permissions-Policy") != "camera=()" {
-		t.Error("Permissions-Policy 头缺失")
-	}
-	if rec.Header().Get("Cross-Origin-Opener-Policy") != "same-origin" {
-		t.Error("Cross-Origin-Opener-Policy 头缺失")
-	}
-	if rec.Header().Get("Cross-Origin-Resource-Policy") != "same-origin" {
-		t.Error("Cross-Origin-Resource-Policy 头缺失")
-	}
-	if rec.Header().Get("Cross-Origin-Embedder-Policy") != "require-corp" {
-		t.Error("Cross-Origin-Embedder-Policy 头缺失")
-	}
-	if rec.Header().Get("Content-Security-Policy") != "default-src 'self'" {
-		t.Error("Content-Security-Policy 头缺失")
-	}
-	if rec.Header().Get("Content-Security-Policy-Report-Only") != "default-src 'self'; report-uri /csp" {
-		t.Error("Content-Security-Policy-Report-Only 头缺失")
-	}
-	if rec.Header().Get("Origin-Agent-Cluster") != "?1" {
-		t.Error("Origin-Agent-Cluster 头缺失")
-	}
+	testx.RequireEqual(t, rec.Header().Get("Permissions-Policy"), "camera=()")
+	testx.RequireEqual(t, rec.Header().Get("Cross-Origin-Opener-Policy"), "same-origin")
+	testx.RequireEqual(t, rec.Header().Get("Cross-Origin-Resource-Policy"), "same-origin")
+	testx.RequireEqual(t, rec.Header().Get("Cross-Origin-Embedder-Policy"), "require-corp")
+	testx.RequireEqual(t, rec.Header().Get("Content-Security-Policy"), "default-src 'self'")
+	testx.RequireEqual(t, rec.Header().Get("Content-Security-Policy-Report-Only"), "default-src 'self'; report-uri /csp")
+	testx.RequireEqual(t, rec.Header().Get("Origin-Agent-Cluster"), "?1")
 }
 
 func TestSecurityHeadersDisabled(t *testing.T) {

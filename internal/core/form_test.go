@@ -29,9 +29,7 @@ func TestBindFormURLEncoded(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	c := NewContext(httptest.NewRecorder(), req)
 	var m formModel
-	if err := c.BindForm(&m); err != nil {
-		t.Fatalf("BindForm 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindForm(&m))
 	if m.Name != "webx" || m.Age != 3 || !m.Active || len(m.Tags) != 2 || m.Tags[1] != "b" {
 		t.Errorf("表单绑定不符：%+v", m)
 	}
@@ -61,9 +59,7 @@ func TestBindFormMoreTypes(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	c := NewContext(httptest.NewRecorder(), req)
 	var m formModelMore
-	if err := c.BindForm(&m); err != nil {
-		t.Fatalf("BindForm 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindForm(&m))
 	if m.Count != 5 || m.Ratio != 1.5 || !m.On {
 		t.Errorf("更多类型绑定不符：%+v", m)
 	}
@@ -96,9 +92,7 @@ func TestBindFormUnexportedField(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	c := NewContext(httptest.NewRecorder(), req)
 	var m formModelHidden
-	if err := c.BindForm(&m); err != nil {
-		t.Fatalf("BindForm 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindForm(&m))
 	testx.Equal(t, m.hidden, "")
 
 }
@@ -113,9 +107,7 @@ func TestBindFormMultipart(t *testing.T) {
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	c := NewContext(httptest.NewRecorder(), req)
 	var m formModel
-	if err := c.BindForm(&m); err != nil {
-		t.Fatalf("BindForm 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindForm(&m))
 	if m.Name != "多部分" || m.Age != 7 {
 		t.Errorf("multipart 绑定不符：%+v", m)
 	}
@@ -174,9 +166,7 @@ func TestBindQuery(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?keyword=webx&page=3&limit=10&ratio=1.5&active=true&tags=a&tags=b&skip=1", nil)
 	c := NewContext(httptest.NewRecorder(), req)
 	var m queryModel
-	if err := c.BindQuery(&m); err != nil {
-		t.Fatalf("BindQuery 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindQuery(&m))
 	if m.Keyword != "webx" || m.Page != 3 || m.Limit != 10 || m.Ratio != 1.5 || !m.Active {
 		t.Errorf("查询绑定不符：%+v", m)
 	}
@@ -226,9 +216,7 @@ func TestBindQueryUnexportedField(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?hidden=x", nil)
 	c := NewContext(httptest.NewRecorder(), req)
 	var m queryModelHidden
-	if err := c.BindQuery(&m); err != nil {
-		t.Fatalf("BindQuery 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindQuery(&m))
 	testx.Equal(t, m.hidden, "")
 
 }
@@ -247,9 +235,7 @@ func TestBindQueryDefaults(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?page=3&name=webx", nil)
 	c := NewContext(httptest.NewRecorder(), req)
 	var m defaultQueryModel
-	if err := c.BindQuery(&m); err != nil {
-		t.Fatalf("BindQuery 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindQuery(&m))
 	if m.Page != 3 || m.Limit != 20 || m.Name != "webx" || !m.On {
 		t.Errorf("默认值填充不符：%+v", m)
 	}
@@ -267,9 +253,7 @@ func TestBindFormDefaults(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	c := NewContext(httptest.NewRecorder(), req)
 	var m defaultFormModel
-	if err := c.BindForm(&m); err != nil {
-		t.Fatalf("BindForm 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindForm(&m))
 	if m.Age != 18 {
 		t.Errorf("表单默认值未填充：%d", m.Age)
 	}
@@ -278,9 +262,7 @@ func TestBindFormDefaults(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	c = NewContext(httptest.NewRecorder(), req)
 	m = defaultFormModel{}
-	if err := c.BindForm(&m); err != nil {
-		t.Fatalf("BindForm 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindForm(&m))
 	if m.Age != 30 {
 		t.Errorf("显式值应覆盖默认值：%d", m.Age)
 	}
@@ -375,9 +357,7 @@ func TestBindQueryNested(t *testing.T) {
 	c := NewContext(httptest.NewRecorder(), req)
 	var m nestedQueryModel
 	m.Ptr = &nestedAddr{}
-	if err := c.BindQuery(&m); err != nil {
-		t.Fatalf("BindQuery 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindQuery(&m))
 	if m.Name != "webx" || m.Addr.City != "北京" || m.Addr.Zip != 100000 ||
 		m.Home.City != "上海" || m.Skip.X != "" || m.NoTag != "" {
 		t.Errorf("嵌套绑定不符：%+v", m)
@@ -409,9 +389,7 @@ func TestBindQueryNestedNilPtr(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?name=x", nil)
 	c := NewContext(httptest.NewRecorder(), req)
 	var m nestedQueryModel
-	if err := c.BindQuery(&m); err != nil {
-		t.Fatalf("BindQuery 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindQuery(&m))
 	if m.Ptr != nil {
 		t.Errorf("nil 指针应跳过：%+v", m.Ptr)
 	}
@@ -426,9 +404,7 @@ func TestBindQueryNestedCycle(t *testing.T) {
 	n.Next = &n
 	req := httptest.NewRequest(http.MethodGet, "/?name=x", nil)
 	c := NewContext(httptest.NewRecorder(), req)
-	if err := c.BindQuery(&n); err != nil {
-		t.Fatalf("循环引用应安全跳过：%v", err)
-	}
+	testx.RequireNoError(t, c.BindQuery(&n))
 	testx.Equal(t, n.Name, "x")
 
 }
@@ -454,9 +430,7 @@ func TestBindFormNested(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	c := NewContext(httptest.NewRecorder(), req)
 	var m nestedFormModel
-	if err := c.BindForm(&m); err != nil {
-		t.Fatalf("BindForm 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.BindForm(&m))
 	if m.Name != "webx" || m.Addr.City != "北京" {
 		t.Errorf("表单嵌套绑定不符：%+v", m)
 	}
@@ -481,9 +455,7 @@ func TestFormFileAndSave(t *testing.T) {
 	testx.Equal(t, fh.Filename, "a.txt")
 
 	dest := filepath.Join(t.TempDir(), "out.txt")
-	if err := c.SaveUploadedFile(fh, dest); err != nil {
-		t.Fatalf("SaveUploadedFile 失败：%v", err)
-	}
+	testx.RequireNoError(t, c.SaveUploadedFile(fh, dest))
 	got, err := os.ReadFile(dest)
 	testx.RequireNoError(t, err)
 

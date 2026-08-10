@@ -41,9 +41,7 @@ func TestHealthHandler(t *testing.T) {
 
 	body := rec.Body.String()
 	for _, want := range []string{"运行中", "2分钟", "code"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("健康检查响应缺少 %s：%s", want, body)
-		}
+		testx.RequireTrue(t, strings.Contains(body, want))
 	}
 }
 

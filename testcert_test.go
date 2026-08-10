@@ -52,11 +52,7 @@ func writeTestCert(t testHelper) (string, string) {
 	dir := t.TempDir()
 	certFile := filepath.Join(dir, "cert.pem")
 	keyFile := filepath.Join(dir, "key.pem")
-	if err := os.WriteFile(certFile, certPEM, 0o600); err != nil {
-		t.Fatalf("写入测试证书失败：%v", err)
-	}
-	if err := os.WriteFile(keyFile, keyPEM, 0o600); err != nil {
-		t.Fatalf("写入测试私钥失败：%v", err)
-	}
+	testx.RequireNoError(t, os.WriteFile(certFile, certPEM, 0o600))
+	testx.RequireNoError(t, os.WriteFile(keyFile, keyPEM, 0o600))
 	return certFile, keyFile
 }

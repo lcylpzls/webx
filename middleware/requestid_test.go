@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lcylpzls/testx"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
@@ -42,9 +43,7 @@ func TestRequestIDGenerated(t *testing.T) {
 			if !requestIDPattern.MatchString(c.RequestID()) {
 				t.Errorf("生成的随机请求 ID 格式不符：%s", c.RequestID())
 			}
-			if got := req.Header.Get("X-Request-ID"); got != c.RequestID() {
-				t.Errorf("出站请求头未透传：%s", got)
-			}
+			testx.RequireEqual(t, req.Header.Get("X-Request-ID"), c.RequestID())
 		},
 	})
 	c.Run()
@@ -66,9 +65,7 @@ func TestRequestIDWithOptions(t *testing.T) {
 			if rec.Header().Get("X-Trace-ID") != "trace-123" {
 				t.Error("自定义头未写入响应")
 			}
-			if got := req.Header.Get("X-Trace-ID"); got != "trace-123" {
-				t.Errorf("自定义头未透传上游：%s", got)
-			}
+			testx.RequireEqual(t, req.Header.Get("X-Trace-ID"), "trace-123")
 		},
 	})
 	c.Run()

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/lcylpzls/testx"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
@@ -25,29 +26,24 @@ func runValidation(t *testing.T, req *http.Request) (*httptest.ResponseRecorder,
 func TestValidationSkipsBodylessMethods(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodOptions} {
 		rec, reached := runValidation(t, httptest.NewRequest(method, "/", nil))
-		if !reached || rec.Code != http.StatusOK {
-			t.Errorf("%s 应直接放行：%v %d", method, reached, rec.Code)
-		}
+		testx.RequireTrue(t, reached)
+		testx.RequireEqual(t, rec.Code, http.StatusOK)
 	}
 }
 
 func TestValidationNoContentType(t *testing.T) {
 	rec, reached := runValidation(t, httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}")))
-	if !reached || rec.Code != http.StatusOK {
-		t.Errorf("无 Content-Type 应放行：%v %d", reached, rec.Code)
-	}
+	testx.RequireTrue(t, reached)
+	testx.RequireEqual(t, rec.Code, http.StatusOK)
 }
 
 func TestValidationWrongContentType(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("a=1"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec, reached := runValidation(t, req)
-	if reached || rec.Code != http.StatusBadRequest {
-		t.Errorf("错误 Content-Type 应 400：%v %d", reached, rec.Code)
-	}
-	if !contains(rec.Body.String(), "Content-Type 必须为 application/json 或 multipart/form-data") {
-		t.Errorf("400 消息不符：%s", rec.Body.String())
-	}
+	testx.RequireFalse(t, reached)
+	testx.RequireEqual(t, rec.Code, http.StatusBadRequest)
+	testx.RequireTrue(t, contains(rec.Body.String(), "Content-Type 必须为 application/json 或 multipart/form-data"))
 }
 
 func TestValidationBodyTooLarge(t *testing.T) {
@@ -55,48 +51,38 @@ func TestValidationBodyTooLarge(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.ContentLength = 11 * 1024 * 1024
 	rec, reached := runValidation(t, req)
-	if reached || rec.Code != http.StatusBadRequest {
-		t.Errorf("超大请求体应 400：%v %d", reached, rec.Code)
-	}
+	testx.RequireFalse(t, reached)
+	testx.RequireEqual(t, rec.Code, http.StatusBadRequest)
 }
 
 func TestValidationPasses(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"a":1}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec, reached := runValidation(t, req)
-	if !reached || rec.Code != http.StatusOK {
-		t.Errorf("合法 JSON 应放行：%v %d", reached, rec.Code)
-	}
+	testx.RequireTrue(t, reached)
+	testx.RequireEqual(t, rec.Code, http.StatusOK)
 }
 
 func TestValidationMultipart(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("a=1"))
 	req.Header.Set("Content-Type", "multipart/form-data; boundary=x")
 	rec, reached := runValidation(t, req)
-	if !reached || rec.Code != http.StatusOK {
-		t.Errorf("合法 multipart 应放行：%v %d", reached, rec.Code)
-	}
+	testx.RequireTrue(t, reached)
+	testx.RequireEqual(t, rec.Code, http.StatusOK)
 
 	req = httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("x"))
 	req.Header.Set("Content-Type", "multipart/form-data")
 	req.ContentLength = 11 * 1024 * 1024
 	rec, reached = runValidation(t, req)
-	if reached || rec.Code != http.StatusBadRequest {
-		t.Errorf("超大 multipart 应 400：%v %d", reached, rec.Code)
-	}
+	testx.RequireFalse(t, reached)
+	testx.RequireEqual(t, rec.Code, http.StatusBadRequest)
 }
 
 func TestIsJSONContentType(t *testing.T) {
-	if !isJSONContentType("application/json") || !isJSONContentType("application/json; charset=utf-8") {
-		t.Error("JSON Content-Type 判定不符")
-	}
-	if isJSONContentType("text/plain") {
-		t.Error("非 JSON Content-Type 判定不符")
-	}
-	if !isMultipartForm("multipart/form-data") || !isMultipartForm("multipart/form-data; boundary=x") {
-		t.Error("multipart Content-Type 判定不符")
-	}
-	if isMultipartForm("application/json") {
-		t.Error("非 multipart 判定不符")
-	}
+	testx.RequireTrue(t, isJSONContentType("application/json"))
+	testx.RequireTrue(t, isJSONContentType("application/json; charset=utf-8"))
+	testx.RequireFalse(t, isJSONContentType("text/plain"))
+	testx.RequireTrue(t, isMultipartForm("multipart/form-data"))
+	testx.RequireTrue(t, isMultipartForm("multipart/form-data; boundary=x"))
+	testx.RequireFalse(t, isMultipartForm("application/json"))
 }

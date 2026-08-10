@@ -246,9 +246,7 @@ func TestRouterHandleErrors(t *testing.T) {
 	if err := rt.Handle("GET", "/same", chain); err == nil {
 		t.Error("重复注册同路径应报错")
 	}
-	if err := rt.Handle("POST", "/same", chain); err != nil {
-		t.Errorf("不同方法同路径应允许：%v", err)
-	}
+	testx.RequireNoError(t, rt.Handle("POST", "/same", chain))
 	if err := rt.Handle("GET", "/conflict/:a", chain); err != nil {
 		t.Fatal(err)
 	}
@@ -261,9 +259,7 @@ func TestRouterHandleErrors(t *testing.T) {
 	if err := rt.Handle("GET", "/w/*b", chain); err == nil {
 		t.Error("通配参数名冲突应报错")
 	}
-	if err := rt.HandleStatic("/static", http.Dir(t.TempDir())); err != nil {
-		t.Errorf("静态注册失败：%v", err)
-	}
+	testx.RequireNoError(t, rt.HandleStatic("/static", http.Dir(t.TempDir())))
 	// 静态路径重复注册：GET 冲突
 	if err := rt.HandleStatic("/static", http.Dir(t.TempDir())); err == nil {
 		t.Error("重复注册静态路径应报错")
