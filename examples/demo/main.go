@@ -3,7 +3,6 @@ package main
 
 import (
 	"github.com/lcylpzls/errx"
-	errxlogx "github.com/lcylpzls/errx/logx"
 	"github.com/lcylpzls/logx"
 	"github.com/lcylpzls/webx"
 )
@@ -34,7 +33,7 @@ func main() {
 		Handler: func(c *webx.Context) {
 			if c.Param("id") == "0" {
 				err := errx.NewCode("USER_NOT_FOUND", "用户不存在")
-				logger.Warn("业务错误", errxlogx.Fields(err))
+				logger.Warn("业务错误", logx.FieldsFromError(err))
 				c.Fail(404, 404, err.Message())
 				return
 			}

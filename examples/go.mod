@@ -5,7 +5,7 @@ go 1.26.5
 require (
 	github.com/lcylpzls/clix v1.4.3
 	github.com/lcylpzls/errx v1.5.6
-	github.com/lcylpzls/logx v1.3.3
+	github.com/lcylpzls/logx v1.4.0
 	github.com/lcylpzls/metricsx v1.5.3
 	github.com/lcylpzls/webx v1.5.5
 	github.com/prometheus/client_golang v1.24.1
