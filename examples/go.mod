@@ -3,9 +3,9 @@ module github.com/lcylpzls/webx/examples
 go 1.26.5
 
 require (
-	github.com/lcylpzls/clix v1.2.0
+	github.com/lcylpzls/clix v1.3.0
 	github.com/lcylpzls/errx v1.4.0
-	github.com/lcylpzls/logx v1.2.0
+	github.com/lcylpzls/logx v1.2.5
 	github.com/lcylpzls/metricsx v1.3.0
 	github.com/lcylpzls/webx v1.3.0
 	github.com/prometheus/client_golang v1.24.1
@@ -16,8 +16,8 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/lcylpzls/confx v0.3.3 // indirect
-	github.com/lcylpzls/validx v1.0.2 // indirect
+	github.com/lcylpzls/confx v0.4.4 // indirect
+	github.com/lcylpzls/validx v1.1.3 // indirect
 	github.com/magiconair/properties v1.18.11 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
@@ -33,5 +33,3 @@ require (
 	gopkg.in/ini.v1 v1.67.3 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/lcylpzls/webx => ../

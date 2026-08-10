@@ -8,8 +8,8 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/hertz-contrib/http2 v0.1.8
 	github.com/labstack/echo/v4 v4.15.4
-	github.com/lcylpzls/logx v1.0.0
-	github.com/lcylpzls/testx v1.2.0
+	github.com/lcylpzls/logx v1.2.5
+	github.com/lcylpzls/testx v1.3.0
 	github.com/lcylpzls/webx v1.3.0
 	github.com/quic-go/quic-go v0.61.0
 	github.com/valyala/fasthttp v1.73.0
@@ -37,7 +37,7 @@ require (
 	github.com/klauspost/compress v1.19.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
-	github.com/lcylpzls/confx v0.3.1 // indirect
+	github.com/lcylpzls/confx v0.4.4 // indirect
 	github.com/lcylpzls/errx v1.4.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/magiconair/properties v1.18.11 // indirect
@@ -64,5 +64,3 @@ require (
 	gopkg.in/ini.v1 v1.67.3 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/lcylpzls/webx => ..
