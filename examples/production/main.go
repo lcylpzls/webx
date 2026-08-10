@@ -45,7 +45,7 @@ func run(_ context.Context, c *clix.Context) error {
 		return err
 	}
 
-	metrics, err := metricsx.New(metricsx.WithNamespace("myapp"))
+	metrics, err := metricsx.New()
 	if err != nil {
 		logger.Error("创建指标适配器失败", logx.Fields(logx.Any("error", err)))
 		return err

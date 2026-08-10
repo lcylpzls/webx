@@ -22,7 +22,7 @@ func main() {
 		panic(err)
 	}
 
-	metrics, err := metricsx.New(metricsx.WithNamespace("myapp"))
+	metrics, err := metricsx.New()
 	if err != nil {
 		panic(err)
 	}
