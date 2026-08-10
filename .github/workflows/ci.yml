@@ -166,6 +166,9 @@ jobs:
           apidiff -w /tmp/middleware-old.bin ./middleware
 
       - name: Compare current API with baseline
+        # v2.0.0 起为破坏性主版本：与 v1.0.0 基线对比改为信息性输出，
+        # 不再作为门禁（破坏性变更随主版本发布）。
+        continue-on-error: true
         run: |
           export PATH="$(go env GOPATH)/bin:$PATH"
           apidiff -w /tmp/webx-new.bin .
