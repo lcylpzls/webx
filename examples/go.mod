@@ -3,11 +3,11 @@ module github.com/lcylpzls/webx/examples
 go 1.26.5
 
 require (
-	github.com/lcylpzls/clix v1.4.1
-	github.com/lcylpzls/errx v1.5.4
-	github.com/lcylpzls/logx v1.3.1
-	github.com/lcylpzls/metricsx v1.5.1
-	github.com/lcylpzls/webx v1.5.3
+	github.com/lcylpzls/clix v1.4.2
+	github.com/lcylpzls/errx v1.5.5
+	github.com/lcylpzls/logx v1.3.2
+	github.com/lcylpzls/metricsx v1.5.2
+	github.com/lcylpzls/webx v1.5.4
 	github.com/prometheus/client_golang v1.24.1
 )
 
