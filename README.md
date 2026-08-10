@@ -3,7 +3,7 @@
 **基于 Go 标准库的工业级 HTTP/HTTPS 服务组件库**：
 路由、上下文、中间件链全部自研，传输层基于 `net/http`。
 
-[![Go Version](https://img.shields.io/badge/Go-%3E%3D1.26-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-%3E%3D1.26.5-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 当前状态：**v2.0.0 已发布（破坏性变更）**。各包语句覆盖率 100%，
