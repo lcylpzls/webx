@@ -276,20 +276,28 @@ func newFakeSink() *fakeSink {
 	}
 }
 
-func (f *fakeSink) IncCounter(name string, labels ...string) {
+func (f *fakeSink) IncCounter(name string, labels []string) {
 	f.counters[name] = append(f.counters[name], name+":"+joinLabels(labels))
 }
 
-func (f *fakeSink) ObserveDuration(name string, seconds float64, labels ...string) {
+func (f *fakeSink) AddCounter(name string, delta float64, labels []string) {
+	f.counters[name] = append(f.counters[name], name+":"+joinLabels(labels))
+}
+
+func (f *fakeSink) ObserveDuration(name string, seconds float64, labels []string) {
 	f.hist[name] = append(f.hist[name], name+":"+joinLabels(labels))
 }
 
-func (f *fakeSink) AddGauge(name string, delta float64, labels ...string) {
+func (f *fakeSink) AddGauge(name string, delta float64, labels []string) {
 	f.gauges[name] += delta
 }
 
-func (f *fakeSink) SetGauge(name string, value float64, labels ...string) {
+func (f *fakeSink) SetGauge(name string, value float64, labels []string) {
 	f.gauges[name] = value
+}
+
+func (f *fakeSink) RegisterMetric(name, help string, labelNames []string) error {
+	return nil
 }
 
 func joinLabels(labels []string) string {
@@ -407,13 +415,23 @@ func TestLimiterMetricsSinkExternal(t *testing.T) {
 	}
 }
 
-// counterOnlySink 仅实现 MetricsSink，不实现 GaugeSink。
+// counterOnlySink 实现 MetricsSink，Gauge 相关方法为 no-op。
 type counterOnlySink struct {
 	counters map[string][]string
 }
 
-func (f *counterOnlySink) IncCounter(name string, labels ...string) {
+func (f *counterOnlySink) IncCounter(name string, labels []string) {
 	f.counters[name] = append(f.counters[name], name+":"+joinLabels(labels))
 }
 
-func (f *counterOnlySink) ObserveDuration(string, float64, ...string) {}
+func (f *counterOnlySink) AddCounter(string, float64, []string) {}
+
+func (f *counterOnlySink) ObserveDuration(string, float64, []string) {}
+
+func (f *counterOnlySink) AddGauge(string, float64, []string) {}
+
+func (f *counterOnlySink) SetGauge(string, float64, []string) {}
+
+func (f *counterOnlySink) RegisterMetric(string, string, []string) error {
+	return nil
+}

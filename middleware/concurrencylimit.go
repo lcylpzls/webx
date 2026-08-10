@@ -67,7 +67,7 @@ func (l *ConcurrencyLimiter) SetMetricsSink(sink MetricsSink) {
 // emitRejected 转发并发拒绝事件。
 func (l *ConcurrencyLimiter) emitRejected() {
 	if l.sink != nil {
-		l.sink.IncCounter("webx.concurrency_rejected")
+		l.sink.IncCounter("webx.concurrency_rejected", nil)
 	}
 }
 

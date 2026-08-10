@@ -2,6 +2,13 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v1.5.6] - 2026-08-10
+
+### 变更
+
+- Metrics 契约统一为 `metricsx.Sink`（破坏性：注入实现需满足 Sink 协议，Gauge 上报不再需要可选接口断言）；
+- 依赖升级：metricsx v1.5.4、confx v1.0.4、errx v1.5.7、logx v1.3.4、idgenx v1.4.4、resiliencex v1.3.4、cryptox v1.0.4、validx v1.2.5、testx v1.4.5 及三方最新版本。
+
 ## [v1.5.5] - 2026-08-10
 
 ### 变更

@@ -7,26 +7,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lcylpzls/metricsx"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
-// MetricsSink 是外部指标接收器接口，metricsx 等家族底座天然满足。
+// MetricsSink 是外部指标接收器协议（家族统一契约，定义见 metricsx.Sink）。
 // 未注入时仅保留内部快照统计，不产生外部开销。
-type MetricsSink interface {
-	// IncCounter 增加一个计数指标。
-	IncCounter(name string, labels ...string)
-	// ObserveDuration 记录一次耗时观测（秒）。
-	ObserveDuration(name string, seconds float64, labels ...string)
-}
-
-// GaugeSink 是可选的瞬时量扩展接口，实现时 webx 会上报
-// 活跃请求与连接水位；未实现则自动跳过。
-type GaugeSink interface {
-	// AddGauge 按增量调整瞬时量（如 +1/-1）。
-	AddGauge(name string, delta float64, labels ...string)
-	// SetGauge 设置瞬时量绝对值。
-	SetGauge(name string, value float64, labels ...string)
-}
+type MetricsSink = metricsx.Sink
 
 // Metrics 统计请求、状态码分布与协议维度指标，供监控面板对接。
 type Metrics struct {
@@ -186,14 +173,14 @@ func (m *Metrics) emitSink(c *core.Context, status int, elapsed uint64) {
 		statusClass(status),
 		protocolName(c.Request().Proto),
 	}
-	m.sink.IncCounter("webx.requests", labels...)
-	m.sink.ObserveDuration("webx.request_duration", float64(elapsed)/1e9, labels...)
+	m.sink.IncCounter("webx.requests", labels)
+	m.sink.ObserveDuration("webx.request_duration", float64(elapsed)/1e9, labels)
 }
 
 // gaugeDelta 通过可选瞬时量接口调整水位。
 func (m *Metrics) gaugeDelta(name string, delta float64) {
-	if g, ok := m.sink.(GaugeSink); ok {
-		g.AddGauge(name, delta)
+	if m.sink != nil {
+		m.sink.AddGauge(name, delta, nil)
 	}
 }
 
@@ -201,7 +188,7 @@ func (m *Metrics) gaugeDelta(name string, delta float64) {
 func (m *Metrics) recordPanic() {
 	m.panics.Add(1)
 	if m.sink != nil {
-		m.sink.IncCounter("webx.panics")
+		m.sink.IncCounter("webx.panics", nil)
 	}
 }
 

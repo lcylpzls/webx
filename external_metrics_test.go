@@ -26,28 +26,38 @@ func newExternalSink() *externalSink {
 	}
 }
 
-func (f *externalSink) IncCounter(name string, labels ...string) {
+func (f *externalSink) IncCounter(name string, labels []string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.counters[name] = append(f.counters[name], strings.Join(labels, "|"))
 }
 
-func (f *externalSink) ObserveDuration(name string, seconds float64, labels ...string) {
+func (f *externalSink) AddCounter(name string, delta float64, labels []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.counters[name] = append(f.counters[name], strings.Join(labels, "|"))
+}
+
+func (f *externalSink) ObserveDuration(name string, seconds float64, labels []string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.hist[name] = append(f.hist[name], strings.Join(labels, "|"))
 }
 
-func (f *externalSink) AddGauge(name string, delta float64, labels ...string) {
+func (f *externalSink) AddGauge(name string, delta float64, labels []string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.gauges[name] += delta
 }
 
-func (f *externalSink) SetGauge(name string, value float64, labels ...string) {
+func (f *externalSink) SetGauge(name string, value float64, labels []string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.gauges[name] = value
+}
+
+func (f *externalSink) RegisterMetric(name, help string, labelNames []string) error {
+	return nil
 }
 
 func (f *externalSink) counterCount(name string) int {

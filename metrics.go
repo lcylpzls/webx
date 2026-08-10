@@ -3,27 +3,13 @@ package webx
 import (
 	"net"
 	"net/http"
+
+	"github.com/lcylpzls/metricsx"
 )
 
-// Metrics 是最小指标接口，与 dbx/httpx/cachex/resiliencex 等
-// 家族底座签名一致，metricsx 天然满足。
+// Metrics 是最小指标协议（家族统一契约，定义见 metricsx.Sink）。
 // webx 本身不采集 Prometheus，只把事件转发给外部注入的实例。
-type Metrics interface {
-	// IncCounter 增加一个计数指标。
-	IncCounter(name string, labels ...string)
-	// ObserveDuration 记录一次耗时观测（秒）。
-	ObserveDuration(name string, seconds float64, labels ...string)
-}
-
-// GaugeMetrics 是可选的瞬时量扩展接口。
-// 注入的指标实例支持时，webx 会上报活跃请求与连接水位；
-// 不支持则自动跳过，不影响主流程。
-type GaugeMetrics interface {
-	// AddGauge 按增量调整瞬时量（如 +1/-1）。
-	AddGauge(name string, delta float64, labels ...string)
-	// SetGauge 设置瞬时量绝对值。
-	SetGauge(name string, value float64, labels ...string)
-}
+type Metrics = metricsx.Sink
 
 // MetricsSnapshot 是 webx 运行指标快照，可接入监控面板。
 type MetricsSnapshot struct {
@@ -172,8 +158,8 @@ func (s *Server) connState(_ net.Conn, state http.ConnState) {
 
 // emitConnGauge 向外部瞬时量接口上报当前连接数变化。
 func (s *Server) emitConnGauge(delta int64) {
-	if g, ok := s.metricsSink.(GaugeMetrics); ok {
-		g.AddGauge("webx.active_connections", float64(delta))
+	if s.metricsSink != nil {
+		s.metricsSink.AddGauge("webx.active_connections", float64(delta), nil)
 	}
 }
 

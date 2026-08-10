@@ -85,7 +85,7 @@ func (rl *RateLimiter) SetMetricsSink(sink MetricsSink) {
 // emitRejected 转发限流拒绝事件。
 func (rl *RateLimiter) emitRejected() {
 	if rl.sink != nil {
-		rl.sink.IncCounter("webx.rate_limited")
+		rl.sink.IncCounter("webx.rate_limited", nil)
 	}
 }
 
