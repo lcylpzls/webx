@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	testx "github.com/lcylpzls/testx"
 	"net"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lcylpzls/resiliencex"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
@@ -88,6 +90,39 @@ func TestRateLimiterWhitelist(t *testing.T) {
 	// qps=0 时非白名单必被拒
 	if rl.Allow("8.8.8.8") {
 		t.Error("非白名单应被拒")
+	}
+}
+
+// TestRateLimiterMetricsSink 验证限流拒绝事件转发到外部指标接收器。
+func TestRateLimiterMetricsSink(t *testing.T) {
+	sink := newFakeSink()
+	rl := NewRateLimiter(1, time.Second, nil)
+	rl.SetMetricsSink(sink)
+	if !rl.Allow("192.0.2.1") {
+		t.Fatal("首次请求应放行")
+	}
+	if rl.Allow("192.0.2.1") {
+		t.Fatal("令牌耗尽后应拒绝")
+	}
+	if len(sink.counters["webx.rate_limited"]) != 1 {
+		t.Fatalf("限流拒绝事件缺失：%+v", sink.counters)
+	}
+}
+
+// TestRateLimiterTokenBucketError 验证令牌桶构造失败时请求被拒绝。
+func TestRateLimiterTokenBucketError(t *testing.T) {
+	orig := newTokenBucket
+	newTokenBucket = func(float64, int, ...resiliencex.Option) (*resiliencex.Limiter, error) {
+		return nil, errors.New("模拟令牌桶构造失败")
+	}
+	defer func() { newTokenBucket = orig }()
+
+	rl := NewRateLimiter(1, time.Second, nil)
+	if rl.Allow("192.0.2.1") {
+		t.Fatal("令牌桶构造失败时应拒绝请求")
+	}
+	if rl.Rejected() != 1 {
+		t.Fatalf("应记录 1 次拒绝，实际 %d", rl.Rejected())
 	}
 }
 

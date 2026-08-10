@@ -33,6 +33,9 @@ type RateLimiter struct {
 	sink       MetricsSink
 }
 
+// newTokenBucket 是可替换的令牌桶构造器（测试可注入失败分支）。
+var newTokenBucket = resiliencex.NewTokenBucket
+
 // NewRateLimiter 创建 IP 限流器。
 func NewRateLimiter(qps int, window time.Duration, whitelistCIDRs []string) *RateLimiter {
 	rl := &RateLimiter{
@@ -114,7 +117,7 @@ func (rl *RateLimiter) Allow(ip string) bool {
 			rl.rejected.Add(1)
 			return false
 		}
-		limiter, err := resiliencex.NewTokenBucket(float64(rl.qps), rl.qps)
+		limiter, err := newTokenBucket(float64(rl.qps), rl.qps)
 		if err != nil {
 			rl.rejected.Add(1)
 			return false
