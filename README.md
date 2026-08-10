@@ -136,7 +136,7 @@
 - 链路追踪统一使用 tracex 基座：
   `s.UseGlobalMiddleware(txwebx.Middleware(m))`；
 - 全局中间件已覆盖 404/405 兜底请求，追踪无盲区；
-- `X-Trace-ID` 请求 ID 能力保留，与链路追踪无关。
+- `X-Request-ID` 请求 ID 能力保留，与链路追踪无关。
 
 ## License
 

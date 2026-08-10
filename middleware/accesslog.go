@@ -121,7 +121,7 @@ func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
 	}
 }
 
-// headerFieldName 将请求头名转为日志字段名（X-Trace-ID → header_x_trace_id）。
+// headerFieldName 将请求头名转为日志字段名（X-Request-ID → header_x_request_id）。
 func headerFieldName(key string) string {
 	return "header_" + strings.ToLower(strings.ReplaceAll(key, "-", "_"))
 }

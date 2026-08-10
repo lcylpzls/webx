@@ -10,7 +10,14 @@
   保证 trace / 限流 / 安全等中间件全请求生效；
 - 明确规范：webx 不内置分布式追踪中间件，链路追踪统一通过
   tracex 基座 + `github.com/lcylpzls/tracex/adapters/webx` 接入；
-  `X-Trace-ID` 请求 ID 能力保留（与链路追踪无关）。
+  `X-Request-ID` 请求 ID 能力保留（与链路追踪无关）。
+
+## [v1.2.6] - 2026-08-10
+
+### 文档修正
+
+- 请求 ID 头名文档统一为 `X-Request-ID`（默认值本就是
+  X-Request-ID，此前文档误写为 X-Trace-ID）。
 
 ## [v1.2.2] - 2026-08-09
 
