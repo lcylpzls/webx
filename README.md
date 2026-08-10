@@ -130,6 +130,14 @@
   或更高版本；低于该版本时 `Start()` 会拒绝初始化并返回
   `WEBX_START_FAILED`。
 
+## 可观测性规范
+
+- webx 不内置分布式追踪（保持零第三方依赖定位）；
+- 链路追踪统一使用 tracex 基座：
+  `s.UseGlobalMiddleware(txwebx.Middleware(m))`；
+- 全局中间件已覆盖 404/405 兜底请求，追踪无盲区；
+- `X-Trace-ID` 请求 ID 能力保留，与链路追踪无关。
+
 ## License
 
 MIT © [lcylpzls](https://github.com/lcylpzls)

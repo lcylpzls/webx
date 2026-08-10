@@ -553,6 +553,9 @@ func (s *Server) Start() error {
 		s.mwManager.SetOrder(keys...)
 	}
 
+	ctx := context.Background()
+	globalChain := s.mwManager.Build(ctx)
+
 	noRoute := core.NoRouteHandler
 	if s.spa != nil {
 		noRoute = spaNoRoute(s.spa.fs, s.spa.indexPath)
@@ -563,11 +566,18 @@ func (s *Server) Start() error {
 	if msg := s.errMessages[ErrorMessageMethodNotAllowed]; msg != "" {
 		noMethod = func(c *core.Context) { c.JSONResponse(http.StatusMethodNotAllowed, msg, nil) }
 	}
-	s.router = NewRouter(noRoute, noMethod)
+	// 兜底处理器（404/405）也走全局中间件链，保证 trace/限流/
+	// 安全等中间件全请求覆盖。
+	wrapFallback := func(h core.HandlerFunc) core.HandlerFunc {
+		chain := append(append([]core.HandlerFunc{}, globalChain...), h)
+		return func(c *core.Context) {
+			c.SetHandlers(chain)
+			c.Run()
+		}
+	}
+	s.router = NewRouter(wrapFallback(noRoute), wrapFallback(noMethod))
 	s.router.SetMaxBodyBytes(s.config.MaxBodyBytes)
 
-	ctx := context.Background()
-	globalChain := s.mwManager.Build(ctx)
 	buildChain := func(route Route) []core.HandlerFunc {
 		// 首个处理器注入路由/分组元数据，供 Metrics 等中间件做路由级聚合。
 		chain := []core.HandlerFunc{

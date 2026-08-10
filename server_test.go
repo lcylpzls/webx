@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -1931,4 +1932,41 @@ func freeUDPAddr(t *testing.T) string {
 	addr := pc.LocalAddr().String()
 	pc.Close()
 	return addr
+}
+
+// TestGlobalMiddlewareCoversFallbacks 验证全局中间件覆盖 404/405。
+func TestGlobalMiddlewareCoversFallbacks(t *testing.T) {
+	s := newTestServer(t, validConfig(t))
+	var hits atomic.Int32
+	s.UseGlobalMiddleware(func(c *Context) {
+		hits.Add(1)
+		c.Next()
+	})
+	s.UseHttp2Listen("127.0.0.1:0")
+	s.RegisterRoute(Route{Method: http.MethodGet, Path: "/hello",
+		Handler: func(c *Context) { _ = c.String(http.StatusOK, "ok") }})
+	startServer(t, s)
+	defer s.Stop(context.Background())
+
+	base := "https://" + s.ListenerAddr()
+	resp, err := testHTTPClient().Get(base + "/missing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("404 状态不符：%d", resp.StatusCode)
+	}
+	req, _ := http.NewRequest(http.MethodPost, base+"/hello", nil)
+	resp2, err := testHTTPClient().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp2.Body.Close()
+	if resp2.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("405 状态不符：%d", resp2.StatusCode)
+	}
+	if hits.Load() != 2 {
+		t.Fatalf("全局中间件应覆盖 404/405，实际命中：%d", hits.Load())
+	}
 }
