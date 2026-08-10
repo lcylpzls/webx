@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"net"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/lcylpzls/confx"
@@ -56,11 +55,6 @@ type Config struct {
 	LivenessPath string `toml:"liveness_path"`
 	// ReadinessPath 就绪探针端点路径，默认为 "/readyz"。
 	ReadinessPath string `toml:"readiness_path"`
-	// MetricsEnabled 是否启用 Prometheus 文本格式指标端点。
-	MetricsEnabled bool `toml:"metrics_enabled"`
-	// MetricsPath 指标端点路径，启用时默认为 "/metrics"。
-	MetricsPath string `toml:"metrics_path"`
-
 	// LogLevel 日志级别，可选 debug、info、warn、error，为空默认 info。
 	LogLevel string `toml:"log_level"`
 	// AccessLogEnabled 是否启用访问日志中间件。
@@ -274,12 +268,6 @@ func (c *Config) Validate() error {
 	}
 	if c.ReadinessPath == "" {
 		c.ReadinessPath = "/readyz"
-	}
-	if c.MetricsEnabled && c.MetricsPath == "" {
-		c.MetricsPath = "/metrics"
-	}
-	if c.MetricsPath != "" && !strings.HasPrefix(c.MetricsPath, "/") {
-		return errx.NewCode(CodeConfigInvalid, "指标端点路径必须以 / 开头")
 	}
 	if c.ReadHeaderTimeout == 0 {
 		c.ReadHeaderTimeout = 10 * time.Second

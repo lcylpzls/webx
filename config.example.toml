@@ -26,8 +26,9 @@ liveness_path = "/healthz"     # 存活探针（RegisterLivenessCheck）
 readiness_path = "/readyz"     # 就绪探针（RegisterReadinessCheck，关闭中返回 503）
 
 # --- 指标端点（Prometheus 文本格式，自研零依赖） ---
-metrics_enabled = false            # true=启用 /metrics 指标端点
-metrics_path = "/metrics"          # 端点路径（需以 / 开头）
+# 指标统一外置：v2 不再内置 /metrics 端点。
+# 在代码中通过 s.WithMetrics(metricsx 实例) 接入，
+# 再用 promhttp 自行挂载暴露路由。
 
 # --- 平台限制 ---
 # Unix Socket 监听（UseUnixSocketListen）在 Windows 上要求

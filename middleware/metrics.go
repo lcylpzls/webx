@@ -10,8 +10,27 @@ import (
 	"github.com/lcylpzls/webx/internal/core"
 )
 
+// MetricsSink 是外部指标接收器接口，metricsx 等家族底座天然满足。
+// 未注入时仅保留内部快照统计，不产生外部开销。
+type MetricsSink interface {
+	// IncCounter 增加一个计数指标。
+	IncCounter(name string, labels ...string)
+	// ObserveDuration 记录一次耗时观测（秒）。
+	ObserveDuration(name string, seconds float64, labels ...string)
+}
+
+// GaugeSink 是可选的瞬时量扩展接口，实现时 webx 会上报
+// 活跃请求与连接水位；未实现则自动跳过。
+type GaugeSink interface {
+	// AddGauge 按增量调整瞬时量（如 +1/-1）。
+	AddGauge(name string, delta float64, labels ...string)
+	// SetGauge 设置瞬时量绝对值。
+	SetGauge(name string, value float64, labels ...string)
+}
+
 // Metrics 统计请求、状态码分布与协议维度指标，供监控面板对接。
 type Metrics struct {
+	sink         MetricsSink
 	requests     atomic.Uint64
 	errors5x     atomic.Uint64
 	panics       atomic.Uint64
@@ -42,9 +61,9 @@ type routeGroupStore struct {
 	groups sync.Map
 }
 
-// NewMetrics 创建指标计数器。
-func NewMetrics() *Metrics {
-	return &Metrics{stats: &routeGroupStore{}}
+// NewMetrics 创建指标计数器，sink 为外部指标接收器（可为 nil）。
+func NewMetrics(sink MetricsSink) *Metrics {
+	return &Metrics{sink: sink, stats: &routeGroupStore{}}
 }
 
 // ProtocolStats 协议维度请求统计快照。
@@ -103,8 +122,10 @@ func MetricsHandler(m *Metrics) core.HandlerFunc {
 		start := time.Now()
 		m.requests.Add(1)
 		m.inFlight.Add(1)
+		m.gaugeDelta("webx.requests_in_flight", 1)
 		defer func() {
 			m.inFlight.Add(-1)
+			m.gaugeDelta("webx.requests_in_flight", -1)
 			elapsed := uint64(time.Since(start))
 			m.durationNs.Add(elapsed)
 			m.samples.Add(1)
@@ -114,6 +135,7 @@ func MetricsHandler(m *Metrics) core.HandlerFunc {
 				m.status5xx.Add(1)
 				m.errors5x.Add(1)
 				m.recordRoute(c, status, elapsed)
+				m.emitSink(c, status, elapsed)
 				panic(r)
 			}
 			switch {
@@ -146,8 +168,70 @@ func MetricsHandler(m *Metrics) core.HandlerFunc {
 				m.http3Samples.Add(1)
 			}
 			m.recordRoute(c, status, elapsed)
+			m.emitSink(c, status, elapsed)
 		}()
 		c.Next()
+	}
+}
+
+// emitSink 将请求事件转发给外部指标接收器。
+// 标签固定为 route/group/status/protocol，保证命名与维度统一。
+func (m *Metrics) emitSink(c *core.Context, status int, elapsed uint64) {
+	if m.sink == nil {
+		return
+	}
+	labels := []string{
+		c.Route(),
+		c.Group(),
+		statusClass(status),
+		protocolName(c.Request().Proto),
+	}
+	m.sink.IncCounter("webx.requests", labels...)
+	m.sink.ObserveDuration("webx.request_duration", float64(elapsed)/1e9, labels...)
+}
+
+// gaugeDelta 通过可选瞬时量接口调整水位。
+func (m *Metrics) gaugeDelta(name string, delta float64) {
+	if g, ok := m.sink.(GaugeSink); ok {
+		g.AddGauge(name, delta)
+	}
+}
+
+// recordPanic 记录 Recovery 捕获的 panic 并转发外部计数。
+func (m *Metrics) recordPanic() {
+	m.panics.Add(1)
+	if m.sink != nil {
+		m.sink.IncCounter("webx.panics")
+	}
+}
+
+// statusClass 返回标准状态码分类标签（1xx..5xx）。
+func statusClass(status int) string {
+	switch {
+	case status < 200:
+		return "1xx"
+	case status < 300:
+		return "2xx"
+	case status < 400:
+		return "3xx"
+	case status < 500:
+		return "4xx"
+	default:
+		return "5xx"
+	}
+}
+
+// protocolName 返回可读协议标签（HTTP/1、HTTP/2、HTTP/3）。
+func protocolName(proto string) string {
+	switch proto {
+	case "HTTP/1.0", "HTTP/1.1":
+		return "HTTP/1"
+	case "HTTP/2.0":
+		return "HTTP/2"
+	case "HTTP/3.0":
+		return "HTTP/3"
+	default:
+		return "unknown"
 	}
 }
 

@@ -23,6 +23,7 @@ type RateLimiter struct {
 	maxBuckets int
 	keyFunc    func(*core.Context) string
 	rejectMsg  string
+	sink       MetricsSink
 }
 
 type tokenBucket struct {
@@ -74,6 +75,18 @@ func (rl *RateLimiter) SetRejectMessage(msg string) {
 	rl.rejectMsg = msg
 }
 
+// SetMetricsSink 注入外部指标接收器（启动前调用，可为 nil）。
+func (rl *RateLimiter) SetMetricsSink(sink MetricsSink) {
+	rl.sink = sink
+}
+
+// emitRejected 转发限流拒绝事件。
+func (rl *RateLimiter) emitRejected() {
+	if rl.sink != nil {
+		rl.sink.IncCounter("webx.rate_limited")
+	}
+}
+
 // Allow 检查指定 IP 是否被允许通过。
 func (rl *RateLimiter) Allow(ip string) bool {
 	rl.mu.Lock()
@@ -109,6 +122,7 @@ func (rl *RateLimiter) Allow(ip string) bool {
 		return true
 	}
 	rl.rejected.Add(1)
+	rl.emitRejected()
 	return false
 }
 

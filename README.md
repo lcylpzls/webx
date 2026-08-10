@@ -6,7 +6,7 @@
 [![Go Version](https://img.shields.io/badge/Go-%3E%3D1.26-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> 当前状态：**v1.2.1 已发布，API 冻结**。各包语句覆盖率 100%，
+> 当前状态：**v2.0.0 已发布（破坏性变更）**。各包语句覆盖率 100%，
 > 三平台 CI + race + fuzz + apidiff 全绿。
 
 ## 技术栈
@@ -19,6 +19,7 @@
 | [confx](https://github.com/lcylpzls/confx) | TOML 配置加载 | 自家库 |
 | [quic-go](https://github.com/quic-go/quic-go) | HTTP/3 (QUIC) 传输 | 第三方直接依赖之一 |
 | [google/uuid](https://github.com/google/uuid) | UUID v7 请求 ID | 标准实现，`uuid.Must` 稳定生成 |
+| [metricsx](https://github.com/lcylpzls/metricsx)（可选） | 统一外置指标底座 | 仅示例接入，库本体不依赖 |
 
 > 第三方直接依赖：`quic-go`（HTTP/3）与 `google/uuid`（UUID v7），其余全部自研。
 
@@ -27,7 +28,7 @@
 1. 复制 `config.example.toml` 为 `config.toml`，填入 TLS 证书路径并按需修改；
 2. 从 [examples/basic](examples/basic) 起步体验最小服务；
 3. 生产部署直接参考 [examples/production](examples/production)：
-   探针、可信代理、限流、并发限制、指标端点、上传与优雅关闭全配置模板。
+   探针、可信代理、限流、并发限制、外置指标、上传与优雅关闭全配置模板。
 
 ## 设计原则
 
@@ -53,13 +54,14 @@
 - 🐢 慢请求日志：`slow_request_threshold` 超阈值自动 Warn；
 - ⚡ 静态资源 ETag：可选弱 ETag，`If-None-Match` 命中返回 304；
 - 🕵️ 可信代理：`trusted_proxies` 配置，代理头防伪造（限流/审计/日志统一）；
-- 📊 运行时指标：goroutine、堆内存、GC 计数进入 `/metrics`；
+- 📊 指标统一外置：`WithMetrics(metricsx 实例)` 转发请求/耗时/水位事件，
+  由 metricsx + promhttp 自行暴露；
 - ✏️ 错误文案可定制：`error_messages` 覆盖内置 404/405/413/429/503；
 - 📋 AccessLog 请求头白名单：`access_log_headers` + 复用脱敏；
 - 📊 标准化响应：`{code, msg, data, requestId, timestamp}`；
 - 🩺 健康检查：`/health`，路径可配置；
 - 🔍 探针分离：`/healthz` 存活 / `/readyz` 就绪（优雅关闭中就绪自动 503）；
-- 📈 Prometheus 指标端点：`/metrics` 文本格式输出（零第三方依赖）；
+- 📈 v2 不再内置 `/metrics` 端点，指标采集职责完全交给外部底座；
 - 🪵 日志接入 logx；错误接入 errx；配置接入 confx（TOML）；
 - 🧹 优雅关闭：SIGINT/SIGTERM 信号捕获 + `Stop(ctx)`；
 - 🗂️ 静态文件服务与 SPA 回退（支持 `embed`）。
@@ -95,7 +97,7 @@
 | 路由/分组 | `RegisterRoute / RegisterRouteGroup / RouteGroup.GET...` |
 | 中间件管理 | `UseGlobalMiddleware / OverrideMiddleware / Disable/EnableMiddleware` |
 | 请求 ID | `SetRequestIDOptions`（自定义头名与生成器，默认 UUID v7） |
-| 指标端点 | `EnableMetricsEndpoint("/metrics")`（Prometheus 文本格式） |
+| 指标接入 | `WithMetrics(metricsx 实例)`（请求/耗时/水位事件，可选） |
 | 并发限制 | `SetMaxConcurrentRequests(n)`（超限 503 + Retry-After） |
 | 内置中间件 | Recovery、RequestID、BodyLimit、Timeout、CORS、Validation、RateLimit、Gzip、Metrics、AccessLog、Security |
 | 标准化响应 | `c.Success / c.Fail / c.JSONResponse / c.AbortWithStatusJSON` |

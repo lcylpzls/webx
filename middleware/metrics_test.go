@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 )
 
 func TestMetricsHandler(t *testing.T) {
-	m := NewMetrics()
+	m := NewMetrics(nil)
 
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/ok", nil))
@@ -38,7 +39,7 @@ func TestMetricsHandler(t *testing.T) {
 }
 
 func TestMetricsDurations(t *testing.T) {
-	m := NewMetrics()
+	m := NewMetrics(nil)
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/slow", nil))
 	c.SetHandlers([]core.HandlerFunc{
@@ -56,7 +57,7 @@ func TestMetricsDurations(t *testing.T) {
 }
 
 func TestMetricsInFlight(t *testing.T) {
-	m := NewMetrics()
+	m := NewMetrics(nil)
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	rec := httptest.NewRecorder()
@@ -86,7 +87,7 @@ func TestMetricsInFlight(t *testing.T) {
 }
 
 func TestMetricsStatusCodes(t *testing.T) {
-	m := NewMetrics()
+	m := NewMetrics(nil)
 	for _, code := range []int{199, 200, 302, 404, 500} {
 		rec := httptest.NewRecorder()
 		c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -107,7 +108,7 @@ func TestMetricsStatusCodes(t *testing.T) {
 }
 
 func TestMetricsProtocolStats(t *testing.T) {
-	m := NewMetrics()
+	m := NewMetrics(nil)
 	for _, proto := range []string{"HTTP/1.0", "HTTP/1.1", "HTTP/2.0", "HTTP/3.0"} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -129,20 +130,21 @@ func TestMetricsProtocolStats(t *testing.T) {
 	if ps.HTTP1AvgMs == 0 || ps.HTTP2AvgMs == 0 || ps.HTTP3AvgMs == 0 {
 		t.Errorf("协议平均耗时应为正数：%+v", ps)
 	}
-	fresh := NewMetrics().ProtocolStats()
+	fresh := NewMetrics(nil).ProtocolStats()
 	if fresh.HTTP1AvgMs != 0 || fresh.HTTP2AvgMs != 0 || fresh.HTTP3AvgMs != 0 {
 		t.Errorf("未采样协议平均耗时应为 0：%+v", fresh)
 	}
 }
 
 func TestMetricsPanicSampling(t *testing.T) {
-	m := NewMetrics()
+	m := NewMetrics(nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
 	req.Proto = "HTTP/1.1"
 	c := core.NewContext(rec, req)
 	c.SetRoute("/boom")
 	c.SetHandlers([]core.HandlerFunc{
+		RecoveryWithOptions(nil, m, false),
 		MetricsHandler(m),
 		func(c *core.Context) { panic("测试 panic") },
 	})
@@ -168,7 +170,7 @@ func TestMetricsPanicSampling(t *testing.T) {
 }
 
 func TestMetricsRouteAndGroupStats(t *testing.T) {
-	m := NewMetrics()
+	m := NewMetrics(nil)
 	for i := 0; i < 3; i++ {
 		rec := httptest.NewRecorder()
 		c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/api/users/1", nil))
@@ -240,7 +242,7 @@ func TestMetricsRouteAndGroupStats(t *testing.T) {
 	}
 
 	// 空快照
-	fresh := NewMetrics()
+	fresh := NewMetrics(nil)
 	if got := fresh.RouteStats(); len(got) != 0 {
 		t.Errorf("空路由快照应为空：%+v", got)
 	}
@@ -269,3 +271,168 @@ func TestMetricsZeroValueSafe(t *testing.T) {
 		t.Errorf("零值 Metrics 不应产生路由统计：%+v", got)
 	}
 }
+
+// fakeSink 是外部指标接收器测试替身，同时实现瞬时量接口。
+type fakeSink struct {
+	counters map[string][]string
+	hist     map[string][]string
+	gauges   map[string]float64
+}
+
+func newFakeSink() *fakeSink {
+	return &fakeSink{
+		counters: make(map[string][]string),
+		hist:     make(map[string][]string),
+		gauges:   make(map[string]float64),
+	}
+}
+
+func (f *fakeSink) IncCounter(name string, labels ...string) {
+	f.counters[name] = append(f.counters[name], name+":"+joinLabels(labels))
+}
+
+func (f *fakeSink) ObserveDuration(name string, seconds float64, labels ...string) {
+	f.hist[name] = append(f.hist[name], name+":"+joinLabels(labels))
+}
+
+func (f *fakeSink) AddGauge(name string, delta float64, labels ...string) {
+	f.gauges[name] += delta
+}
+
+func (f *fakeSink) SetGauge(name string, value float64, labels ...string) {
+	f.gauges[name] = value
+}
+
+func joinLabels(labels []string) string {
+	return strings.Join(labels, "|")
+}
+
+func TestMetricsHandlerExternalSink(t *testing.T) {
+	sink := newFakeSink()
+	m := NewMetrics(sink)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/users/1", nil)
+	req.Proto = "HTTP/2.0"
+	c := core.NewContext(rec, req)
+	c.SetRoute("/api/users/:id")
+	c.SetGroup("/api")
+	c.SetHandlers([]core.HandlerFunc{
+		MetricsHandler(m),
+		func(c *core.Context) { c.Success("ok", nil) },
+	})
+	c.Run()
+
+	if len(sink.counters["webx.requests"]) != 1 {
+		t.Fatalf("外部请求计数缺失：%+v", sink.counters)
+	}
+	if got := sink.counters["webx.requests"][0]; got != "webx.requests:/api/users/:id|/api|2xx|HTTP/2" {
+		t.Errorf("请求标签不符：%s", got)
+	}
+	if len(sink.hist["webx.request_duration"]) != 1 {
+		t.Fatalf("外部耗时观测缺失：%+v", sink.hist)
+	}
+	if sink.gauges["webx.requests_in_flight"] != 0 {
+		t.Errorf("瞬时量应回归 0：%v", sink.gauges)
+	}
+}
+
+func TestMetricsHandlerExternalSinkPanic(t *testing.T) {
+	sink := newFakeSink()
+	m := NewMetrics(sink)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
+	req.Proto = "HTTP/1.1"
+	c := core.NewContext(rec, req)
+	c.SetRoute("/boom")
+	c.SetHandlers([]core.HandlerFunc{
+		RecoveryWithOptions(nil, m, false),
+		MetricsHandler(m),
+		func(c *core.Context) { panic("测试 panic") },
+	})
+	func() {
+		defer func() { recover() }()
+		c.Run()
+	}()
+	if len(sink.counters["webx.panics"]) != 1 {
+		t.Errorf("外部 panic 计数缺失：%+v", sink.counters)
+	}
+	if got := sink.counters["webx.requests"][0]; got != "webx.requests:/boom||5xx|HTTP/1" {
+		t.Errorf("panic 请求标签不符：%s", got)
+	}
+}
+
+func TestMetricsHandlerExternalSinkNoGauge(t *testing.T) {
+	sink := &counterOnlySink{counters: make(map[string][]string)}
+	m := NewMetrics(sink)
+	rec := httptest.NewRecorder()
+	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+	c.SetHandlers([]core.HandlerFunc{
+		MetricsHandler(m),
+		func(c *core.Context) { c.Success("ok", nil) },
+	})
+	c.Run()
+	if len(sink.counters["webx.requests"]) != 1 {
+		t.Fatalf("仅计数接收器也应收到请求事件：%+v", sink.counters)
+	}
+}
+
+func TestStatusClassAndProtocolName(t *testing.T) {
+	cases := []struct {
+		status int
+		proto  string
+		class  string
+		pt     string
+	}{
+		{199, "HTTP/1.0", "1xx", "HTTP/1"},
+		{200, "HTTP/1.1", "2xx", "HTTP/1"},
+		{302, "HTTP/2.0", "3xx", "HTTP/2"},
+		{404, "HTTP/3.0", "4xx", "HTTP/3"},
+		{500, "h2c", "5xx", "unknown"},
+	}
+	for _, tc := range cases {
+		if got := statusClass(tc.status); got != tc.class {
+			t.Errorf("statusClass(%d) = %q,want %q", tc.status, got, tc.class)
+		}
+		if got := protocolName(tc.proto); got != tc.pt {
+			t.Errorf("protocolName(%q) = %q,want %q", tc.proto, got, tc.pt)
+		}
+	}
+}
+
+func TestLimiterMetricsSinkExternal(t *testing.T) {
+	sink := newFakeSink()
+	rl := NewRateLimiter(1, time.Second, nil)
+	rl.SetMetricsSink(sink)
+	if !rl.Allow("127.0.0.1") {
+		t.Fatal("首个请求应放行")
+	}
+	if rl.Allow("127.0.0.1") {
+		t.Fatal("第二个请求应被限流拒绝")
+	}
+	if len(sink.counters["webx.rate_limited"]) != 1 {
+		t.Errorf("外部限流拒绝事件缺失：%+v", sink.counters)
+	}
+
+	cl := NewConcurrencyLimiter(1)
+	cl.SetMetricsSink(sink)
+	if !cl.TryAcquire() {
+		t.Fatal("首个并发额度应获取成功")
+	}
+	if cl.TryAcquire() {
+		t.Fatal("额度已满应拒绝")
+	}
+	if len(sink.counters["webx.concurrency_rejected"]) != 1 {
+		t.Errorf("外部并发拒绝事件缺失：%+v", sink.counters)
+	}
+}
+
+// counterOnlySink 仅实现 MetricsSink，不实现 GaugeSink。
+type counterOnlySink struct {
+	counters map[string][]string
+}
+
+func (f *counterOnlySink) IncCounter(name string, labels ...string) {
+	f.counters[name] = append(f.counters[name], name+":"+joinLabels(labels))
+}
+
+func (f *counterOnlySink) ObserveDuration(string, float64, ...string) {}

@@ -3,5 +3,3 @@ tls_key_file = "/etc/ssl/private/server.key"
 shutdown_timeout = "30s"
 request_timeout = "30s"
 middleware_metrics = true
-metrics_enabled = true
-metrics_path = "/metrics"

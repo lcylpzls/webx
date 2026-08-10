@@ -1,4 +1,4 @@
-// production 示例：探针、可信代理、限流、并发限制、指标端点、上传与优雅关闭的综合生产模板。
+// production 示例：探针、可信代理、限流、并发限制、外置指标、上传与优雅关闭的综合生产模板。
 package main
 
 import (
@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/lcylpzls/logx"
+	"github.com/lcylpzls/metricsx"
 	"github.com/lcylpzls/webx"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -25,8 +27,21 @@ func main() {
 		return
 	}
 
+	metrics, err := metricsx.New(metricsx.WithNamespace("myapp"))
+	if err != nil {
+		logger.Error("创建指标适配器失败", logx.Fields(logx.Any("error", err)))
+		return
+	}
+
 	s := webx.NewServer(cfg, logger)
-	s.EnableMetricsEndpoint("/metrics")
+	s.WithMetrics(metrics)
+	s.RegisterRoute(webx.Route{
+		Method: http.MethodGet,
+		Path:   "/metrics",
+		Handler: func(c *webx.Context) {
+			promhttp.Handler().ServeHTTP(c.Writer(), c.Request())
+		},
+	})
 	s.SetMaxConcurrentRequests(200)
 	s.EnableRateLimit(webx.RateLimitOptions{QPS: 100, Window: time.Second})
 	s.RegisterLivenessCheck("live", func(ctx context.Context) error { return nil })

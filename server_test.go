@@ -141,8 +141,8 @@ func TestServerChainAPI(t *testing.T) {
 	if got := s.SetRequestIDOptions(RequestIDOptions{Header: "X-Trace-ID"}); got != s {
 		t.Error("SetRequestIDOptions 应返回自身")
 	}
-	if got := s.EnableMetricsEndpoint("/metrics"); got != s {
-		t.Error("EnableMetricsEndpoint 应返回自身")
+	if got := s.WithMetrics(nil); got != s {
+		t.Error("WithMetrics 应返回自身")
 	}
 	if got := s.SetMaxConcurrentRequests(10); got != s {
 		t.Error("SetMaxConcurrentRequests 应返回自身")

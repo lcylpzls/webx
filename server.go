@@ -78,7 +78,7 @@ type Server struct {
 	onShutdown      []func()
 	mwOrder         []MiddlewareType
 	requestIDOpts   RequestIDOptions
-	metricsPath     string
+	metricsSink     middleware.MetricsSink
 	maxConcurrent   int
 	errorMessages   map[string]string
 	errMessages     map[string]string
@@ -117,6 +117,24 @@ func (s *Server) WithLogger(l logx.Logger) *Server {
 		return s
 	}
 	s.logger = l
+	return s
+}
+
+// WithMetrics 注入外部指标接收器（metricsx 或其他实现），启动前调用。
+// 接收器实现 GaugeMetrics 时自动上报活跃请求/连接水位；
+// 传 nil 表示关闭外部转发，仅保留内部快照统计。
+func (s *Server) WithMetrics(m Metrics) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		s.warnStarted("修改外部指标接收器")
+		return s
+	}
+	if m == nil {
+		s.metricsSink = nil
+	} else {
+		s.metricsSink = m
+	}
 	return s
 }
 
@@ -339,19 +357,6 @@ func (s *Server) SetRequestIDOptions(opts RequestIDOptions) *Server {
 	return s
 }
 
-// EnableMetricsEndpoint 启用 Prometheus 文本格式指标端点（启动前调用）。
-// path 为空表示禁用；绕过业务中间件链，避免自采集反馈。
-func (s *Server) EnableMetricsEndpoint(path string) *Server {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.started {
-		s.warnStarted("启用指标端点")
-		return s
-	}
-	s.metricsPath = path
-	return s
-}
-
 // SetMaxConcurrentRequests 设置同时处理的请求数上限（启动前调用）。
 // n <= 0 表示不限制；超限请求返回 503 并携带 Retry-After。
 func (s *Server) SetMaxConcurrentRequests(n int) *Server {
@@ -407,6 +412,7 @@ func (s *Server) EnableRateLimit(opts RateLimitOptions) *Server {
 			return opts.KeyFunc(c)
 		})
 	}
+	rl.SetMetricsSink(s.metricsSink)
 	s.rateLimiter = rl
 	s.mwManager.EnableRateLimit(middleware.RateLimit(rl))
 
@@ -634,12 +640,6 @@ func (s *Server) Start() error {
 			}
 		}
 	}
-	if path := s.metricsEndpointPath(); path != "" {
-		if err := s.router.Handle("GET", path, []core.HandlerFunc{s.serveMetrics}); err != nil {
-			return errx.WrapCode(err, CodeStartFailed, "指标端点路由注册失败")
-		}
-	}
-
 	var wg sync.WaitGroup
 	if s.http2Enabled {
 		getCert := s.buildGetCertificate()
@@ -854,7 +854,10 @@ func callRouteGroupFn(fn func(*RouteGroup), rg *RouteGroup) (err error) {
 
 // registerBuiltinMiddleware 按配置注册内置中间件。
 func (s *Server) registerBuiltinMiddleware() {
-	s.metrics = middleware.NewMetrics()
+	s.metrics = middleware.NewMetrics(s.metricsSink)
+	if s.rateLimiter != nil {
+		s.rateLimiter.SetMetricsSink(s.metricsSink)
+	}
 	s.mwManager.RegisterBuiltin("recovery", middleware.RecoveryWithOptions(s.logger, s.metrics, s.config.Debug))
 	if !s.config.MiddlewareRecovery {
 		s.mwManager.Disable("recovery")
@@ -874,6 +877,7 @@ func (s *Server) registerBuiltinMiddleware() {
 	}
 	s.concurrencyLimiter = middleware.NewConcurrencyLimiter(s.maxConcurrent)
 	s.concurrencyLimiter.SetRejectMessage(s.errMessages[ErrorMessageTooBusy])
+	s.concurrencyLimiter.SetMetricsSink(s.metricsSink)
 	s.mwManager.RegisterBuiltin("concurrency_limit", middleware.ConcurrencyLimit(s.concurrencyLimiter))
 	if s.maxConcurrent <= 0 {
 		s.mwManager.Disable("concurrency_limit")

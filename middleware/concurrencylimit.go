@@ -13,6 +13,7 @@ type ConcurrencyLimiter struct {
 	active    atomic.Int64
 	rejected  atomic.Uint64
 	rejectMsg atomic.Pointer[string]
+	sink      MetricsSink
 }
 
 // NewConcurrencyLimiter 创建并发限制器；max <= 0 表示不限制。
@@ -29,6 +30,7 @@ func (l *ConcurrencyLimiter) TryAcquire() bool {
 		current := l.active.Load()
 		if current >= l.max {
 			l.rejected.Add(1)
+			l.emitRejected()
 			return false
 		}
 		if l.active.CompareAndSwap(current, current+1) {
@@ -55,6 +57,18 @@ func (l *ConcurrencyLimiter) Rejected() uint64 {
 // SetRejectMessage 设置拒绝响应文案；空字符串使用默认文案。
 func (l *ConcurrencyLimiter) SetRejectMessage(msg string) {
 	l.rejectMsg.Store(&msg)
+}
+
+// SetMetricsSink 注入外部指标接收器（启动前调用，可为 nil）。
+func (l *ConcurrencyLimiter) SetMetricsSink(sink MetricsSink) {
+	l.sink = sink
+}
+
+// emitRejected 转发并发拒绝事件。
+func (l *ConcurrencyLimiter) emitRejected() {
+	if l.sink != nil {
+		l.sink.IncCounter("webx.concurrency_rejected")
+	}
 }
 
 // ConcurrencyLimit 返回并发限制中间件；额度已满时返回 503 并携带 Retry-After。

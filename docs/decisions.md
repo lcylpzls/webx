@@ -77,3 +77,18 @@
   - QUIC 传输层继续使用 quic-go，不自行实现 QUIC。
 - **后果**：路由分发与标准化响应达到 0 allocs/op，端到端性能保持
   与 gin/echo 持平并持续向 fasthttp 靠拢；CI 增加分配数门禁防回退。
+
+## ADR-010 指标统一外置（v2.0.0）
+
+- **状态**：已定
+- **背景**：家族统一可观测性要求 metrics 只由一个底座（metricsx）
+  采集，webx 不再内置 Prometheus 文本端点与 /metrics 路由。
+- **决策**：
+  - 删除 `EnableMetricsEndpoint`、`metrics_enabled` / `metrics_path`
+    配置与文本渲染；快照 API（`Metrics()` / `RouteStats()` /
+    `GroupStats()`）保留，仅作为运行状态查看；
+  - 新增 `WithMetrics(webx.Metrics)` 外置转发：请求/耗时/panic/
+    限流/并发拒绝事件，活跃请求与连接水位走可选 `GaugeMetrics`；
+  - 暴露路由由调用方自行实现（示例使用 promhttp）。
+- **后果**：Prometheus 采集链路唯一化，webx 保持零指标采集依赖；
+  迁移只需删除配置字段并替换一行 API。

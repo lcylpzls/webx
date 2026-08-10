@@ -30,7 +30,7 @@ func RecoveryWithOptions(logger logx.Logger, m *Metrics, debugMode bool) core.Ha
 		defer func() {
 			if r := recover(); r != nil {
 				if m != nil {
-					m.panics.Add(1)
+					m.recordPanic()
 				}
 				stack := debug.Stack()
 				if logger != nil {

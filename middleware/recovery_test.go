@@ -50,7 +50,7 @@ func TestRecoveryNormal(t *testing.T) {
 }
 
 func TestRecoveryWithMetrics(t *testing.T) {
-	m := NewMetrics()
+	m := NewMetrics(nil)
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{

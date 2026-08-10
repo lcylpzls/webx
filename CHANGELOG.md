@@ -2,6 +2,31 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v2.0.0] - 2026-08-10
+
+### 破坏性变更
+
+- 移除内置 Prometheus 指标端点：`EnableMetricsEndpoint`、
+  配置项 `metrics_enabled` / `metrics_path` 与 `/metrics` 文本渲染全部删除；
+- 新增 `WithMetrics(webx.Metrics)`：外部注入统一指标接收器
+  （metricsx 等家族底座天然满足），请求数/耗时/panic/限流/并发拒绝
+  事件全部转发，活跃请求与连接水位通过可选 `GaugeMetrics` 接口上报；
+- `Metrics` 快照结构更名为 `MetricsSnapshot`，`Server.Metrics()` /
+  `RouteStats()` / `GroupStats()` 快照能力保留；
+- `middleware.NewMetrics(sink)` 签名变更，`middleware.MetricsSink` /
+  `GaugeSink` 为新的外部接收器接口。
+
+### 迁移指引
+
+- 删除配置中的 `metrics_enabled` / `metrics_path`；
+- `s.EnableMetricsEndpoint("/metrics")` 改为
+  `s.WithMetrics(m)` + 自行注册 promhttp 暴露路由（见 examples/metrics）。
+
+### 质量
+
+- 新增外部指标转发测试（含限流/并发拒绝事件与无 Gauge 实现降级）；
+- 覆盖率保持 100%；race / vet / staticcheck / fuzz 全绿。
+
 ## [v1.2.5] - 2026-08-10
 
 ### 修复与规范

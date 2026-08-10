@@ -5,8 +5,28 @@ import (
 	"net/http"
 )
 
-// Metrics 是 webx 运行指标快照，可接入监控面板。
-type Metrics struct {
+// Metrics 是最小指标接口，与 dbx/httpx/cachex/resiliencex 等
+// 家族底座签名一致，metricsx 天然满足。
+// webx 本身不采集 Prometheus，只把事件转发给外部注入的实例。
+type Metrics interface {
+	// IncCounter 增加一个计数指标。
+	IncCounter(name string, labels ...string)
+	// ObserveDuration 记录一次耗时观测（秒）。
+	ObserveDuration(name string, seconds float64, labels ...string)
+}
+
+// GaugeMetrics 是可选的瞬时量扩展接口。
+// 注入的指标实例支持时，webx 会上报活跃请求与连接水位；
+// 不支持则自动跳过，不影响主流程。
+type GaugeMetrics interface {
+	// AddGauge 按增量调整瞬时量（如 +1/-1）。
+	AddGauge(name string, delta float64, labels ...string)
+	// SetGauge 设置瞬时量绝对值。
+	SetGauge(name string, value float64, labels ...string)
+}
+
+// MetricsSnapshot 是 webx 运行指标快照，可接入监控面板。
+type MetricsSnapshot struct {
 	// Requests 请求总数（需启用 MiddlewareMetrics）。
 	Requests uint64
 	// Errors5xx 5xx 响应数（需启用 MiddlewareMetrics）。
@@ -72,8 +92,9 @@ type GroupStat struct {
 }
 
 // Metrics 返回运行指标快照；未启用对应能力时字段为 0。
-func (s *Server) Metrics() Metrics {
-	m := Metrics{}
+// 快照来自 webx 内部轻量计数器，与外部 metricsx 转发互不干扰。
+func (s *Server) Metrics() MetricsSnapshot {
+	m := MetricsSnapshot{}
 	if s.metrics != nil {
 		m.Requests, m.Errors5xx = s.metrics.Snapshot()
 		m.Panics = s.metrics.Panics()
@@ -142,8 +163,17 @@ func (s *Server) connState(_ net.Conn, state http.ConnState) {
 	switch state {
 	case http.StateNew:
 		s.activeConns.Add(1)
+		s.emitConnGauge(1)
 	case http.StateClosed, http.StateHijacked:
 		s.activeConns.Add(-1)
+		s.emitConnGauge(-1)
+	}
+}
+
+// emitConnGauge 向外部瞬时量接口上报当前连接数变化。
+func (s *Server) emitConnGauge(delta int64) {
+	if g, ok := s.metricsSink.(GaugeMetrics); ok {
+		g.AddGauge("webx.active_connections", float64(delta))
 	}
 }
 
