@@ -8,9 +8,9 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/hertz-contrib/http2 v0.1.8
 	github.com/labstack/echo/v4 v4.15.4
-	github.com/lcylpzls/logx v1.2.5
-	github.com/lcylpzls/testx v1.3.0
-	github.com/lcylpzls/webx v1.3.0
+	github.com/lcylpzls/logx v1.3.0
+	github.com/lcylpzls/testx v1.4.1
+	github.com/lcylpzls/webx v1.5.2
 	github.com/quic-go/quic-go v0.61.0
 	github.com/valyala/fasthttp v1.73.0
 )
