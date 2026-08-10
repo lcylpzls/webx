@@ -2,6 +2,16 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v1.5.2] - 2026-08-10
+
+### 变更
+
+- IP 限流中间件的令牌桶算法统一引用家族 esiliencex.Limiter（含 RetryAfter），去除自研 tokenBucket 实现；行为与 Retry-After 语义保持一致。
+
+### 质量
+
+- 全部库包语句覆盖率保持 100%；race / vet / staticcheck / fuzz / govulncheck 全绿。
+
 ## [v1.5.1] - 2026-08-10
 
 ### 变更

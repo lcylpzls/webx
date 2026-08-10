@@ -9,13 +9,20 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lcylpzls/resiliencex"
 	"github.com/lcylpzls/webx/internal/core"
 )
 
-// RateLimiter 实现基于 IP 的令牌桶限流。
+// limiterEntry 记录每个限流维度的令牌桶与最近活动时间。
+type limiterEntry struct {
+	limiter  *resiliencex.Limiter
+	lastTime time.Time
+}
+
+// RateLimiter 实现基于 IP 的令牌桶限流（桶算法由 resiliencex 提供）。
 type RateLimiter struct {
 	mu         sync.Mutex
-	buckets    map[string]*tokenBucket
+	buckets    map[string]*limiterEntry
 	qps        int
 	window     time.Duration
 	whitelist  []*net.IPNet
@@ -26,15 +33,10 @@ type RateLimiter struct {
 	sink       MetricsSink
 }
 
-type tokenBucket struct {
-	tokens   float64
-	lastTime time.Time
-}
-
 // NewRateLimiter 创建 IP 限流器。
 func NewRateLimiter(qps int, window time.Duration, whitelistCIDRs []string) *RateLimiter {
 	rl := &RateLimiter{
-		buckets:    make(map[string]*tokenBucket),
+		buckets:    make(map[string]*limiterEntry),
 		qps:        qps,
 		window:     window,
 		maxBuckets: 100000,
@@ -108,17 +110,20 @@ func (rl *RateLimiter) Allow(ip string) bool {
 			rl.rejected.Add(1)
 			return false
 		}
-		bucket = &tokenBucket{tokens: float64(rl.qps), lastTime: now}
+		if rl.qps <= 0 {
+			rl.rejected.Add(1)
+			return false
+		}
+		limiter, err := resiliencex.NewTokenBucket(float64(rl.qps), rl.qps)
+		if err != nil {
+			rl.rejected.Add(1)
+			return false
+		}
+		bucket = &limiterEntry{limiter: limiter, lastTime: now}
 		rl.buckets[ip] = bucket
 	}
-	elapsed := now.Sub(bucket.lastTime).Seconds()
-	bucket.tokens += elapsed * float64(rl.qps)
-	if bucket.tokens > float64(rl.qps) {
-		bucket.tokens = float64(rl.qps)
-	}
 	bucket.lastTime = now
-	if bucket.tokens >= 1 {
-		bucket.tokens--
+	if bucket.limiter.Allow() {
 		return true
 	}
 	rl.rejected.Add(1)
@@ -142,11 +147,11 @@ func (rl *RateLimiter) RetryAfter(key string) time.Duration {
 	if !ok {
 		return 0
 	}
-	missing := 1 - bucket.tokens
-	if missing <= 0 {
+	wait := bucket.limiter.RetryAfter()
+	if wait <= 0 {
 		return 0
 	}
-	return time.Duration(math.Ceil(missing/float64(rl.qps))) * time.Second
+	return time.Duration(math.Ceil(wait.Seconds())) * time.Second
 }
 
 // Cleanup 清理超过 window*10 未活动的桶。
