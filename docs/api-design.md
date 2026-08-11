@@ -1,7 +1,7 @@
 # webx API 设计定稿（v1.0.0）
 
 > 本文是评审稿的定稿记录。所有 API 决策点已确认并冻结；
-> 最终签名以 [api-v1.0.0.md](api-v1.0.0.md) 为准。
+> 最终签名以 `go doc` 与根目录 README 为准。
 
 ## 决策记录（原 D-1 ~ D-7）
 
@@ -23,4 +23,4 @@
   `func(http.Handler) http.Handler`，路由与分组中间件保持
   `func(*webx.Context)`；
 - 全部公开 API 以每版本生成的 `docs/api-vX.Y.Z.md` 基线为准；
-- v1.0.0 起 API 冻结，后续变更需通过 apidiff 与基线比对。
+- 家族约定：破坏性变更统一走 minor 版本（不强制主版本升级）。

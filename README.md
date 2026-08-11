@@ -6,10 +6,10 @@
 [![Go Version](https://img.shields.io/badge/Go-%3E%3D1.26.5-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> 当前状态：**v2.0.0 已发布（破坏性变更）**。各包语句覆盖率 100%，
-> 三平台 CI + race + fuzz + apidiff 全绿。
+> 当前状态：**v1.6.1**。各包语句覆盖率 100%，
+> 三平台 CI + race + fuzz 全绿。
 
-> 模块路径：`github.com/lcylpzls/webx`（v2 主版本规范）。
+> 模块路径：`github.com/lcylpzls/webx`。
 
 ## 技术栈
 
@@ -73,7 +73,6 @@
 - [docs/README.md](docs/README.md) — 文档索引与阅读顺序
 - [docs/architecture.md](docs/architecture.md) — 架构设计
 - [docs/api-design.md](docs/api-design.md) — API 设计定稿（决策点已冻结）
-- [docs/iteration-plan.md](docs/iteration-plan.md) — 迭代计划与质量门槛
 - [docs/decisions.md](docs/decisions.md) — 架构决策记录（ADR）
 
 ## 性能数据（Benchmark 实测）

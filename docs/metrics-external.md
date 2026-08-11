@@ -1,12 +1,19 @@
-# v2 外置指标接入指南
+# 外置指标接入指南
 
-webx v2.0.0 起不再内置 Prometheus 指标端点。指标统一由家族
-metricsx 底座采集，webx 只负责把请求事件转发给外部注入的实例。
+webx 不内置 Prometheus 指标端点。指标统一由家族 metricsx 底座采集，
+webx 只负责把请求事件转发给外部注入的实例。
 
 ## 快速接入
 
 ```go
-m, err := metricsx.New(metricsx.WithNamespace("myapp"))
+import (
+	metricsxprom "github.com/lcylpzls/metricsx/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+m, err := metricsx.New(
+	metricsxprom.WithPrometheus(metricsxprom.WithNamespace("myapp")),
+)
 if err != nil {
 	panic(err)
 }
@@ -24,6 +31,8 @@ s.RegisterRoute(webx.Route{
 })
 ```
 
+仅使用内存后端时可直接 `metricsx.New()`（零第三方依赖）。
+
 ## 上报的指标
 
 | 指标名 | 类型 | 标签 | 说明 |
@@ -39,9 +48,10 @@ s.RegisterRoute(webx.Route{
 瞬时量仅在注入的接收器实现 `webx.GaugeMetrics` 时上报；
 只实现 `webx.Metrics` 的接收器自动跳过水位指标。
 
-## 与 v1 的差异
+## 运行状态快照
 
-- 删除 `EnableMetricsEndpoint`、`metrics_enabled` / `metrics_path`；
-- `Metrics` 快照结构更名为 `MetricsSnapshot`；
-- 快照 API（`Metrics()` / `RouteStats()` / `GroupStats()`）保留，
-  用于运行状态查看，不再承担 Prometheus 暴露职责。
+`Server.Metrics()` / `RouteStats()` / `GroupStats()` 保留运行状态快照
+能力，用于控制台查看与调试，不再承担 Prometheus 暴露职责。
+
+历史版本曾内置 Prometheus 端点（`EnableMetricsEndpoint`），
+现已在 v1.5.x 系列移除，迁移记录见 CHANGELOG。
