@@ -6,7 +6,7 @@
 [![Go Version](https://img.shields.io/badge/Go-%3E%3D1.26.5-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> 当前状态：**v1.6.3**。各包语句覆盖率 100%，
+> 当前状态：**v1.6.4**。各包语句覆盖率 100%，
 > 三平台 CI + race + fuzz 全绿。
 
 > 模块路径：`github.com/lcylpzls/webx`。

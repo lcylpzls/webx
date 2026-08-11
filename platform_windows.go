@@ -79,7 +79,10 @@ var unixProbeCandidates = func() []string {
 
 // unixShortDirCandidates 返回短目录候选（可注入测试）。
 var unixShortDirCandidates = func() []string {
-	return []string{os.TempDir(), os.Getenv("USERPROFILE"), os.Getenv("SystemRoot") + "\\Temp"}
+	if sr := os.Getenv("SystemRoot"); sr != "" {
+		return []string{os.TempDir(), os.Getenv("USERPROFILE"), sr + "\\Temp"}
+	}
+	return []string{os.TempDir(), os.Getenv("USERPROFILE")}
 }
 
 // shortUnixDir 返回一个长度足够短的目录（用于测试中创建 Unix Socket）。
