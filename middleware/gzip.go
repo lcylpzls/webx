@@ -44,12 +44,12 @@ func gzipPoolForLevel(level int) *sync.Pool {
 }
 
 // Gzip 返回响应压缩中间件：客户端 Accept-Encoding 含 gzip 时启用。
-func Gzip() core.HandlerFunc {
+func Gzip() func(http.Handler) http.Handler {
 	return GzipWithOptions(GzipOptions{})
 }
 
 // GzipWithOptions 返回带选项的响应压缩中间件。
-func GzipWithOptions(opts GzipOptions) core.HandlerFunc {
+func GzipWithOptions(opts GzipOptions) func(http.Handler) http.Handler {
 	minSize := opts.MinSize
 	if minSize <= 0 {
 		minSize = 1024
@@ -59,20 +59,23 @@ func GzipWithOptions(opts GzipOptions) core.HandlerFunc {
 		level = gzip.DefaultCompression
 	}
 	pool := gzipPoolForLevel(level)
-	return func(c *core.Context) {
-		if !acceptsGzip(c.GetHeaderCanonical(canonicalAcceptEncoding)) {
-			c.Next()
-			return
-		}
-		orig := c.Writer()
-		gz := pool.Get().(*gzip.Writer)
-		gw := &gzipWriter{ResponseWriter: orig, gz: gz, minSize: minSize}
-		c.SetWriter(gw)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := core.From(r.Context())
+			if !acceptsGzip(r.Header.Get(canonicalAcceptEncoding)) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			orig := c.Writer()
+			gz := pool.Get().(*gzip.Writer)
+			gw := &gzipWriter{ResponseWriter: orig, gz: gz, minSize: minSize}
+			c.SetWriter(gw)
 
-		c.Next()
-		_ = gw.Close()
-		pool.Put(gz)
-		c.SetWriter(orig)
+			next.ServeHTTP(gw, r)
+			_ = gw.Close()
+			pool.Put(gz)
+			c.SetWriter(orig)
+		})
 	}
 }
 

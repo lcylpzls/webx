@@ -17,7 +17,7 @@ func TestMetricsHandler(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/ok", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		MetricsHandler(m),
+		stdToCore(MetricsHandler(m)),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -29,7 +29,7 @@ func TestMetricsHandler(t *testing.T) {
 	rec = httptest.NewRecorder()
 	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/fail", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		MetricsHandler(m),
+		stdToCore(MetricsHandler(m)),
 		func(c *core.Context) { c.JSONResponse(http.StatusInternalServerError, "内部错误", nil) },
 	})
 	c.Run()
@@ -44,7 +44,7 @@ func TestMetricsDurations(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/slow", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		MetricsHandler(m),
+		stdToCore(MetricsHandler(m)),
 		func(c *core.Context) {
 			time.Sleep(2 * time.Millisecond)
 			c.Success("ok", nil)
@@ -64,7 +64,7 @@ func TestMetricsInFlight(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		MetricsHandler(m),
+		stdToCore(MetricsHandler(m)),
 		func(c *core.Context) {
 			close(entered)
 			<-release
@@ -89,7 +89,7 @@ func TestMetricsStatusCodes(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 		c.SetHandlers([]core.HandlerFunc{
-			MetricsHandler(m),
+			stdToCore(MetricsHandler(m)),
 			func(c *core.Context) { c.JSONResponse(code, "resp", nil) },
 		})
 		c.Run()
@@ -112,7 +112,7 @@ func TestMetricsProtocolStats(t *testing.T) {
 		req.Proto = proto
 		c := core.NewContext(rec, req)
 		c.SetHandlers([]core.HandlerFunc{
-			MetricsHandler(m),
+			stdToCore(MetricsHandler(m)),
 			func(c *core.Context) {
 				time.Sleep(2 * time.Millisecond)
 				c.Success("ok", nil)
@@ -141,8 +141,8 @@ func TestMetricsPanicSampling(t *testing.T) {
 	c := core.NewContext(rec, req)
 	c.SetRoute("/boom")
 	c.SetHandlers([]core.HandlerFunc{
-		RecoveryWithOptions(nil, m, false),
-		MetricsHandler(m),
+		stdToCore(RecoveryWithOptions(nil, m, false)),
+		stdToCore(MetricsHandler(m)),
 		func(c *core.Context) { panic("测试 panic") },
 	})
 	func() {
@@ -172,7 +172,7 @@ func TestMetricsRouteAndGroupStats(t *testing.T) {
 		c.SetRoute("/api/users/:id")
 		c.SetGroup("/api")
 		c.SetHandlers([]core.HandlerFunc{
-			MetricsHandler(m),
+			stdToCore(MetricsHandler(m)),
 			func(c *core.Context) {
 				if i == 2 {
 					c.JSONResponse(http.StatusInternalServerError, "内部错误", nil)
@@ -190,7 +190,7 @@ func TestMetricsRouteAndGroupStats(t *testing.T) {
 	c.SetRoute("/api/v2/:id")
 	c.SetGroup("/api/v2")
 	c.SetHandlers([]core.HandlerFunc{
-		MetricsHandler(m),
+		stdToCore(MetricsHandler(m)),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -254,7 +254,7 @@ func TestMetricsZeroValueSafe(t *testing.T) {
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
 	c.SetRoute("/x")
 	c.SetHandlers([]core.HandlerFunc{
-		MetricsHandler(&m),
+		stdToCore(MetricsHandler(&m)),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -314,7 +314,7 @@ func TestMetricsHandlerExternalSink(t *testing.T) {
 	c.SetRoute("/api/users/:id")
 	c.SetGroup("/api")
 	c.SetHandlers([]core.HandlerFunc{
-		MetricsHandler(m),
+		stdToCore(MetricsHandler(m)),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -340,8 +340,8 @@ func TestMetricsHandlerExternalSinkPanic(t *testing.T) {
 	c := core.NewContext(rec, req)
 	c.SetRoute("/boom")
 	c.SetHandlers([]core.HandlerFunc{
-		RecoveryWithOptions(nil, m, false),
-		MetricsHandler(m),
+		stdToCore(RecoveryWithOptions(nil, m, false)),
+		stdToCore(MetricsHandler(m)),
 		func(c *core.Context) { panic("测试 panic") },
 	})
 	func() {
@@ -360,7 +360,7 @@ func TestMetricsHandlerExternalSinkNoGauge(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		MetricsHandler(m),
+		stdToCore(MetricsHandler(m)),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()

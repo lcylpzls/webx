@@ -16,7 +16,7 @@ func runValidation(t *testing.T, req *http.Request) (*httptest.ResponseRecorder,
 	var reached bool
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		Validation(),
+		stdToCore(Validation()),
 		func(c *core.Context) { reached = true; c.Success("ok", nil) },
 	})
 	c.Run()

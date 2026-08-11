@@ -72,18 +72,21 @@ func (l *ConcurrencyLimiter) emitRejected() {
 }
 
 // ConcurrencyLimit 返回并发限制中间件；额度已满时返回 503 并携带 Retry-After。
-func ConcurrencyLimit(l *ConcurrencyLimiter) core.HandlerFunc {
-	return func(c *core.Context) {
-		if !l.TryAcquire() {
-			c.SetHeaderCanonical(canonicalRetryAfter, "1")
-			if p := l.rejectMsg.Load(); p != nil && *p != "" {
-				c.AbortWithStatusJSON(http.StatusServiceUnavailable, *p, nil)
+func ConcurrencyLimit(l *ConcurrencyLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := core.From(r.Context())
+			if !l.TryAcquire() {
+				w.Header().Set(canonicalRetryAfter, "1")
+				if p := l.rejectMsg.Load(); p != nil && *p != "" {
+					c.AbortWithStatusJSON(http.StatusServiceUnavailable, *p, nil)
+					return
+				}
+				c.AbortWithStatusJSON(http.StatusServiceUnavailable, "请求过于繁忙，请稍后重试", nil)
 				return
 			}
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, "请求过于繁忙，请稍后重试", nil)
-			return
-		}
-		defer l.Release()
-		c.Next()
+			defer l.Release()
+			next.ServeHTTP(w, r)
+		})
 	}
 }

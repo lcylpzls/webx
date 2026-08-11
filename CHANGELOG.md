@@ -4,10 +4,26 @@
 
 ## [v1.6.0] - 2026-08-11
 
+### 破坏性变更
+
+- 全局中间件全面标准库形态化：内置中间件与
+  `UseGlobalMiddleware / OverrideMiddleware` 全部改用
+  `func(http.Handler) http.Handler` 签名（v2 前允许破坏性变更）；
+- 新增 `core.NewContextWith / From / RouteFrom / GroupFrom`，
+  标准中间件通过 request context 读取 webx 请求上下文；
+  路由/分组中间件与处理器保持 `func(*webx.Context)` 形态。
+
 ### 变更
 
 - 示例适配 errx/logx 子包移除：改用 `logx.FieldsFromError`；
-- examples 模块依赖升级：logx v1.4.0。
+- examples 模块依赖升级：logx v1.4.0；
+- 家族依赖升级：confx v1.1.0、errx v1.6.0、idgenx v1.5.0、
+  logx v1.5.0、metricsx v1.6.0、resiliencex v1.4.0、testx v1.5.0、
+  validx v1.3.0、cryptox v1.2.1、tracex v1.1.0。
+
+### 质量
+
+- 全部包语句覆盖率保持 100%；race / vet / staticcheck 全绿。
 
 ## [v1.5.6] - 2026-08-10
 

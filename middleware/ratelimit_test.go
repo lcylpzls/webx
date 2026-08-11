@@ -153,7 +153,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 		req.RemoteAddr = ip + ":1234"
 		rec := httptest.NewRecorder()
 		c := core.NewContext(rec, req)
-		c.SetHandlers([]core.HandlerFunc{RateLimit(rl), func(c *core.Context) { c.Success("ok", nil) }})
+		c.SetHandlers([]core.HandlerFunc{stdToCore(RateLimit(rl)), func(c *core.Context) { c.Success("ok", nil) }})
 		c.Run()
 		return rec.Code
 	}
@@ -167,7 +167,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "1.1.1.1:1234"
 	c := core.NewContext(rec, req)
-	c.SetHandlers([]core.HandlerFunc{RateLimit(rl), func(c *core.Context) { c.Success("ok", nil) }})
+	c.SetHandlers([]core.HandlerFunc{stdToCore(RateLimit(rl)), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
 	if got := rec.Header().Get("Retry-After"); got != "1" {
 		t.Errorf("Retry-After 头不符：%s", got)
@@ -182,7 +182,7 @@ func TestRateLimitCustomMessage(t *testing.T) {
 		req.RemoteAddr = "1.1.1.1:1234"
 		rec := httptest.NewRecorder()
 		c := core.NewContext(rec, req)
-		c.SetHandlers([]core.HandlerFunc{RateLimit(rl), func(c *core.Context) { c.Success("ok", nil) }})
+		c.SetHandlers([]core.HandlerFunc{stdToCore(RateLimit(rl)), func(c *core.Context) { c.Success("ok", nil) }})
 		c.Run()
 		return rec
 	}
@@ -201,7 +201,7 @@ func TestRateLimitMiddlewareNoRetryAfter(t *testing.T) {
 		req.RemoteAddr = ip + ":1234"
 		rec := httptest.NewRecorder()
 		c := core.NewContext(rec, req)
-		c.SetHandlers([]core.HandlerFunc{RateLimit(rl), func(c *core.Context) { c.Success("ok", nil) }})
+		c.SetHandlers([]core.HandlerFunc{stdToCore(RateLimit(rl)), func(c *core.Context) { c.Success("ok", nil) }})
 		c.Run()
 		return rec
 	}
@@ -222,7 +222,7 @@ func TestRateLimitKeyFunc(t *testing.T) {
 		req.RemoteAddr = "1.1.1.1:80"
 		rec := httptest.NewRecorder()
 		c := core.NewContext(rec, req)
-		c.SetHandlers([]core.HandlerFunc{RateLimit(rl), func(c *core.Context) { c.Success("ok", nil) }})
+		c.SetHandlers([]core.HandlerFunc{stdToCore(RateLimit(rl)), func(c *core.Context) { c.Success("ok", nil) }})
 		c.Run()
 		return rec.Code
 	}
@@ -250,7 +250,7 @@ func TestRateLimitTrustedProxy(t *testing.T) {
 			_, ipNet, _ := net.ParseCIDR("9.9.9.0/24")
 			c.SetTrustedProxies([]*net.IPNet{ipNet})
 		}
-		c.SetHandlers([]core.HandlerFunc{RateLimit(rl), func(c *core.Context) { c.Success("ok", nil) }})
+		c.SetHandlers([]core.HandlerFunc{stdToCore(RateLimit(rl)), func(c *core.Context) { c.Success("ok", nil) }})
 		c.Run()
 		return rec.Code
 	}

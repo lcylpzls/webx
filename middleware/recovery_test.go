@@ -16,7 +16,7 @@ func TestRecoveryPanic(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		Recovery(),
+		stdToCore(Recovery()),
 		func(c *core.Context) { panic("boom") },
 	})
 	c.Run()
@@ -37,7 +37,7 @@ func TestRecoveryNormal(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		Recovery(),
+		stdToCore(Recovery()),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -53,7 +53,7 @@ func TestRecoveryWithMetrics(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		RecoveryWithMetrics(m),
+		stdToCore(RecoveryWithMetrics(m)),
 		func(c *core.Context) { panic("boom") },
 	})
 	c.Run()
@@ -75,7 +75,7 @@ func TestRecoveryWithLogger(t *testing.T) {
 	c := core.NewContext(rec, req)
 	c.Set("requestId", "req-1")
 	c.SetHandlers([]core.HandlerFunc{
-		RecoveryWith(logger, nil),
+		stdToCore(RecoveryWith(logger, nil)),
 		func(c *core.Context) { panic("boom") },
 	})
 	c.Run()
@@ -91,7 +91,7 @@ func TestRecoveryWithOptionsDebug(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		RecoveryWithOptions(nil, nil, true),
+		stdToCore(RecoveryWithOptions(nil, nil, true)),
 		func(c *core.Context) { panic("boom") },
 	})
 	c.Run()

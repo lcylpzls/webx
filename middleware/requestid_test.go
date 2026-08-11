@@ -20,7 +20,7 @@ func TestRequestIDFromHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		RequestID(),
+		stdToCore(RequestID()),
 		func(c *core.Context) {
 			if c.RequestID() != "custom-id" {
 				t.Errorf("请求 ID 不符：%s", c.RequestID())
@@ -38,7 +38,7 @@ func TestRequestIDGenerated(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		RequestID(),
+		stdToCore(RequestID()),
 		func(c *core.Context) {
 			if !requestIDPattern.MatchString(c.RequestID()) {
 				t.Errorf("生成的随机请求 ID 格式不符：%s", c.RequestID())
@@ -54,10 +54,10 @@ func TestRequestIDWithOptions(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		RequestIDWithOptions(RequestIDOptions{
+		stdToCore(RequestIDWithOptions(RequestIDOptions{
 			Header:    "X-Trace-ID",
 			Generator: func() string { return "trace-123" },
-		}),
+		})),
 		func(c *core.Context) {
 			if c.RequestID() != "trace-123" {
 				t.Errorf("自定义生成器未生效：%s", c.RequestID())
@@ -76,7 +76,7 @@ func TestRequestIDWithOptions(t *testing.T) {
 	req.Header.Set("X-Trace-ID", "incoming-id")
 	c = core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		RequestIDWithOptions(RequestIDOptions{Header: "X-Trace-ID"}),
+		stdToCore(RequestIDWithOptions(RequestIDOptions{Header: "X-Trace-ID"})),
 		func(c *core.Context) {
 			if c.RequestID() != "incoming-id" {
 				t.Errorf("入站自定义头未优先：%s", c.RequestID())

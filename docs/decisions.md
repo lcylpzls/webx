@@ -46,6 +46,11 @@
   Metrics → AccessLog，且可通过 `SetMiddlewareOrder` 调整。
 - **后果**：迁移心智成本低，同时保留灵活定制能力。
 
+> 补充（v1.6.0）：全局中间件与内置中间件统一为标准库形态
+> `func(http.Handler) http.Handler`；路由/分组中间件保留 core 链
+> 的 Next/Abort 语义，标准中间件通过 request context 透传
+> `*Context`（`core.From / RouteFrom / GroupFrom`）。
+
 ## ADR-007 质量门槛：100% 覆盖 + CI 全绿才可发版
 
 - **状态**：已定

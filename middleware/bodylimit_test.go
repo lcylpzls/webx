@@ -17,7 +17,7 @@ func TestBodyLimitOverContentLength(t *testing.T) {
 	c := core.NewContext(rec, req)
 	aborted := true
 	c.SetHandlers([]core.HandlerFunc{
-		BodyLimit(10),
+		stdToCore(BodyLimit(10)),
 		func(c *core.Context) { aborted = false },
 	})
 	c.Run()
@@ -32,7 +32,7 @@ func TestBodyLimitCustomMessage(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 100)))
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		BodyLimitWithOptions(10, BodyLimitOptions{Message: "自定义超限文案"}),
+		stdToCore(BodyLimitWithOptions(10, BodyLimitOptions{Message: "自定义超限文案"})),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -48,7 +48,7 @@ func TestBodyLimitChunkedWrapped(t *testing.T) {
 	c := core.NewContext(rec, req)
 	readErr := error(nil)
 	c.SetHandlers([]core.HandlerFunc{
-		BodyLimit(10),
+		stdToCore(BodyLimit(10)),
 		func(c *core.Context) {
 			_, readErr = io.ReadAll(c.Request().Body)
 		},
@@ -63,7 +63,7 @@ func TestBodyLimitUnderLimit(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("ok"))
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		BodyLimit(10),
+		stdToCore(BodyLimit(10)),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -75,7 +75,7 @@ func TestBodyLimitDisabledAndNilBody(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		BodyLimit(0),
+		stdToCore(BodyLimit(0)),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -86,7 +86,7 @@ func TestBodyLimitDisabledAndNilBody(t *testing.T) {
 	req.Body = nil
 	c = core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		BodyLimit(10),
+		stdToCore(BodyLimit(10)),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()

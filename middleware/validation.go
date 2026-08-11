@@ -40,18 +40,21 @@ func init() {
 
 // Validation 返回请求参数校验中间件：校验 Content-Type 是否为 JSON/
 // multipart、Content-Length 是否超过 10MB（判定统一走 validx 规则）。
-func Validation() core.HandlerFunc {
-	return func(c *core.Context) {
-		err := validx.ValidateField(validationInput{
-			method:      c.Request().Method,
-			contentType: c.GetHeaderCanonical(canonicalContentType),
-			contentLen:  c.Request().ContentLength,
-		}, "webx_http_request")
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, err.Error(), nil)
-			return
-		}
-		c.Next()
+func Validation() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := core.From(r.Context())
+			err := validx.ValidateField(validationInput{
+				method:      r.Method,
+				contentType: r.Header.Get(canonicalContentType),
+				contentLen:  r.ContentLength,
+			}, "webx_http_request")
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusBadRequest, err.Error(), nil)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 

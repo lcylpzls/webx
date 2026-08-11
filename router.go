@@ -269,8 +269,13 @@ func allowHeader(node *routeNode) string {
 // wrapRequestHandler 将 webx 处理器链包装为带参数的最终处理器。
 func wrapRequestHandler(rt *Router, chain []core.HandlerFunc, params []string) requestHandler {
 	return func(w http.ResponseWriter, r *http.Request, matched []core.Param) {
-		c := core.Acquire(w, r)
-		defer core.Release(c)
+		c := core.From(r.Context())
+		if c == nil {
+			c = core.Acquire(w, r)
+			defer core.Release(c)
+		}
+		c.SetWriter(w)
+		c.SetRequest(r)
 		if len(params) > 0 {
 			c.SetParams(matched)
 		}
@@ -284,8 +289,13 @@ func wrapRequestHandler(rt *Router, chain []core.HandlerFunc, params []string) r
 
 // runFallback 执行 404/405 兜底处理器。
 func (rt *Router) runFallback(w http.ResponseWriter, r *http.Request, h core.HandlerFunc) {
-	c := core.Acquire(w, r)
-	defer core.Release(c)
+	c := core.From(r.Context())
+	if c == nil {
+		c = core.Acquire(w, r)
+		defer core.Release(c)
+	}
+	c.SetWriter(w)
+	c.SetRequest(r)
 	c.SetHandlers([]core.HandlerFunc{h})
 	c.Run()
 }

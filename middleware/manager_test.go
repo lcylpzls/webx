@@ -2,11 +2,12 @@ package middleware
 
 import (
 	"context"
+	"net/http"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/lcylpzls/testx"
-	"github.com/lcylpzls/webx/internal/core"
 )
 
 func TestManagerDefaultState(t *testing.T) {
@@ -19,9 +20,9 @@ func TestManagerDefaultState(t *testing.T) {
 
 func TestManagerRegisterOverrideDisableEnable(t *testing.T) {
 	m := NewManager()
-	a := func(c *core.Context) { c.Next() }
-	b := func(c *core.Context) { c.Next() }
-	override := func(c *core.Context) { c.Next() }
+	a := pass()
+	b := pass()
+	override := pass()
 
 	m.RegisterBuiltin("recovery", a)
 	m.RegisterBuiltin("request_id", b)
@@ -46,8 +47,8 @@ func TestManagerRegisterOverrideDisableEnable(t *testing.T) {
 
 func TestManagerRateLimit(t *testing.T) {
 	m := NewManager()
-	rl := func(c *core.Context) { c.Next() }
-	m.EnableRateLimit(rl)
+	rl := NewRateLimiter(10, time.Second, nil)
+	m.EnableRateLimit(RateLimit(rl))
 	chain := m.Build(context.Background())
 	if len(chain) != 1 {
 		t.Fatalf("EnableRateLimit 后链长度不符：%d", len(chain))
@@ -56,7 +57,7 @@ func TestManagerRateLimit(t *testing.T) {
 	m.DisableRateLimit()
 	m.Enable("rate_limit")
 	testx.RequireEqual(t, len(m.Build(context.Background())), 0)
-	m.EnableRateLimit(rl)
+	m.EnableRateLimit(RateLimit(rl))
 	testx.RequireEqual(t, len(m.Build(context.Background())), 1)
 	m.DisableRateLimit()
 	testx.RequireEqual(t, len(m.Build(context.Background())), 0)
@@ -64,9 +65,9 @@ func TestManagerRateLimit(t *testing.T) {
 
 func TestManagerAppendAndOrder(t *testing.T) {
 	m := NewManager()
-	recovery := func(c *core.Context) { c.Next() }
-	requestID := func(c *core.Context) { c.Next() }
-	extra := func(c *core.Context) { c.Next() }
+	recovery := pass()
+	requestID := pass()
+	extra := pass()
 	m.RegisterBuiltin("recovery", recovery)
 	m.RegisterBuiltin("request_id", requestID)
 	m.Append(extra)
@@ -81,8 +82,8 @@ func TestManagerAppendAndOrder(t *testing.T) {
 
 func TestManagerSetOrder(t *testing.T) {
 	m := NewManager()
-	m.RegisterBuiltin("recovery", func(c *core.Context) { c.Next() })
-	m.RegisterBuiltin("request_id", func(c *core.Context) { c.Next() })
+	m.RegisterBuiltin("recovery", pass())
+	m.RegisterBuiltin("request_id", pass())
 	m.SetOrder("request_id", "recovery", "unknown")
 	chain := m.Build(context.Background())
 	if len(chain) != 2 {
@@ -96,6 +97,15 @@ func TestManagerSetOrder(t *testing.T) {
 }
 
 // sameFunc 判断两个函数值是否指向同一函数。
-func sameFunc(a, b core.HandlerFunc) bool {
+func sameFunc(a, b Middleware) bool {
 	return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()
+}
+
+// pass 构造一个直通的标准中间件（测试辅助）。
+func pass() Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+		})
+	}
 }

@@ -137,8 +137,8 @@ func (s *Server) WithMetrics(m Metrics) *Server {
 	return s
 }
 
-// UseGlobalMiddleware 追加外部全局中间件。
-func (s *Server) UseGlobalMiddleware(mw ...HandlerFunc) *Server {
+// UseGlobalMiddleware 追加外部全局中间件（标准库形态）。
+func (s *Server) UseGlobalMiddleware(mw ...func(http.Handler) http.Handler) *Server {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.started {
@@ -149,8 +149,8 @@ func (s *Server) UseGlobalMiddleware(mw ...HandlerFunc) *Server {
 	return s
 }
 
-// OverrideMiddleware 使用自定义 Handler 覆盖指定类型的内置中间件。
-func (s *Server) OverrideMiddleware(mt MiddlewareType, mw HandlerFunc) *Server {
+// OverrideMiddleware 使用自定义标准中间件覆盖指定类型的内置中间件。
+func (s *Server) OverrideMiddleware(mt MiddlewareType, mw func(http.Handler) http.Handler) *Server {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.started {
@@ -558,9 +558,6 @@ func (s *Server) Start() error {
 		s.mwManager.SetOrder(keys...)
 	}
 
-	ctx := context.Background()
-	globalChain := s.mwManager.Build(ctx)
-
 	noRoute := core.NoRouteHandler
 	if s.spa != nil {
 		noRoute = spaNoRoute(s.spa.fs, s.spa.indexPath)
@@ -571,17 +568,18 @@ func (s *Server) Start() error {
 	if msg := s.errMessages[ErrorMessageMethodNotAllowed]; msg != "" {
 		noMethod = func(c *core.Context) { c.JSONResponse(http.StatusMethodNotAllowed, msg, nil) }
 	}
-	// 兜底处理器（404/405）也走全局中间件链，保证 trace/限流/
-	// 安全等中间件全请求覆盖。
-	wrapFallback := func(h core.HandlerFunc) core.HandlerFunc {
-		chain := append(append([]core.HandlerFunc{}, globalChain...), h)
-		return func(c *core.Context) {
-			c.SetHandlers(chain)
-			c.Run()
-		}
-	}
-	s.router = NewRouter(wrapFallback(noRoute), wrapFallback(noMethod))
+	s.router = NewRouter(noRoute, noMethod)
 	s.router.SetMaxBodyBytes(s.config.MaxBodyBytes)
+
+	ctx := context.Background()
+	globalChain := s.mwManager.Build(ctx)
+
+	// 构建最终 http.Handler：路由 → 全局中间件链 → 请求上下文注入。
+	rootHandler := http.Handler(s.router)
+	for i := len(globalChain) - 1; i >= 0; i-- {
+		rootHandler = globalChain[i](rootHandler)
+	}
+	rootHandler = injectContext(rootHandler)
 
 	buildChain := func(route Route) []core.HandlerFunc {
 		// 首个处理器注入路由/分组元数据，供 Metrics 等中间件做路由级聚合。
@@ -593,7 +591,6 @@ func (s *Server) Start() error {
 				c.Next()
 			},
 		}
-		chain = append(chain, globalChain...)
 		chain = append(chain, route.Middleware...)
 		chain = append(chain, route.Handler)
 		return chain
@@ -649,7 +646,7 @@ func (s *Server) Start() error {
 		}
 		s.addListener(ln)
 		srv := &http.Server{
-			Handler:           s.router,
+			Handler:           rootHandler,
 			ReadTimeout:       s.config.ReadTimeout,
 			WriteTimeout:      s.config.WriteTimeout,
 			ReadHeaderTimeout: s.config.ReadHeaderTimeout,
@@ -678,7 +675,7 @@ func (s *Server) Start() error {
 			return err
 		}
 		s.addQUICListener(qln)
-		h3s := &http3.Server{Handler: s.router}
+		h3s := &http3.Server{Handler: rootHandler}
 		s.addHTTP3Server(h3s)
 		wg.Add(1)
 		go func() {
@@ -697,7 +694,7 @@ func (s *Server) Start() error {
 		}
 		s.addListener(ln)
 		srv := &http.Server{
-			Handler:           s.router,
+			Handler:           rootHandler,
 			ReadTimeout:       s.config.ReadTimeout,
 			WriteTimeout:      s.config.WriteTimeout,
 			ReadHeaderTimeout: s.config.ReadHeaderTimeout,
@@ -1041,4 +1038,15 @@ func logHTTP3Exit(logger logx.Logger, ctx context.Context, err error) {
 		return
 	}
 	logger.WithContext(ctx).Error("webx：HTTP/3 服务异常退出", logx.Fields(logx.Any("error", err)))
+}
+
+// injectContext 将 webx 请求上下文注入 request context，供标准中间件读取。
+func injectContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := core.Acquire(w, r)
+		defer core.Release(c)
+		c.SetRequest(r)
+		r = r.WithContext(core.NewContextWith(r.Context(), c))
+		next.ServeHTTP(w, r)
+	})
 }

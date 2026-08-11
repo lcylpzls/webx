@@ -52,7 +52,7 @@ func TestConcurrencyLimitMiddleware(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		ConcurrencyLimit(l),
+		stdToCore(ConcurrencyLimit(l)),
 		func(c *core.Context) {
 			close(entered)
 			<-release
@@ -69,7 +69,7 @@ func TestConcurrencyLimitMiddleware(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	c2 := core.NewContext(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
 	c2.SetHandlers([]core.HandlerFunc{
-		ConcurrencyLimit(l),
+		stdToCore(ConcurrencyLimit(l)),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c2.Run()
@@ -105,7 +105,7 @@ func TestConcurrencyLimitCustomMessage(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		ConcurrencyLimit(l2),
+		stdToCore(ConcurrencyLimit(l2)),
 		func(c *core.Context) {
 			close(entered)
 			<-release
@@ -121,7 +121,7 @@ func TestConcurrencyLimitCustomMessage(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	c2 := core.NewContext(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
 	c2.SetHandlers([]core.HandlerFunc{
-		ConcurrencyLimit(l2),
+		stdToCore(ConcurrencyLimit(l2)),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c2.Run()
@@ -137,7 +137,7 @@ func TestConcurrencyLimitPanicRelease(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		ConcurrencyLimit(l),
+		stdToCore(ConcurrencyLimit(l)),
 		func(c *core.Context) { panic("测试 panic") },
 	})
 	func() {

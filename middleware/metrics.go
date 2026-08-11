@@ -104,60 +104,63 @@ type routeStat struct {
 // MetricsHandler 返回指标采集中间件。
 // panic 安全：请求处理发生 panic 时仍会记录请求数、耗时与 5xx 分布，
 // 随后重新抛出 panic 交由 Recovery 中间件处理。
-func MetricsHandler(m *Metrics) core.HandlerFunc {
-	return func(c *core.Context) {
-		start := time.Now()
-		m.requests.Add(1)
-		m.inFlight.Add(1)
-		m.gaugeDelta("webx.requests_in_flight", 1)
-		defer func() {
-			m.inFlight.Add(-1)
-			m.gaugeDelta("webx.requests_in_flight", -1)
-			elapsed := uint64(time.Since(start))
-			m.durationNs.Add(elapsed)
-			m.samples.Add(1)
-			status := c.StatusCode()
-			if r := recover(); r != nil {
-				status = http.StatusInternalServerError
-				m.status5xx.Add(1)
-				m.errors5x.Add(1)
+func MetricsHandler(m *Metrics) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := core.From(r.Context())
+			start := time.Now()
+			m.requests.Add(1)
+			m.inFlight.Add(1)
+			m.gaugeDelta("webx.requests_in_flight", 1)
+			defer func() {
+				m.inFlight.Add(-1)
+				m.gaugeDelta("webx.requests_in_flight", -1)
+				elapsed := uint64(time.Since(start))
+				m.durationNs.Add(elapsed)
+				m.samples.Add(1)
+				status := c.StatusCode()
+				if rec := recover(); rec != nil {
+					status = http.StatusInternalServerError
+					m.status5xx.Add(1)
+					m.errors5x.Add(1)
+					m.recordRoute(c, status, elapsed)
+					m.emitSink(c, status, elapsed)
+					panic(rec)
+				}
+				switch {
+				case status < 200:
+					m.status1xx.Add(1)
+				case status < 300:
+					m.status2xx.Add(1)
+				case status < 400:
+					m.status3xx.Add(1)
+				case status < 500:
+					m.status4xx.Add(1)
+				default:
+					m.status5xx.Add(1)
+				}
+				if status >= 500 {
+					m.errors5x.Add(1)
+				}
+				switch r.Proto {
+				case "HTTP/1.0", "HTTP/1.1":
+					m.http1Req.Add(1)
+					m.http1Ns.Add(elapsed)
+					m.http1Samples.Add(1)
+				case "HTTP/2.0":
+					m.http2Req.Add(1)
+					m.http2Ns.Add(elapsed)
+					m.http2Samples.Add(1)
+				case "HTTP/3.0":
+					m.http3Req.Add(1)
+					m.http3Ns.Add(elapsed)
+					m.http3Samples.Add(1)
+				}
 				m.recordRoute(c, status, elapsed)
 				m.emitSink(c, status, elapsed)
-				panic(r)
-			}
-			switch {
-			case status < 200:
-				m.status1xx.Add(1)
-			case status < 300:
-				m.status2xx.Add(1)
-			case status < 400:
-				m.status3xx.Add(1)
-			case status < 500:
-				m.status4xx.Add(1)
-			default:
-				m.status5xx.Add(1)
-			}
-			if status >= 500 {
-				m.errors5x.Add(1)
-			}
-			switch c.Request().Proto {
-			case "HTTP/1.0", "HTTP/1.1":
-				m.http1Req.Add(1)
-				m.http1Ns.Add(elapsed)
-				m.http1Samples.Add(1)
-			case "HTTP/2.0":
-				m.http2Req.Add(1)
-				m.http2Ns.Add(elapsed)
-				m.http2Samples.Add(1)
-			case "HTTP/3.0":
-				m.http3Req.Add(1)
-				m.http3Ns.Add(elapsed)
-				m.http3Samples.Add(1)
-			}
-			m.recordRoute(c, status, elapsed)
-			m.emitSink(c, status, elapsed)
-		}()
-		c.Next()
+			}()
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 

@@ -1,21 +1,23 @@
 // Package middleware 提供 webx 内置的 HTTP 中间件实现。
-// 包含 Recovery、RequestID、Timeout、CORS、Validation、RateLimit 与 AccessLog。
+// 全部为标准库形态（func(http.Handler) http.Handler），可插拔到任何 net/http 服务。
 package middleware
 
 import (
 	"context"
+	"net/http"
 	"sync"
-
-	"github.com/lcylpzls/webx/internal/core"
 )
+
+// Middleware 是标准中间件签名。
+type Middleware = func(http.Handler) http.Handler
 
 // Manager 管理内置中间件的注册表、执行顺序和启用状态。
 type Manager struct {
-	builtins  map[string]core.HandlerFunc
-	overrides map[string]core.HandlerFunc
+	builtins  map[string]Middleware
+	overrides map[string]Middleware
 	disabled  map[string]bool
 	order     []string
-	extras    []core.HandlerFunc
+	extras    []Middleware
 	mu        sync.RWMutex
 }
 
@@ -23,8 +25,8 @@ type Manager struct {
 // 默认启用全部内置中间件（RateLimit 注册但默认禁用）。
 func NewManager() *Manager {
 	m := &Manager{
-		builtins:  make(map[string]core.HandlerFunc),
-		overrides: make(map[string]core.HandlerFunc),
+		builtins:  make(map[string]Middleware),
+		overrides: make(map[string]Middleware),
 		disabled:  make(map[string]bool),
 		order: []string{
 			"recovery",
@@ -40,21 +42,21 @@ func NewManager() *Manager {
 			"metrics",
 			"access_log",
 		},
-		extras: make([]core.HandlerFunc, 0),
+		extras: make([]Middleware, 0),
 	}
 	m.disabled["rate_limit"] = true
 	return m
 }
 
 // RegisterBuiltin 注册一个内置中间件到管理器。
-func (m *Manager) RegisterBuiltin(key string, handler core.HandlerFunc) {
+func (m *Manager) RegisterBuiltin(key string, handler Middleware) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.builtins[key] = handler
 }
 
 // Override 覆盖指定类型的内置中间件。
-func (m *Manager) Override(mt string, handler core.HandlerFunc) {
+func (m *Manager) Override(mt string, handler Middleware) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.overrides[mt] = handler
@@ -83,7 +85,7 @@ func (m *Manager) Enable(mt ...string) {
 }
 
 // EnableRateLimit 启用限流中间件并注册其 Handler。
-func (m *Manager) EnableRateLimit(handler core.HandlerFunc) {
+func (m *Manager) EnableRateLimit(handler Middleware) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.builtins["rate_limit"] = handler
@@ -99,7 +101,7 @@ func (m *Manager) DisableRateLimit() {
 }
 
 // Append 追加外部全局中间件到中间件链末尾（路由专属中间件之前）。
-func (m *Manager) Append(handler ...core.HandlerFunc) {
+func (m *Manager) Append(handler ...Middleware) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.extras = append(m.extras, handler...)
@@ -126,11 +128,11 @@ func (m *Manager) SetOrder(keys ...string) {
 
 // Build 构建最终执行的中间件链。
 // 返回顺序：内置（启用）→ 外部全局。
-func (m *Manager) Build(ctx context.Context) []core.HandlerFunc {
+func (m *Manager) Build(ctx context.Context) []Middleware {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var chain []core.HandlerFunc
+	var chain []Middleware
 	for _, key := range m.order {
 		if m.disabled[key] {
 			continue

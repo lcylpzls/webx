@@ -170,25 +170,28 @@ func (rl *RateLimiter) Cleanup(interval time.Duration) {
 }
 
 // RateLimit 返回 IP 令牌桶限流中间件，超限返回标准化 429。
-func RateLimit(rl *RateLimiter) core.HandlerFunc {
-	return func(c *core.Context) {
-		key := c.RemoteIP()
-		if rl.keyFunc != nil {
-			key = rl.keyFunc(c)
-		}
-		if !rl.Allow(key) {
-			if retryAfter := rl.RetryAfter(key); retryAfter > 0 {
-				c.SetHeaderCanonical(canonicalRetryAfter, strconv.FormatInt(int64(retryAfter.Seconds()), 10))
+func RateLimit(rl *RateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := core.From(r.Context())
+			key := c.RemoteIP()
+			if rl.keyFunc != nil {
+				key = rl.keyFunc(c)
 			}
-			rl.mu.Lock()
-			message := rl.rejectMsg
-			rl.mu.Unlock()
-			if message == "" {
-				message = "请求过于频繁，请稍后重试"
+			if !rl.Allow(key) {
+				if retryAfter := rl.RetryAfter(key); retryAfter > 0 {
+					w.Header().Set(canonicalRetryAfter, strconv.FormatInt(int64(retryAfter.Seconds()), 10))
+				}
+				rl.mu.Lock()
+				message := rl.rejectMsg
+				rl.mu.Unlock()
+				if message == "" {
+					message = "请求过于频繁，请稍后重试"
+				}
+				c.AbortWithStatusJSON(http.StatusTooManyRequests, message, nil)
+				return
 			}
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, message, nil)
-			return
-		}
-		c.Next()
+			next.ServeHTTP(w, r)
+		})
 	}
 }

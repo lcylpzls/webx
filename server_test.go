@@ -44,6 +44,37 @@ func newTestServer(t *testing.T, cfg Config) *Server {
 	return NewServer(cfg, newTestLogger(t))
 }
 
+// noopMW 返回一个直通的标准中间件（测试辅助）。
+func noopMW(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+	})
+}
+
+// stdChainToCore 将标准中间件链适配为 core 处理器链（测试辅助）。
+func stdChainToCore(chain []func(http.Handler) http.Handler, final core.HandlerFunc) []core.HandlerFunc {
+	handlers := make([]core.HandlerFunc, 0, len(chain)+1)
+	for _, mw := range chain {
+		mw := mw
+		handlers = append(handlers, func(c *core.Context) {
+			r := c.Request().WithContext(core.NewContextWith(c.Request().Context(), c))
+			c.SetRequest(r)
+			called := false
+			var next http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r2 *http.Request) {
+				called = true
+				c.SetWriter(w)
+				c.SetRequest(r2)
+				c.Next()
+			})
+			mw(next).ServeHTTP(c.Writer(), r)
+			if !called {
+				c.Abort()
+			}
+		})
+	}
+	return append(handlers, final)
+}
+
 func validConfig(t *testing.T) Config {
 	t.Helper()
 	cert, key := writeTestCert(t)
@@ -92,10 +123,10 @@ func TestServerChainAPI(t *testing.T) {
 	if got := s.WithLogger(newTestLogger(t)); got != s {
 		t.Error("链式方法应返回自身")
 	}
-	if got := s.UseGlobalMiddleware(noopHandler); got != s {
+	if got := s.UseGlobalMiddleware(noopMW); got != s {
 		t.Error("UseGlobalMiddleware 应返回自身")
 	}
-	if got := s.OverrideMiddleware(MiddlewareRequestID, noopHandler); got != s {
+	if got := s.OverrideMiddleware(MiddlewareRequestID, noopMW); got != s {
 		t.Error("OverrideMiddleware 应返回自身")
 	}
 	if got := s.DisableMiddleware(MiddlewareCORS); got != s {
@@ -440,8 +471,8 @@ func TestServerIntegration(t *testing.T) {
 		t.Error("RegisterRoute 应返回自身")
 	}
 	_ = s.WithLogger(s.logger)
-	_ = s.UseGlobalMiddleware(noopHandler)
-	_ = s.OverrideMiddleware(MiddlewareCORS, noopHandler)
+	_ = s.UseGlobalMiddleware(noopMW)
+	_ = s.OverrideMiddleware(MiddlewareCORS, noopMW)
 	_ = s.DisableMiddleware(MiddlewareCORS)
 	_ = s.EnableMiddleware(MiddlewareCORS)
 	_ = s.RegisterRoutes(nil)
@@ -1754,7 +1785,7 @@ func TestRegisterBuiltinMiddlewareCORSExposeOverride(t *testing.T) {
 	chain := s.mwManager.Build(context.Background())
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	c.SetHandlers(append(chain, func(c *core.Context) { c.Success("ok", nil) }))
+	c.SetHandlers(stdChainToCore(chain, func(c *core.Context) { c.Success("ok", nil) }))
 	c.Run()
 	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "X-Trace-ID" {
 		t.Errorf("默认 CORS 未保留自定义 ExposeHeaders：%s", got)
@@ -1848,9 +1879,11 @@ func freeUDPAddr(t *testing.T) string {
 func TestGlobalMiddlewareCoversFallbacks(t *testing.T) {
 	s := newTestServer(t, validConfig(t))
 	var hits atomic.Int32
-	s.UseGlobalMiddleware(func(c *Context) {
-		hits.Add(1)
-		c.Next()
+	s.UseGlobalMiddleware(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			next.ServeHTTP(w, r)
+		})
 	})
 	s.UseHttp2Listen("127.0.0.1:0")
 	s.RegisterRoute(Route{Method: http.MethodGet, Path: "/hello",

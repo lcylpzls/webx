@@ -15,7 +15,7 @@ func TestCORSAllowAll(t *testing.T) {
 	req.Header.Set("Origin", "https://a.com")
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
-	c.SetHandlers([]core.HandlerFunc{CORS(cfg), func(c *core.Context) { c.Success("ok", nil) }})
+	c.SetHandlers([]core.HandlerFunc{stdToCore(CORS(cfg)), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
 	testx.Equal(t, rec.Code, http.StatusNoContent)
 
@@ -41,7 +41,7 @@ func TestCORSAllowedOrigin(t *testing.T) {
 	req.Header.Set("Origin", "https://trusted.com")
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
-	c.SetHandlers([]core.HandlerFunc{CORS(cfg), func(c *core.Context) { c.Success("ok", nil) }})
+	c.SetHandlers([]core.HandlerFunc{stdToCore(CORS(cfg)), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
 	if rec.Header().Get("Access-Control-Allow-Origin") != "https://trusted.com" {
 		t.Error("可信来源未回显")
@@ -69,7 +69,7 @@ func TestCORSDisallowedAndNoOrigin(t *testing.T) {
 	req.Header.Set("Origin", "https://evil.com")
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
-	c.SetHandlers([]core.HandlerFunc{CORS(cfg), func(c *core.Context) { c.Success("ok", nil) }})
+	c.SetHandlers([]core.HandlerFunc{stdToCore(CORS(cfg)), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
 	if rec.Header().Get("Access-Control-Allow-Origin") != "" {
 		t.Error("不可信来源不应回显")
@@ -77,7 +77,7 @@ func TestCORSDisallowedAndNoOrigin(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	c.SetHandlers([]core.HandlerFunc{CORS(cfg), func(c *core.Context) { c.Success("ok", nil) }})
+	c.SetHandlers([]core.HandlerFunc{stdToCore(CORS(cfg)), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
 	if rec.Header().Get("Access-Control-Allow-Origin") != "" {
 		t.Error("无 Origin 不应设置响应头")
@@ -93,7 +93,7 @@ func TestCORSAllowCredentials(t *testing.T) {
 	req.Header.Set("Origin", "https://trusted.com")
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
-	c.SetHandlers([]core.HandlerFunc{CORS(cfg), func(c *core.Context) { c.Success("ok", nil) }})
+	c.SetHandlers([]core.HandlerFunc{stdToCore(CORS(cfg)), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
 	if rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
 		t.Error("凭据头缺失")
@@ -104,7 +104,7 @@ func TestCORSExposeHeaders(t *testing.T) {
 	cfg := CORSConfig{ExposeHeaders: []string{"X-Request-ID", "X-Trace-ID"}}
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	c.SetHandlers([]core.HandlerFunc{CORS(cfg), func(c *core.Context) { c.Success("ok", nil) }})
+	c.SetHandlers([]core.HandlerFunc{stdToCore(CORS(cfg)), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
 	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "X-Request-ID, X-Trace-ID" {
 		t.Errorf("Expose-Headers 不符：%s", got)
@@ -112,7 +112,7 @@ func TestCORSExposeHeaders(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	c.SetHandlers([]core.HandlerFunc{CORS(DefaultCORSConfig()), func(c *core.Context) { c.Success("ok", nil) }})
+	c.SetHandlers([]core.HandlerFunc{stdToCore(CORS(DefaultCORSConfig())), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
 	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "X-Request-ID" {
 		t.Errorf("默认 Expose-Headers 应含 X-Request-ID：%s", got)
@@ -120,7 +120,7 @@ func TestCORSExposeHeaders(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	c.SetHandlers([]core.HandlerFunc{CORS(CORSConfig{}), func(c *core.Context) { c.Success("ok", nil) }})
+	c.SetHandlers([]core.HandlerFunc{stdToCore(CORS(CORSConfig{})), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
 	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "" {
 		t.Errorf("空 ExposeHeaders 不应设置响应头：%s", got)
@@ -131,7 +131,7 @@ func TestCORSAllowPrivateNetwork(t *testing.T) {
 	cfg := CORSConfig{AllowPrivateNetwork: true}
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	c.SetHandlers([]core.HandlerFunc{CORS(cfg), func(c *core.Context) { c.Success("ok", nil) }})
+	c.SetHandlers([]core.HandlerFunc{stdToCore(CORS(cfg)), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
 	if got := rec.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
 		t.Errorf("内网预检头缺失：%s", got)
@@ -139,7 +139,7 @@ func TestCORSAllowPrivateNetwork(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	c.SetHandlers([]core.HandlerFunc{CORS(DefaultCORSConfig()), func(c *core.Context) { c.Success("ok", nil) }})
+	c.SetHandlers([]core.HandlerFunc{stdToCore(CORS(DefaultCORSConfig())), func(c *core.Context) { c.Success("ok", nil) }})
 	c.Run()
 	if got := rec.Header().Get("Access-Control-Allow-Private-Network"); got != "" {
 		t.Errorf("默认不应输出内网预检头：%s", got)

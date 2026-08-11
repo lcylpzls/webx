@@ -25,7 +25,7 @@ func TestAccessLogSuccessOnly(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/ok", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		AccessLog(logger, AccessLogOptions{}),
+		stdToCore(AccessLog(logger, AccessLogOptions{})),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -39,7 +39,7 @@ func TestAccessLogSuccessOnly(t *testing.T) {
 	failReq.Proto = "HTTP/3.0"
 	c = core.NewContext(rec, failReq)
 	c.SetHandlers([]core.HandlerFunc{
-		AccessLog(logger, AccessLogOptions{}),
+		stdToCore(AccessLog(logger, AccessLogOptions{})),
 		func(c *core.Context) { c.JSONResponse(http.StatusNotFound, "不存在", nil) },
 	})
 	c.Run()
@@ -73,7 +73,7 @@ func TestAccessLogLogAll(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/all", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		AccessLog(logger, AccessLogOptions{LogSuccess: true}),
+		stdToCore(AccessLog(logger, AccessLogOptions{LogSuccess: true})),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -96,7 +96,7 @@ func TestAccessLogRedaction(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		AccessLog(logger, AccessLogOptions{LogSuccess: true, RedactKeys: []string{"token"}}),
+		stdToCore(AccessLog(logger, AccessLogOptions{LogSuccess: true, RedactKeys: []string{"token"}})),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -124,7 +124,7 @@ func TestAccessLogSampling(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/s", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		AccessLog(logger, AccessLogOptions{LogSuccess: true, SampleRate: 10}),
+		stdToCore(AccessLog(logger, AccessLogOptions{LogSuccess: true, SampleRate: 10})),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -138,7 +138,7 @@ func TestAccessLogSampling(t *testing.T) {
 	rec = httptest.NewRecorder()
 	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/s", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		AccessLog(logger, AccessLogOptions{LogSuccess: true, SampleRate: 10}),
+		stdToCore(AccessLog(logger, AccessLogOptions{LogSuccess: true, SampleRate: 10})),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -157,7 +157,7 @@ func TestAccessLogSlowThreshold(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/slow", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		AccessLog(logger, AccessLogOptions{SlowThreshold: time.Millisecond}),
+		stdToCore(AccessLog(logger, AccessLogOptions{SlowThreshold: time.Millisecond})),
 		func(c *core.Context) {
 			time.Sleep(2 * time.Millisecond)
 			c.Success("ok", nil)
@@ -175,7 +175,7 @@ func TestAccessLogSlowThreshold(t *testing.T) {
 	rec = httptest.NewRecorder()
 	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/slow", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		AccessLog(logger, AccessLogOptions{}),
+		stdToCore(AccessLog(logger, AccessLogOptions{})),
 		func(c *core.Context) {
 			time.Sleep(2 * time.Millisecond)
 			c.Success("ok", nil)
@@ -202,11 +202,11 @@ func TestAccessLogHeaderWhitelist(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		AccessLog(logger, AccessLogOptions{
+		stdToCore(AccessLog(logger, AccessLogOptions{
 			LogSuccess: true,
 			HeaderKeys: []string{"X-Trace-ID", "X-User-ID", "X-Secret", "", "X-Missing"},
 			RedactKeys: []string{"X-Secret"},
-		}),
+		})),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()

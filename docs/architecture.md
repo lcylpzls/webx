@@ -75,6 +75,12 @@ func (c *Context) Abort() { c.aborted = true }
 
 中间件链语义与主流框架一致（Next/Abort），迁移与协作成本低。
 
+v1.6.0 起中间件分两层：
+
+- 全局/内置中间件为标准库形态 `func(http.Handler) http.Handler`，
+  位于 `injectContext` 之前，通过 request context 读取 `*Context`；
+- 路由/分组中间件与最终处理器继续使用 core 链的 Next/Abort 语义。
+
 ### 3.2 路由（自研 radix 匹配树）
 
 webx 对外接受框架风格路由语法：`:id`（单段参数）与 `*filepath`（通配剩余路径），

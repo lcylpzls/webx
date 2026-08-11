@@ -18,7 +18,7 @@ func TestGzipCompresses(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		Gzip(),
+		stdToCore(Gzip()),
 		func(c *core.Context) { _ = c.String(http.StatusOK, "压缩内容") },
 	})
 	c.Run()
@@ -43,7 +43,7 @@ func TestGzipCustomLevel(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		GzipWithOptions(GzipOptions{Level: 9}),
+		stdToCore(GzipWithOptions(GzipOptions{Level: 9})),
 		func(c *core.Context) { _ = c.String(http.StatusOK, "自定义级别压缩内容") },
 	})
 	c.Run()
@@ -66,7 +66,7 @@ func TestGzipInvalidLevelNormalized(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		GzipWithOptions(GzipOptions{Level: 99}),
+		stdToCore(GzipWithOptions(GzipOptions{Level: 99})),
 		func(c *core.Context) { _ = c.String(http.StatusOK, "非法级别回退默认") },
 	})
 	c.Run()
@@ -87,7 +87,7 @@ func TestGzipNoAcceptEncoding(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		Gzip(),
+		stdToCore(Gzip()),
 		func(c *core.Context) { _ = c.String(http.StatusOK, "明文") },
 	})
 	c.Run()
@@ -148,7 +148,7 @@ func TestGzipSkipsBinaryContentType(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		Gzip(),
+		stdToCore(Gzip()),
 		func(c *core.Context) {
 			c.Header("Content-Type", "image/png")
 			_, _ = c.Writer().Write([]byte("PNG"))
@@ -167,7 +167,7 @@ func TestGzipSkipsBinaryContentType(t *testing.T) {
 	c = core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.Request().Header.Set("Accept-Encoding", "gzip")
 	c.SetHandlers([]core.HandlerFunc{
-		Gzip(),
+		stdToCore(Gzip()),
 		func(c *core.Context) {
 			c.Header("Content-Type", "image/png")
 			c.Status(http.StatusOK)
@@ -188,7 +188,7 @@ func TestGzipMinSize(t *testing.T) {
 		c := core.NewContext(rec, req)
 		data := bytes.Repeat([]byte("x"), size)
 		c.SetHandlers([]core.HandlerFunc{
-			Gzip(),
+			stdToCore(Gzip()),
 			func(c *core.Context) { _, _ = c.Writer().Write(data) },
 		})
 		c.Run()
@@ -220,7 +220,7 @@ func TestGzipFlushStarts(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, req)
 	c.SetHandlers([]core.HandlerFunc{
-		Gzip(),
+		stdToCore(Gzip()),
 		func(c *core.Context) {
 			_, _ = c.Writer().Write([]byte("ab"))
 			if gw, ok := c.Writer().(*gzipWriter); ok {

@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	testx "github.com/lcylpzls/testx"
@@ -74,6 +75,37 @@ func TestContextAccessors(t *testing.T) {
 	req.RemoteAddr = "no-port"
 	if got := c.RemoteIP(); got != "no-port" {
 		t.Errorf("非法对端地址应按原样返回：%s", got)
+	}
+}
+
+func TestContextPropagation(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := NewContext(rec, req)
+	c.SetRoute("/api/users/:id")
+	c.SetGroup("/api")
+
+	// 注入后可从 request context 取回同一实例。
+	ctx := NewContextWith(context.Background(), c)
+	if got := From(ctx); got != c {
+		t.Error("From 应返回注入的上下文实例")
+	}
+	if got := RouteFrom(ctx); got != "/api/users/:id" {
+		t.Errorf("RouteFrom 不符：%s", got)
+	}
+	if got := GroupFrom(ctx); got != "/api" {
+		t.Errorf("GroupFrom 不符：%s", got)
+	}
+
+	// 未注入时 From 返回 nil，Route/Group 返回空字符串。
+	if got := From(context.Background()); got != nil {
+		t.Error("未注入时 From 应返回 nil")
+	}
+	if got := RouteFrom(context.Background()); got != "" {
+		t.Errorf("未注入时 RouteFrom 应为空：%s", got)
+	}
+	if got := GroupFrom(context.Background()); got != "" {
+		t.Errorf("未注入时 GroupFrom 应为空：%s", got)
 	}
 }
 

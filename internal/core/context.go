@@ -3,6 +3,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -41,6 +42,36 @@ type Context struct {
 type Param struct {
 	Name  string
 	Value string
+}
+
+// contextKey 是 request context 中注入 *Context 的私有键。
+type contextKey struct{}
+
+// NewContextWith 将请求上下文注入 request context，供标准中间件读取。
+func NewContextWith(parent context.Context, c *Context) context.Context {
+	return context.WithValue(parent, contextKey{}, c)
+}
+
+// From 从 request context 取回 webx 请求上下文；未注入返回 nil。
+func From(ctx context.Context) *Context {
+	c, _ := ctx.Value(contextKey{}).(*Context)
+	return c
+}
+
+// RouteFrom 返回当前请求的路由路径（未注入时为空字符串）。
+func RouteFrom(ctx context.Context) string {
+	if c := From(ctx); c != nil {
+		return c.Route()
+	}
+	return ""
+}
+
+// GroupFrom 返回当前请求的路由分组（未注入时为空字符串）。
+func GroupFrom(ctx context.Context) string {
+	if c := From(ctx); c != nil {
+		return c.Group()
+	}
+	return ""
 }
 
 // 常用请求头的预计算规范化键（热路径零规范化分配）。

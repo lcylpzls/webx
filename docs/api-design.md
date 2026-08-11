@@ -18,6 +18,9 @@
 ## 定稿说明
 
 - 路由基于自研 radix 匹配树（v0.17 起替代 ServeMux），匹配与分发完全自主；
-- 内置中间件顺序默认固定但可通过 `SetMiddlewareOrder` 调整；
+- 内置中间件顺序默认固定但可通过 `SetOrder` 调整；
+- v1.6.0 起全局/内置中间件统一为标准库形态
+  `func(http.Handler) http.Handler`，路由与分组中间件保持
+  `func(*webx.Context)`；
 - 全部公开 API 以每版本生成的 `docs/api-vX.Y.Z.md` 基线为准；
 - v1.0.0 起 API 冻结，后续变更需通过 apidiff 与基线比对。

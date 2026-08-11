@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/lcylpzls/idgenx"
@@ -18,12 +19,12 @@ type RequestIDOptions struct {
 
 // RequestID 返回请求 ID 生成中间件。
 // 优先使用请求头 X-Request-ID，否则生成 UUID v7。
-func RequestID() core.HandlerFunc {
+func RequestID() func(http.Handler) http.Handler {
 	return RequestIDWithOptions(RequestIDOptions{})
 }
 
 // RequestIDWithOptions 返回按选项配置的请求 ID 生成中间件。
-func RequestIDWithOptions(opts RequestIDOptions) core.HandlerFunc {
+func RequestIDWithOptions(opts RequestIDOptions) func(http.Handler) http.Handler {
 	header := opts.Header
 	if header == "" {
 		header = "X-Request-ID"
@@ -33,16 +34,19 @@ func RequestIDWithOptions(opts RequestIDOptions) core.HandlerFunc {
 		generator = newRequestID
 	}
 	canonical := core.CanonicalHeaderKey(header)
-	return func(c *core.Context) {
-		requestID := c.GetHeaderCanonical(canonical)
-		if requestID == "" {
-			requestID = generator()
-		}
-		c.Set("requestId", requestID)
-		c.SetHeaderCanonical(canonical, requestID)
-		// 出站透传：转发到上游时保留同一条请求 ID。
-		c.SetRequestHeaderCanonical(canonical, requestID)
-		c.Next()
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := core.From(r.Context())
+			requestID := c.GetHeaderCanonical(canonical)
+			if requestID == "" {
+				requestID = generator()
+			}
+			c.Set("requestId", requestID)
+			w.Header().Set(canonical, requestID)
+			// 出站透传：转发到上游时保留同一条请求 ID。
+			r.Header.Set(canonical, requestID)
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 

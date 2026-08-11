@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/lcylpzls/webx/internal/core"
@@ -53,48 +54,50 @@ type SecurityHeadersOptions struct {
 }
 
 // SecurityHeaders 返回安全响应头中间件。
-func SecurityHeaders(opts SecurityHeadersOptions) core.HandlerFunc {
-	return func(c *core.Context) {
-		if opts.ContentTypeNoSniff {
-			c.SetHeaderCanonical(canonicalContentTypeOptions, "nosniff")
-		}
-		if opts.FrameDeny {
-			c.SetHeaderCanonical(canonicalFrameOptions, "DENY")
-		}
-		if opts.ReferrerPolicy != "" {
-			c.SetHeaderCanonical(canonicalReferrerPolicy, opts.ReferrerPolicy)
-		}
-		if opts.HSTSMaxAge > 0 {
-			hsts := fmt.Sprintf("max-age=%d", int64(opts.HSTSMaxAge.Seconds()))
-			if opts.HSTSIncludeSubDomains {
-				hsts += "; includeSubDomains"
+func SecurityHeaders(opts SecurityHeadersOptions) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if opts.ContentTypeNoSniff {
+				w.Header().Set(canonicalContentTypeOptions, "nosniff")
 			}
-			if opts.HSTSPreload {
-				hsts += "; preload"
+			if opts.FrameDeny {
+				w.Header().Set(canonicalFrameOptions, "DENY")
 			}
-			c.SetHeaderCanonical(canonicalHSTS, hsts)
-		}
-		if opts.PermissionsPolicy != "" {
-			c.SetHeaderCanonical(canonicalPermissionsPolicy, opts.PermissionsPolicy)
-		}
-		if opts.CrossOriginOpenerPolicy != "" {
-			c.SetHeaderCanonical(canonicalCOOP, opts.CrossOriginOpenerPolicy)
-		}
-		if opts.CrossOriginResourcePolicy != "" {
-			c.SetHeaderCanonical(canonicalCORP, opts.CrossOriginResourcePolicy)
-		}
-		if opts.CrossOriginEmbedderPolicy != "" {
-			c.SetHeaderCanonical(canonicalCOEP, opts.CrossOriginEmbedderPolicy)
-		}
-		if opts.ContentSecurityPolicy != "" {
-			c.SetHeaderCanonical(canonicalCSP, opts.ContentSecurityPolicy)
-		}
-		if opts.ContentSecurityPolicyReportOnly != "" {
-			c.SetHeaderCanonical(canonicalCSPReportOnly, opts.ContentSecurityPolicyReportOnly)
-		}
-		if opts.OriginAgentCluster {
-			c.SetHeaderCanonical(canonicalOriginAgentCluster, "?1")
-		}
-		c.Next()
+			if opts.ReferrerPolicy != "" {
+				w.Header().Set(canonicalReferrerPolicy, opts.ReferrerPolicy)
+			}
+			if opts.HSTSMaxAge > 0 {
+				hsts := fmt.Sprintf("max-age=%d", int64(opts.HSTSMaxAge.Seconds()))
+				if opts.HSTSIncludeSubDomains {
+					hsts += "; includeSubDomains"
+				}
+				if opts.HSTSPreload {
+					hsts += "; preload"
+				}
+				w.Header().Set(canonicalHSTS, hsts)
+			}
+			if opts.PermissionsPolicy != "" {
+				w.Header().Set(canonicalPermissionsPolicy, opts.PermissionsPolicy)
+			}
+			if opts.CrossOriginOpenerPolicy != "" {
+				w.Header().Set(canonicalCOOP, opts.CrossOriginOpenerPolicy)
+			}
+			if opts.CrossOriginResourcePolicy != "" {
+				w.Header().Set(canonicalCORP, opts.CrossOriginResourcePolicy)
+			}
+			if opts.CrossOriginEmbedderPolicy != "" {
+				w.Header().Set(canonicalCOEP, opts.CrossOriginEmbedderPolicy)
+			}
+			if opts.ContentSecurityPolicy != "" {
+				w.Header().Set(canonicalCSP, opts.ContentSecurityPolicy)
+			}
+			if opts.ContentSecurityPolicyReportOnly != "" {
+				w.Header().Set(canonicalCSPReportOnly, opts.ContentSecurityPolicyReportOnly)
+			}
+			if opts.OriginAgentCluster {
+				w.Header().Set(canonicalOriginAgentCluster, "?1")
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
 }

@@ -14,10 +14,10 @@ func TestHooks(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		Hooks(
+		stdToCore(Hooks(
 			func(c *core.Context) { order = append(order, "request") },
 			func(c *core.Context) { order = append(order, "response") },
-		),
+		)),
 		func(c *core.Context) { order = append(order, "handler"); c.Success("ok", nil) },
 	})
 	c.Run()
@@ -31,7 +31,7 @@ func TestHooksNil(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		Hooks(nil, nil),
+		stdToCore(Hooks(nil, nil)),
 		func(c *core.Context) { called = true; c.Success("ok", nil) },
 	})
 	c.Run()

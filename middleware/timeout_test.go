@@ -15,7 +15,7 @@ func TestTimeoutTriggers(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		Timeout(10 * time.Millisecond),
+		stdToCore(Timeout(10 * time.Millisecond)),
 		func(c *core.Context) {
 			<-c.Request().Context().Done()
 			_ = c.String(http.StatusOK, "迟到响应")
@@ -42,7 +42,7 @@ func TestTimeoutCustomMessage(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		TimeoutWithOptions(10*time.Millisecond, TimeoutOptions{Message: "自定义超时文案"}),
+		stdToCore(TimeoutWithOptions(10*time.Millisecond, TimeoutOptions{Message: "自定义超时文案"})),
 		func(c *core.Context) {
 			<-c.Request().Context().Done()
 			_ = c.String(http.StatusOK, "迟到响应")
@@ -58,7 +58,7 @@ func TestTimeoutWroteHeaderBeforeExpiry(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		Timeout(5 * time.Millisecond),
+		stdToCore(Timeout(5 * time.Millisecond)),
 		func(c *core.Context) {
 			c.Status(http.StatusOK)
 			<-c.Request().Context().Done()
@@ -74,7 +74,7 @@ func TestTimeoutWritesBeforeExpiry(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		Timeout(time.Second),
+		stdToCore(Timeout(time.Second)),
 		func(c *core.Context) {
 			_ = c.String(http.StatusOK, "正常响应")
 		},
@@ -90,7 +90,7 @@ func TestTimeoutDisabled(t *testing.T) {
 	var called bool
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		Timeout(0),
+		stdToCore(Timeout(0)),
 		func(c *core.Context) { called = true; c.Success("ok", nil) },
 	})
 	c.Run()

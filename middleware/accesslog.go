@@ -50,74 +50,77 @@ func (w *countingWriter) Unwrap() http.ResponseWriter {
 var sampleRand = rand.IntN
 
 // AccessLog 返回访问日志中间件。
-func AccessLog(logger logx.Logger, opts AccessLogOptions) core.HandlerFunc {
+func AccessLog(logger logx.Logger, opts AccessLogOptions) func(http.Handler) http.Handler {
 	headerKeys := make([]string, len(opts.HeaderKeys))
 	for i, k := range opts.HeaderKeys {
 		headerKeys[i] = core.CanonicalHeaderKey(k)
 	}
-	return func(c *core.Context) {
-		start := time.Now()
-		orig := c.Writer()
-		cw := countingWriterPool.Get().(*countingWriter)
-		cw.ResponseWriter = orig
-		cw.n = 0
-		c.SetWriter(cw)
-		c.Next()
-		c.SetWriter(orig)
-		bytes := cw.n
-		countingWriterPool.Put(cw)
-		status := c.StatusCode()
-		elapsed := time.Since(start)
-		if opts.SlowThreshold > 0 && elapsed >= opts.SlowThreshold {
-			logger.Warn("慢请求", logx.Fields(
-				logx.String("method", c.Request().Method),
-				logx.String("path", c.Request().URL.Path),
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := core.From(r.Context())
+			start := time.Now()
+			orig := c.Writer()
+			cw := countingWriterPool.Get().(*countingWriter)
+			cw.ResponseWriter = orig
+			cw.n = 0
+			c.SetWriter(cw)
+			next.ServeHTTP(cw, r)
+			c.SetWriter(orig)
+			bytes := cw.n
+			countingWriterPool.Put(cw)
+			status := c.StatusCode()
+			elapsed := time.Since(start)
+			if opts.SlowThreshold > 0 && elapsed >= opts.SlowThreshold {
+				logger.Warn("慢请求", logx.Fields(
+					logx.String("method", r.Method),
+					logx.String("path", r.URL.Path),
+					logx.Int("status", status),
+					logx.String("requestId", c.RequestID()),
+					logx.String("duration", elapsed.String()),
+				))
+			}
+			if status >= 200 && status < 300 && !opts.LogSuccess {
+				return
+			}
+			if opts.SampleRate > 0 && sampleRand(opts.SampleRate) != 0 {
+				return
+			}
+			query := redactQuery(r.URL.RawQuery, opts.RedactKeys)
+			logFields := []logx.Field{
+				logx.String("method", r.Method),
+				logx.String("path", r.URL.Path),
 				logx.Int("status", status),
 				logx.String("requestId", c.RequestID()),
-				logx.String("duration", elapsed.String()),
-			))
-		}
-		if status >= 200 && status < 300 && !opts.LogSuccess {
-			return
-		}
-		if opts.SampleRate > 0 && sampleRand(opts.SampleRate) != 0 {
-			return
-		}
-		query := redactQuery(c.Request().URL.RawQuery, opts.RedactKeys)
-		logFields := []logx.Field{
-			logx.String("method", c.Request().Method),
-			logx.String("path", c.Request().URL.Path),
-			logx.Int("status", status),
-			logx.String("requestId", c.RequestID()),
-			logx.String("ip", c.RemoteIP()),
-			logx.String("host", c.Request().Host),
-			logx.String("scheme", requestScheme(c.Request())),
-			logx.String("proto", friendlyProto(c.Request().Proto)),
-			logx.String("query", query),
-			logx.String("user_agent", c.GetHeaderCanonical(canonicalUserAgent)),
-			logx.Any("duration", elapsed.String()),
-			logx.Int64("duration_ms", elapsed.Milliseconds()),
-			logx.Int64("bytes", bytes),
-		}
-		for i, key := range opts.HeaderKeys {
-			if key == "" {
-				continue
+				logx.String("ip", c.RemoteIP()),
+				logx.String("host", r.Host),
+				logx.String("scheme", requestScheme(r)),
+				logx.String("proto", friendlyProto(r.Proto)),
+				logx.String("query", query),
+				logx.String("user_agent", r.Header.Get(canonicalUserAgent)),
+				logx.Any("duration", elapsed.String()),
+				logx.Int64("duration_ms", elapsed.Milliseconds()),
+				logx.Int64("bytes", bytes),
 			}
-			value := c.GetHeaderCanonical(headerKeys[i])
-			if value == "" {
-				continue
+			for i, key := range opts.HeaderKeys {
+				if key == "" {
+					continue
+				}
+				value := r.Header.Get(headerKeys[i])
+				if value == "" {
+					continue
+				}
+				if isRedactKey(opts.RedactKeys, key) {
+					value = "***"
+				}
+				logFields = append(logFields, logx.String(headerFieldName(key), value))
 			}
-			if isRedactKey(opts.RedactKeys, key) {
-				value = "***"
+			fields := logx.Fields(logFields...)
+			if status >= 400 {
+				logger.Warn("访问日志", fields)
+				return
 			}
-			logFields = append(logFields, logx.String(headerFieldName(key), value))
-		}
-		fields := logx.Fields(logFields...)
-		if status >= 400 {
-			logger.Warn("访问日志", fields)
-			return
-		}
-		logger.Info("访问日志", fields)
+			logger.Info("访问日志", fields)
+		})
 	}
 }
 

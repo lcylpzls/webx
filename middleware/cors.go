@@ -33,7 +33,7 @@ type CORSConfig struct {
 }
 
 // CORS 返回 CORS 跨域处理中间件。
-func CORS(cfg CORSConfig) core.HandlerFunc {
+func CORS(cfg CORSConfig) func(http.Handler) http.Handler {
 	allowAll := false
 	for _, o := range cfg.AllowedOrigins {
 		if o == "*" {
@@ -41,43 +41,44 @@ func CORS(cfg CORSConfig) core.HandlerFunc {
 			break
 		}
 	}
-	return func(c *core.Context) {
-		origin := c.GetHeaderCanonical(canonicalOrigin)
-		if allowAll {
-			c.SetHeaderCanonical(canonicalAllowOrigin, "*")
-		} else if origin != "" {
-			for _, o := range cfg.AllowedOrigins {
-				if o == origin {
-					c.SetHeaderCanonical(canonicalAllowOrigin, origin)
-					c.SetHeaderCanonical(canonicalVary, "Origin")
-					break
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get(canonicalOrigin)
+			if allowAll {
+				w.Header().Set(canonicalAllowOrigin, "*")
+			} else if origin != "" {
+				for _, o := range cfg.AllowedOrigins {
+					if o == origin {
+						w.Header().Set(canonicalAllowOrigin, origin)
+						w.Header().Set(canonicalVary, "Origin")
+						break
+					}
 				}
 			}
-		}
-		if len(cfg.AllowedMethods) > 0 {
-			c.SetHeaderCanonical(canonicalAllowMethods, strings.Join(cfg.AllowedMethods, ", "))
-		}
-		if len(cfg.AllowedHeaders) > 0 {
-			c.SetHeaderCanonical(canonicalAllowHeaders, strings.Join(cfg.AllowedHeaders, ", "))
-		}
-		if len(cfg.ExposeHeaders) > 0 {
-			c.SetHeaderCanonical(canonicalExposeHeaders, strings.Join(cfg.ExposeHeaders, ", "))
-		}
-		if cfg.AllowCredentials {
-			c.SetHeaderCanonical(canonicalAllowCredentials, "true")
-		}
-		if cfg.AllowPrivateNetwork {
-			c.SetHeaderCanonical(canonicalAllowPrivateNetwork, "true")
-		}
-		if cfg.MaxAge > 0 {
-			c.SetHeaderCanonical(canonicalMaxAge, strconv.Itoa(cfg.MaxAge))
-		}
-		if c.Request().Method == http.MethodOptions {
-			c.Status(http.StatusNoContent)
-			c.Abort()
-			return
-		}
-		c.Next()
+			if len(cfg.AllowedMethods) > 0 {
+				w.Header().Set(canonicalAllowMethods, strings.Join(cfg.AllowedMethods, ", "))
+			}
+			if len(cfg.AllowedHeaders) > 0 {
+				w.Header().Set(canonicalAllowHeaders, strings.Join(cfg.AllowedHeaders, ", "))
+			}
+			if len(cfg.ExposeHeaders) > 0 {
+				w.Header().Set(canonicalExposeHeaders, strings.Join(cfg.ExposeHeaders, ", "))
+			}
+			if cfg.AllowCredentials {
+				w.Header().Set(canonicalAllowCredentials, "true")
+			}
+			if cfg.AllowPrivateNetwork {
+				w.Header().Set(canonicalAllowPrivateNetwork, "true")
+			}
+			if cfg.MaxAge > 0 {
+				w.Header().Set(canonicalMaxAge, strconv.Itoa(cfg.MaxAge))
+			}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 

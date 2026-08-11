@@ -14,7 +14,7 @@ func TestSecurityHeaders(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		SecurityHeaders(SecurityHeadersOptions{
+		stdToCore(SecurityHeaders(SecurityHeadersOptions{
 			ContentTypeNoSniff:              true,
 			FrameDeny:                       true,
 			ReferrerPolicy:                  "no-referrer",
@@ -28,7 +28,7 @@ func TestSecurityHeaders(t *testing.T) {
 			ContentSecurityPolicy:           "default-src 'self'",
 			ContentSecurityPolicyReportOnly: "default-src 'self'; report-uri /csp",
 			OriginAgentCluster:              true,
-		}),
+		})),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()
@@ -51,7 +51,7 @@ func TestSecurityHeadersDisabled(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := core.NewContext(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	c.SetHandlers([]core.HandlerFunc{
-		SecurityHeaders(SecurityHeadersOptions{}),
+		stdToCore(SecurityHeaders(SecurityHeadersOptions{})),
 		func(c *core.Context) { c.Success("ok", nil) },
 	})
 	c.Run()

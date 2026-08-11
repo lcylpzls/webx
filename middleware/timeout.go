@@ -53,35 +53,39 @@ type TimeoutOptions struct {
 
 // Timeout 返回请求超时中间件（默认文案）。
 // 向请求注入带超时的 Context；超时后丢弃 Handler 写入并返回 503。
-func Timeout(timeout time.Duration) core.HandlerFunc {
+func Timeout(timeout time.Duration) func(http.Handler) http.Handler {
 	return TimeoutWithOptions(timeout, TimeoutOptions{})
 }
 
 // TimeoutWithOptions 返回带文案选项的请求超时中间件。
-func TimeoutWithOptions(timeout time.Duration, opts TimeoutOptions) core.HandlerFunc {
+func TimeoutWithOptions(timeout time.Duration, opts TimeoutOptions) func(http.Handler) http.Handler {
 	message := opts.Message
 	if message == "" {
 		message = "请求处理超时"
 	}
-	return func(c *core.Context) {
-		if timeout <= 0 {
-			c.Next()
-			return
-		}
-		ctx, cancel := context.WithTimeout(c.Request().Context(), timeout)
-		defer cancel()
-		c.SetRequest(c.Request().WithContext(ctx))
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := core.From(r.Context())
+			if timeout <= 0 {
+				next.ServeHTTP(w, r)
+				return
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), timeout)
+			defer cancel()
+			r = r.WithContext(ctx)
+			c.SetRequest(r)
 
-		origWriter := c.Writer()
-		tw := &timeoutWriter{ResponseWriter: origWriter, ctx: ctx}
-		c.SetWriter(tw)
+			origWriter := c.Writer()
+			tw := &timeoutWriter{ResponseWriter: origWriter, ctx: ctx}
+			c.SetWriter(tw)
 
-		c.Next()
-		c.SetWriter(origWriter)
+			next.ServeHTTP(tw, r)
+			c.SetWriter(origWriter)
 
-		if tw.timedOut && !tw.wroteHeader {
-			c.ResetWriteState()
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, message, nil)
-		}
+			if tw.timedOut && !tw.wroteHeader {
+				c.ResetWriteState()
+				c.AbortWithStatusJSON(http.StatusServiceUnavailable, message, nil)
+			}
+		})
 	}
 }

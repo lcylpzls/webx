@@ -99,6 +99,7 @@
 | 路由/分组 | `RegisterRoute / RegisterRouteGroup / RouteGroup.GET...` |
 | 中间件管理 | `UseGlobalMiddleware / OverrideMiddleware / Disable/EnableMiddleware` |
 | 请求 ID | `SetRequestIDOptions`（自定义头名与生成器，默认 UUID v7） |
+| 中间件形态 | 全局/内置中间件为标准库 `func(http.Handler) http.Handler`；路由与分组中间件沿用 `func(*webx.Context)` |
 | 指标接入 | `WithMetrics(metricsx 实例)`（请求/耗时/水位事件，可选） |
 | 并发限制 | `SetMaxConcurrentRequests(n)`（超限 503 + Retry-After） |
 | 内置中间件 | Recovery、RequestID、BodyLimit、Timeout、CORS、Validation、RateLimit、Gzip、Metrics、AccessLog、Security |
@@ -138,7 +139,7 @@
 
 - webx 不内置分布式追踪（保持零第三方依赖定位）；
 - 链路追踪统一使用 tracex 基座：
-  `s.UseGlobalMiddleware(txwebx.Middleware(m))`；
+  `s.UseGlobalMiddleware(m.Middleware)`；
 - 全局中间件已覆盖 404/405 兜底请求，追踪无盲区；
 - `X-Request-ID` 请求 ID 能力保留，与链路追踪无关。
 
