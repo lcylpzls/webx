@@ -2,6 +2,15 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+## [v1.6.2] - 2026-08-11
+
+### 修复
+
+- Unix Socket 测试按平台能力跳过：Windows 仅在 build 1803
+  （10.0.17134）及以上支持 AF_UNIX，`TestServerUnixServeErrorLogged`
+  补上 `unixSocketSupported()` 版本感知守卫，不再一刀切
+  `//go:build !windows`。
+
 ## [v1.6.1] - 2026-08-11
 
 ### 文档

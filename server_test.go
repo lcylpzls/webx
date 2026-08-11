@@ -1740,6 +1740,9 @@ func TestServerShutdownErrorWrapped(t *testing.T) {
 }
 
 func TestServerUnixServeErrorLogged(t *testing.T) {
+	if err := unixSocketSupported(); err != nil {
+		t.Skipf("当前平台不支持 Unix Socket：%v", err)
+	}
 	s := newTestServer(t, validConfig(t))
 	s.UseUnixSocketListen(filepath.Join(t.TempDir(), "x.sock"), 0o600)
 	errCh := make(chan error, 1)
