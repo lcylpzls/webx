@@ -28,6 +28,31 @@ import (
 	"github.com/quic-go/quic-go/http3"
 )
 
+// unixShortSeq 生成唯一的短目录序号。
+var unixShortSeq uint64
+
+// unixSockTempDir 返回适合 Unix Socket 的临时目录。
+// Windows 上 AF_UNIX 路径限制 ≤60 字符，t.TempDir() 可能过长，回退到 shortUnixDir()
+// 下创建唯一短名子目录（自动注册 Cleanup）。
+func unixSockTempDir(t testHelper) string {
+	t.Helper()
+	dir := t.TempDir()
+	if len(filepath.Join(dir, "webx.sock")) <= maxUnixPathLen {
+		return dir
+	}
+	base := shortUnixDir()
+	n := atomic.AddUint64(&unixShortSeq, 1)
+	d := filepath.Join(base, fmt.Sprintf("w%d", n))
+	if len(filepath.Join(d, "webx.sock")) > maxUnixPathLen {
+		t.Fatalf("短目录仍过长，无法容纳 Unix Socket 路径：%s", d)
+	}
+	if err := os.MkdirAll(d, 0o700); err != nil {
+		testx.RequireNoError(t, err)
+	}
+	t.Cleanup(func() { os.RemoveAll(d) })
+	return d
+}
+
 // newTestLogger 返回写入 io.Discard 的测试日志器。
 func newTestLogger(t testHelper) logx.Logger {
 	t.Helper()
@@ -1513,7 +1538,7 @@ func TestServerUnixSocket(t *testing.T) {
 	if err := unixSocketSupported(); err != nil {
 		t.Skipf("当前平台不支持 Unix Socket：%v", err)
 	}
-	path := filepath.Join(t.TempDir(), "webx.sock")
+	path := filepath.Join(unixSockTempDir(t), "webx.sock")
 	s := newTestServer(t, validConfig(t))
 	s.UseUnixSocketListen(path, 0o600)
 	s.RegisterRoute(Route{Method: "GET", Path: "/ping", Handler: func(c *core.Context) { c.Success("unix", nil) }})
@@ -1560,7 +1585,7 @@ func TestServerStartRollback(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.Mkdir(filepath.Join(dir, "sub"), 0o700)
 	_ = os.WriteFile(filepath.Join(dir, "sub", "x"), []byte("x"), 0o600)
-	s.UseUnixSocketListen(dir, 0o600) // 目录 → 创建失败
+	s.UseUnixSocketListen(unixSockTempDir(t), 0o600) // 目录 → 创建失败
 	if err := s.Start(); err == nil {
 		t.Error("Unix 目录路径应启动失败")
 	}
@@ -1744,7 +1769,7 @@ func TestServerUnixServeErrorLogged(t *testing.T) {
 		t.Skipf("当前平台不支持 Unix Socket：%v", err)
 	}
 	s := newTestServer(t, validConfig(t))
-	s.UseUnixSocketListen(filepath.Join(t.TempDir(), "x.sock"), 0o600)
+	s.UseUnixSocketListen(filepath.Join(unixSockTempDir(t), "x.sock"), 0o600)
 	errCh := make(chan error, 1)
 	go func() { errCh <- s.Start() }()
 	deadline := time.After(5 * time.Second)

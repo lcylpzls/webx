@@ -6,6 +6,7 @@ import (
 	testx "github.com/lcylpzls/testx"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -97,7 +98,10 @@ func TestCreateUnixListener(t *testing.T) {
 	if err := unixSocketSupported(); err != nil {
 		t.Skipf("当前平台不支持 Unix Socket：%v", err)
 	}
-	path := filepath.Join(t.TempDir(), "test.sock")
+	// Windows AF_UNIX 路径需 ≤60 字符，t.TempDir() 可能过长，回退到 shortUnixDir()
+	// 下创建唯一子目录。
+	dir := unixSockTempDir(t)
+	path := filepath.Join(dir, "t.sock")
 	ln, err := createUnixListener(path, 0o600)
 	testx.RequireNoError(t, err)
 
@@ -105,11 +109,11 @@ func TestCreateUnixListener(t *testing.T) {
 	os.Remove(path)
 
 	// 目录路径报错
-	if _, err := createUnixListener(t.TempDir(), 0o600); err == nil {
+	if _, err := createUnixListener(dir, 0o600); err == nil {
 		t.Error("目录路径应报错")
 	}
 	// 残留文件自动清理后成功
-	stale := filepath.Join(t.TempDir(), "stale.sock")
+	stale := filepath.Join(dir, "t2.sock")
 	if err := os.WriteFile(stale, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -120,11 +124,11 @@ func TestCreateUnixListener(t *testing.T) {
 	os.Remove(stale)
 
 	// 父路径为文件：清理失败分支
-	parent := filepath.Join(t.TempDir(), "p")
+	parent := filepath.Join(dir, "p")
 	if err := os.WriteFile(parent, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := createUnixListener(filepath.Join(parent, "child.sock"), 0o600); err == nil {
+	if _, err := createUnixListener(filepath.Join(parent, "c.sock"), 0o600); err == nil {
 		t.Error("父路径为文件应报错")
 	}
 	// 注入 Remove 异常覆盖清理失败分支
@@ -142,12 +146,23 @@ func TestCreateUnixListener(t *testing.T) {
 	}
 	chmodPath = origChmod
 	// 权限设置失败：父目录只读
-	ro := filepath.Join(t.TempDir(), "ro")
+	ro := filepath.Join(dir, "ro")
 	if err := os.Mkdir(ro, 0o500); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := createUnixListener(filepath.Join(ro, "x.sock"), 0o600); err == nil {
 		t.Log("只读目录下监听成功（以 root 运行，跳过权限断言）")
+	}
+}
+
+// TestCreateUnixListenerLongPath 覆盖 Unix Socket 路径长度校验失败分支。
+func TestCreateUnixListenerLongPath(t *testing.T) {
+	if err := unixSocketSupported(); err != nil {
+		t.Skipf("当前平台不支持 Unix Socket：%v", err)
+	}
+	long := strings.Repeat("x", maxUnixPathLen+20)
+	if _, err := createUnixListener(long, 0o600); err == nil {
+		t.Fatal("超长路径应报错")
 	}
 }
 

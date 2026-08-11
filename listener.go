@@ -87,7 +87,11 @@ func createQUICListener(addr string, getCert func(*tls.ClientHelloInfo) (*tls.Ce
 
 // createUnixListener 创建 Unix Socket 监听器。
 // 非 Windows 下先清理残留 Socket 文件，再监听并设置权限。
+// Windows 上 AF_UNIX 路径长度限制为约 60 字符（MS afunix.h wchar_t Path[63]）。
 func createUnixListener(path string, perm os.FileMode) (net.Listener, error) {
+	if err := validateUnixPath(path); err != nil {
+		return nil, err
+	}
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
 		return nil, errx.NewCodef(CodeListenFailed, "Unix Socket 路径为目录而非 Socket 文件，路径 %s", path)
 	}

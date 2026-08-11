@@ -2,6 +2,19 @@
 
 本项目遵循语义化版本（SemVer）。值得记录的变更统一维护在此文件。
 
+
+## [v1.6.3] - 2026-08-11
+
+### 修复
+
+- Windows AF_UNIX 支持增强：`unixSocketSupported()` 在版本检查后增加
+  实际 bind/unlink 探测（候选路径依次尝试 `os.TempDir()` →
+  `%USERPROFILE%` → `%SystemRoot%\Temp`），可捕获临时目录过长等场景；
+- `createUnixListener` 增加 `validateUnixPath()` 路径长度校验
+  （Windows ≤60 字符，其他平台 ≤108 字符）；
+- Unix Socket 测试统一使用短目录辅助 `unixSockTempDir()`，
+  避免 `t.TempDir()` 路径过长导致 Windows AF_UNIX 失败。
+
 ## [v1.6.2] - 2026-08-11
 
 ### 修复
@@ -87,7 +100,8 @@
 
 ### 变更
 
-- IP 限流中间件的令牌桶算法统一引用家族 esiliencex.Limiter（含 RetryAfter），去除自研 tokenBucket 实现；行为与 Retry-After 语义保持一致。
+- IP 限流中间件的令牌桶算法统一引用家族 
+esiliencex.Limiter（含 RetryAfter），去除自研 tokenBucket 实现；行为与 Retry-After 语义保持一致。
 
 ### 质量
 
