@@ -11,8 +11,8 @@ import (
 	"github.com/lcylpzls/clix"
 	"github.com/lcylpzls/logx"
 	"github.com/lcylpzls/metricsx"
+	"github.com/lcylpzls/metricsx/prometheus"
 	"github.com/lcylpzls/webx"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -45,19 +45,23 @@ func run(_ context.Context, c *clix.Context) error {
 		return err
 	}
 
-	metrics, err := metricsx.New()
+	metrics, err := metricsx.New(prometheus.WithPrometheus(
+		prometheus.WithNamespace("webx_production"),
+	))
 	if err != nil {
 		logger.Error("创建指标适配器失败", logx.Fields(logx.Any("error", err)))
 		return err
 	}
 
 	s := webx.NewServer(cfg, logger)
-	s.WithMetrics(metrics)
+	// 指标事件转发给 metricsx 的 Sink（webx.Metrics = metricsx.Sink 契约）。
+	s.WithMetrics(metrics.Sink())
+	// 指标端点统一走 metricsx/prometheus.HTTPHandler，业务侧不直接依赖 promhttp。
 	s.RegisterRoute(webx.Route{
 		Method: http.MethodGet,
 		Path:   "/metrics",
 		Handler: func(c *webx.Context) {
-			promhttp.Handler().ServeHTTP(c.Writer(), c.Request())
+			prometheus.HTTPHandler(metrics).ServeHTTP(c.Writer(), c.Request())
 		},
 	})
 	s.SetMaxConcurrentRequests(200)

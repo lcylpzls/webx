@@ -1,4 +1,4 @@
-// metrics 示例：外置 metricsx 指标接入 + 路由/分组级统计。
+// metrics 示例：外置 metricsx 指标接入 + 路由/分组级统计 + Prometheus 暴露端点。
 package main
 
 import (
@@ -6,8 +6,8 @@ import (
 
 	"github.com/lcylpzls/logx"
 	"github.com/lcylpzls/metricsx"
+	"github.com/lcylpzls/metricsx/prometheus"
 	"github.com/lcylpzls/webx"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -22,19 +22,22 @@ func main() {
 		panic(err)
 	}
 
-	metrics, err := metricsx.New()
+	metrics, err := metricsx.New(prometheus.WithPrometheus(
+		prometheus.WithNamespace("webx_metrics"),
+	))
 	if err != nil {
 		panic(err)
 	}
 
 	s := webx.NewServer(cfg, logger)
-	// v2 不再内置指标端点：外部注入 metricsx，并自行挂载 Prometheus 暴露路由。
-	s.WithMetrics(metrics)
+	// 指标事件转发给 metricsx 的 Sink（webx.Metrics = metricsx.Sink 契约）。
+	s.WithMetrics(metrics.Sink())
+	// 指标端点统一走 metricsx/prometheus.HTTPHandler，业务侧不直接依赖 promhttp。
 	s.RegisterRoute(webx.Route{
 		Method: http.MethodGet,
 		Path:   "/metrics",
 		Handler: func(c *webx.Context) {
-			promhttp.Handler().ServeHTTP(c.Writer(), c.Request())
+			prometheus.HTTPHandler(metrics).ServeHTTP(c.Writer(), c.Request())
 		},
 	})
 	s.RegisterRouteGroup("/api", func(rg *webx.RouteGroup) {

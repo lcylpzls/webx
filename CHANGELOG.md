@@ -4,6 +4,25 @@
 
 
 
+## [v1.6.5] - 2026-08-12
+
+### 变更
+
+- `examples/metrics` 与 `examples/production` 统一走
+  `metricsx/prometheus` 子模块：
+  - 指标后端注入 `prometheus.WithPrometheus(...)`；
+  - `/metrics` 暴露端点改用 `prometheus.HTTPHandler(metrics)`，
+    业务侧不再直接依赖 promhttp；
+  - 指标事件转发改为 `s.WithMetrics(metrics.Sink())`（对齐
+    `webx.Metrics = metricsx.Sink` 契约）；
+- examples 依赖升级至家族最新：metricsx v1.6.3、
+  metricsx/prometheus v1.6.3、clix v1.6.4、errx v1.6.1、
+  logx v1.5.1、webx v1.6.4 等。
+
+### 质量
+
+- 库代码无变更；示例构建、vet 与测试全绿。
+
 ## [v1.6.4] - 2026-08-11
 
 ### 修复
