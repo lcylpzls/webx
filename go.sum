@@ -38,8 +38,8 @@ github.com/lcylpzls/metricsx v1.6.0 h1:pQ9pN5OQe6c32OREHqmyn5seLhRYGzn+39mq3ZvI3
 github.com/lcylpzls/metricsx v1.6.0/go.mod h1:iHmbF4rw6EsgWWtc5tLCT+jvwvJaVkOwmu5euLJyQEE=
 github.com/lcylpzls/resiliencex v1.4.0 h1:NtcDjKXK64y3TC9BKSYuhnW3ufI5J6osoAATNoiHxWE=
 github.com/lcylpzls/resiliencex v1.4.0/go.mod h1:WE72iR8RFoIooJQ/AXpaIksXeRi6v0GlBW5Wi4O9yUk=
-github.com/lcylpzls/testx v1.5.0 h1:ZOsqIoTZTF4QAe7DTE1jGCJHyrEpwg016a9vLsu3VCo=
-github.com/lcylpzls/testx v1.5.0/go.mod h1:sKGsKwNmJ/SAmrWdZO+4tot7RGilWKEuQLMpv3c3+cw=
+github.com/lcylpzls/testx v1.5.1 h1:KhGcoLO2a29PPSevmmX42hm/YmjWiVlMn7suEev/MKM=
+github.com/lcylpzls/testx v1.5.1/go.mod h1:sKGsKwNmJ/SAmrWdZO+4tot7RGilWKEuQLMpv3c3+cw=
 github.com/lcylpzls/tracex v1.1.0 h1:opH6J6wfLqqy8htTqiAU8t+epthtv1b6p0jL7Nr9AGE=
 github.com/lcylpzls/tracex v1.1.0/go.mod h1:vX8YLpaMTGvU1J45r8BfsFvbOMlgIMEibTYhrJr5XEg=
 github.com/lcylpzls/validx v1.3.0 h1:vdp4FltJSF0kfAf864TQ8DkmWmHgdaoUf/FtPm477VY=
