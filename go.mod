@@ -5,7 +5,7 @@ go 1.26.5
 require (
 	github.com/lcylpzls/confx v1.1.0
 	github.com/lcylpzls/errx v1.6.0
-	github.com/lcylpzls/idgenx v1.5.0
+	github.com/lcylpzls/idgenx v1.5.2
 	github.com/lcylpzls/logx v1.5.0
 	github.com/lcylpzls/metricsx v1.6.0
 	github.com/lcylpzls/resiliencex v1.4.0
