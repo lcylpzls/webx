@@ -7,7 +7,7 @@ require (
 	github.com/lcylpzls/errx v1.6.0
 	github.com/lcylpzls/idgenx v1.5.0
 	github.com/lcylpzls/logx v1.5.0
-	github.com/lcylpzls/metricsx v1.6.0
+	github.com/lcylpzls/metricsx v1.6.3
 	github.com/lcylpzls/resiliencex v1.4.0
 	github.com/lcylpzls/testx v1.5.0
 	github.com/lcylpzls/validx v1.3.0
