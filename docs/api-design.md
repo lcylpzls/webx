@@ -22,5 +22,8 @@
 - v1.6.0 起全局/内置中间件统一为标准库形态
   `func(http.Handler) http.Handler`，路由与分组中间件保持
   `func(*webx.Context)`；
+- v1.7.0 起 `UseHttp2Listen(addr)` 更名为
+  `UseHttp1or2Listen(addr, useTLS)`：`useTLS=true` 为 HTTPS
+  （HTTP/1.1+HTTP/2，ALPN 协商），`useTLS=false` 为明文 HTTP/1.1；
 - 全部公开 API 以每版本生成的 `docs/api-vX.Y.Z.md` 基线为准；
 - 家族约定：破坏性变更统一走 minor 版本（不强制主版本升级）。

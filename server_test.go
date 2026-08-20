@@ -178,8 +178,11 @@ func TestServerChainAPI(t *testing.T) {
 	if got := s.RegisterReadinessCheck("", nil); got != s {
 		t.Error("非法就绪检查应直接返回")
 	}
-	if got := s.UseHttp2Listen(":0"); got != s {
-		t.Error("UseHttp2Listen 应返回自身")
+	if got := s.UseHttp1or2Listen(":0", true); got != s {
+		t.Error("UseHttp1or2Listen 应返回自身")
+	}
+	if got := s.UseHttp1or2Listen(":0", false); got != s {
+		t.Error("UseHttp1or2Listen(useTLS=false) 应返回自身")
 	}
 	if got := s.UseHttp3Listen(":0"); got != s {
 		t.Error("UseHttp3Listen 应返回自身")
@@ -241,7 +244,7 @@ func TestWarnStartedWithNilLogger(t *testing.T) {
 func TestServerStartErrors(t *testing.T) {
 	// logger 为 nil
 	s := NewServer(validConfig(t), nil)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	if err := s.Start(); err == nil {
 		t.Error("nil logger 应报错")
 	}
@@ -250,11 +253,29 @@ func TestServerStartErrors(t *testing.T) {
 	if err := s.Start(); !errx.Is(err, CodeStartFailed) {
 		t.Errorf("无监听方式错误不符：%v", err)
 	}
-	// 配置校验失败
-	s = newTestServer(t, Config{})
-	s.UseHttp2Listen(":0")
+	// 配置校验失败（纯 HTTP 模式仍做结构校验）
+	s = newTestServer(t, Config{LogLevel: "verbose"})
+	s.UseHttp1or2Listen(":0", false)
 	if err := s.Start(); err == nil {
 		t.Error("非法配置应报错")
+	}
+	// HTTPS 监听未配置证书
+	s = newTestServer(t, Config{})
+	s.UseHttp1or2Listen(":0", true)
+	if err := s.Start(); err == nil || !errx.Is(err, CodeConfigInvalid) {
+		t.Errorf("HTTPS 缺少证书错误不符：%v", err)
+	}
+	// HTTP/3 监听未配置证书
+	s = newTestServer(t, Config{})
+	s.UseHttp3Listen(":0")
+	if err := s.Start(); err == nil || !errx.Is(err, CodeConfigInvalid) {
+		t.Errorf("HTTP/3 缺少证书错误不符：%v", err)
+	}
+	// 明文 HTTP 监听失败
+	s = newTestServer(t, Config{})
+	s.UseHttp1or2Listen("bad-addr", false)
+	if err := s.Start(); err == nil {
+		t.Error("非法明文 HTTP 地址应报错")
 	}
 	// Unix 平台检查失败
 	orig := checkUnixSocket
@@ -267,34 +288,34 @@ func TestServerStartErrors(t *testing.T) {
 	}
 	// HTTP/2 监听失败
 	s = newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("bad-addr")
+	s.UseHttp1or2Listen("bad-addr", true)
 	if err := s.Start(); err == nil {
 		t.Error("非法 HTTP/2 地址应报错")
 	}
 	// 启动失败时回收限流清理 goroutine
 	s = newTestServer(t, validConfig(t))
 	s.EnableRateLimit(RateLimitOptions{QPS: 10, Window: time.Second})
-	s.UseHttp2Listen("bad-addr")
+	s.UseHttp1or2Listen("bad-addr", true)
 	if err := s.Start(); err == nil {
 		t.Error("限流场景下非法地址应启动失败")
 	}
 	// 路由注册失败（非法参数名）
 	s = newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{Method: "GET", Path: "/x/:", Handler: noopHandler})
 	if err := s.Start(); err == nil {
 		t.Error("非法路由应报错")
 	}
 	// 路由组注册失败
 	s = newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRouteGroup("/g", func(rg *RouteGroup) { rg.GET("/x/:", noopHandler) })
 	if err := s.Start(); err == nil {
 		t.Error("非法分组路由应报错")
 	}
 	// 静态路由注册失败（非法前缀）
 	s = newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.ServeStaticFS("/a/{p...}/b", http.Dir(t.TempDir()))
 	if err := s.Start(); err == nil {
 		t.Error("非法静态前缀应报错")
@@ -303,13 +324,13 @@ func TestServerStartErrors(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.HealthPath = "/x/:"
 	s = newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	if err := s.Start(); err == nil {
 		t.Error("非法健康检查路径应报错")
 	}
 	// 路由分组回调 panic（注册阶段）
 	s = newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRouteGroup("/g", func(rg *RouteGroup) {
 		panic("分组回调 panic")
 	})
@@ -318,7 +339,7 @@ func TestServerStartErrors(t *testing.T) {
 	}
 	// 路由分组回调 panic（hasRoute 二次执行阶段）
 	s = newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	calls := 0
 	s.RegisterRouteGroup("/g", func(rg *RouteGroup) {
 		calls++
@@ -332,11 +353,40 @@ func TestServerStartErrors(t *testing.T) {
 	}
 }
 
+func TestServerPlainHTTPListen(t *testing.T) {
+	// 纯 HTTP 监听：即使配置了不存在的证书路径也不检测，直接以明文 HTTP 启动。
+	dir := t.TempDir()
+	s := newTestServer(t, Config{
+		TLSCertFile:     filepath.Join(dir, "no.pem"),
+		TLSKeyFile:      filepath.Join(dir, "no.key"),
+		ShutdownTimeout: 3 * time.Second,
+	})
+	s.UseHttp1or2Listen("127.0.0.1:0", false)
+	s.RegisterRoute(Route{Method: "GET", Path: "/ping", Handler: func(c *core.Context) {
+		_ = c.String(http.StatusOK, "pong")
+	}})
+	startServer(t, s)
+
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get("http://" + s.ListenerAddr() + "/ping")
+	testx.RequireNoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	testx.Equal(t, resp.StatusCode, http.StatusOK)
+	testx.Equal(t, string(body), "pong")
+	if resp.ProtoMajor != 1 {
+		t.Errorf("明文监听应协商 HTTP/1.x：%s", resp.Proto)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	testx.RequireNoError(t, s.Stop(ctx))
+}
+
 func TestServerMaxBodyBytes(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MaxBodyBytes = 16
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method: "POST",
 		Path:   "/echo",
@@ -415,7 +465,7 @@ func TestServerIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method: "GET",
 		Path:   "/ping",
@@ -502,7 +552,7 @@ func TestServerIntegration(t *testing.T) {
 	_ = s.EnableMiddleware(MiddlewareCORS)
 	_ = s.RegisterRoutes(nil)
 	_ = s.RegisterRouteGroup("/x", func(rg *RouteGroup) {})
-	_ = s.UseHttp2Listen(":0")
+	_ = s.UseHttp1or2Listen(":0", true)
 	_ = s.UseHttp3Listen(":0")
 	_ = s.UseUnixSocketListen("x.sock", 0)
 	_ = s.EnableRateLimit(RateLimitOptions{QPS: 1, Window: time.Second})
@@ -529,7 +579,7 @@ func TestServerRecoveryAndRateLimit(t *testing.T) {
 	cfg.MiddlewareRequestID = true
 	cfg.MiddlewareMetrics = true
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.EnableRateLimit(RateLimitOptions{QPS: 3, Window: time.Second, CleanupInterval: time.Millisecond})
 	s.RegisterRoute(Route{
 		Method: "GET",
@@ -605,7 +655,7 @@ func TestServerRouteGroupStats(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareMetrics = true
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRouteGroup("/api", func(rg *RouteGroup) {
 		rg.GET("/users/:id", func(c *core.Context) { c.Success("ok", nil) })
 		rg.GET("/admin", func(c *core.Context) {
@@ -659,7 +709,7 @@ func TestServerRouteGroupStats(t *testing.T) {
 func TestServerRateLimitKeyFunc(t *testing.T) {
 	cfg := validConfig(t)
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.EnableRateLimit(RateLimitOptions{
 		QPS:     1,
 		Window:  time.Second,
@@ -706,7 +756,7 @@ func TestServerGzipAndMetrics(t *testing.T) {
 	cfg.MiddlewareRecovery = true
 	cfg.GzipLevel = 9
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method: "GET",
 		Path:   "/ok",
@@ -778,7 +828,7 @@ func TestMetricsProtocolHTTP2(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareMetrics = true
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method:  "GET",
 		Path:    "/ok",
@@ -814,7 +864,7 @@ func TestMetricsActiveConnections(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.MiddlewareMetrics = true
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method:  "GET",
 		Path:    "/ok",
@@ -838,7 +888,7 @@ func TestServerConnContextAndOnShutdown(t *testing.T) {
 	type ctxKey struct{}
 	cfg := validConfig(t)
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.SetConnContext(func(ctx context.Context, _ net.Conn) context.Context {
 		return context.WithValue(ctx, ctxKey{}, "conn-value")
 	})
@@ -881,7 +931,7 @@ func TestServerSecurityHeaders(t *testing.T) {
 	cfg.SecurityHSTSIncludeSubDomains = true
 	cfg.SecurityOriginAgentCluster = true
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method:  "GET",
 		Path:    "/ok",
@@ -913,7 +963,7 @@ func TestServerCORSPNA(t *testing.T) {
 	cfg.MiddlewareCORS = true
 	cfg.CORSAllowPrivateNetwork = true
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method:  "GET",
 		Path:    "/ok",
@@ -952,7 +1002,7 @@ func TestServerTrustedProxies(t *testing.T) {
 	// 未配置可信代理：XFF 被忽略，返回 RemoteAddr
 	cfg := validConfig(t)
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	registerIPRoute(s)
 	startServer(t, s)
 	client := testHTTPClient()
@@ -972,7 +1022,7 @@ func TestServerTrustedProxies(t *testing.T) {
 	cfg2 := validConfig(t)
 	cfg2.TrustedProxies = []string{"127.0.0.1/32"}
 	s2 := newTestServer(t, cfg2)
-	s2.UseHttp2Listen("127.0.0.1:0")
+	s2.UseHttp1or2Listen("127.0.0.1:0", true)
 	registerIPRoute(s2)
 	startServer(t, s2)
 	req, _ = http.NewRequest(http.MethodGet, "https://"+s2.ListenerAddr()+"/ip", nil)
@@ -998,7 +1048,7 @@ func TestServerMiddlewareCombo(t *testing.T) {
 	cfg.AccessLogEnabled = true
 	cfg.LogSuccessReq = true
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method: "GET",
 		Path:   "/ok",
@@ -1041,7 +1091,7 @@ func TestServerSSEFlush(t *testing.T) {
 	cfg.MiddlewareTimeout = true
 	cfg.MiddlewareGzip = true
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method: "GET",
 		Path:   "/sse",
@@ -1079,7 +1129,7 @@ func TestServerHTTP3Concurrent(t *testing.T) {
 	cfg := validConfig(t)
 	h3Addr := freeUDPAddr(t)
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.UseHttp3Listen(h3Addr)
 	s.RegisterRoute(Route{
 		Method: "GET",
@@ -1131,7 +1181,7 @@ func TestServerHTTP3Concurrent(t *testing.T) {
 func TestServerSetCertificateLoader(t *testing.T) {
 	cert, key := writeTestCert(t)
 	s := newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.SetCertificateLoader(func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 		c, err := tls.LoadX509KeyPair(cert, key)
 		if err != nil {
@@ -1266,7 +1316,7 @@ func TestServerRequestIDOptions(t *testing.T) {
 		Header:    "X-Trace-ID",
 		Generator: func() string { return "trace-abc" },
 	})
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method:  "GET",
 		Path:    "/ok",
@@ -1291,7 +1341,7 @@ func TestServerMaxConcurrentRequests(t *testing.T) {
 	cfg := validConfig(t)
 	s := newTestServer(t, cfg)
 	s.SetMaxConcurrentRequests(1)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	var enteredOnce sync.Once
@@ -1370,7 +1420,7 @@ func TestServerErrorMessages(t *testing.T) {
 		KeyFunc: func(c *core.Context) string { return c.Request().URL.Path },
 	})
 	s.SetErrorMessages(map[string]string{ErrorMessageNotFound: "流式 404"})
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{Method: "GET", Path: "/ok", Handler: func(c *core.Context) { c.Success("ok", nil) }})
 	s.RegisterRoute(Route{
 		Method: "POST",
@@ -1462,7 +1512,7 @@ func TestServerMiddlewareOrder(t *testing.T) {
 	cfg.MiddlewareRecovery = true
 	s := newTestServer(t, cfg)
 	s.SetMiddlewareOrder([]MiddlewareType{MiddlewareRequestID, MiddlewareRecovery})
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method:  "GET",
 		Path:    "/ok",
@@ -1488,7 +1538,7 @@ func TestServerHTTP3(t *testing.T) {
 	cfg.MiddlewareMetrics = true
 	h3Addr := freeUDPAddr(t)
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.UseHttp3Listen(h3Addr)
 	s.RegisterRoute(Route{Method: "GET", Path: "/ping", Handler: func(c *core.Context) { c.Success("h3", nil) }})
 	startServer(t, s)
@@ -1573,14 +1623,14 @@ func TestServerUnixSocket(t *testing.T) {
 
 func TestServerStartRollback(t *testing.T) {
 	s := newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.UseHttp3Listen("bad-addr")
 	if err := s.Start(); err == nil {
 		t.Error("非法 QUIC 地址应启动失败")
 	}
 	// HTTP/2 + HTTP/3 成功、Unix 失败 → 回滚关闭全部监听器
 	s = newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.UseHttp3Listen(freeUDPAddr(t))
 	dir := t.TempDir()
 	_ = os.Mkdir(filepath.Join(dir, "sub"), 0o700)
@@ -1593,7 +1643,7 @@ func TestServerStartRollback(t *testing.T) {
 
 func TestServerHealthUserRegistered(t *testing.T) {
 	s := newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method: "GET",
 		Path:   "/health",
@@ -1617,7 +1667,7 @@ func TestServerHealthUserRegistered(t *testing.T) {
 
 	// 通过路由分组注册 /health 同样跳过自动注册
 	s2 := newTestServer(t, validConfig(t))
-	s2.UseHttp2Listen("127.0.0.1:0")
+	s2.UseHttp1or2Listen("127.0.0.1:0", true)
 	s2.RegisterRouteGroup("", func(rg *RouteGroup) {
 		rg.GET("/health", func(c *core.Context) { _ = c.String(http.StatusOK, "group-health") })
 	})
@@ -1637,7 +1687,7 @@ func TestServerHealthUserRegistered(t *testing.T) {
 
 func TestServerHealthChecks(t *testing.T) {
 	s := newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterHealthCheck("db", func(ctx context.Context) error { return nil })
 	s.RegisterHealthCheck("redis", func(ctx context.Context) error { return errors.New("连接失败") })
 	startServer(t, s)
@@ -1664,7 +1714,7 @@ func TestServerHealthChecks(t *testing.T) {
 func TestServerLivenessReadiness(t *testing.T) {
 	cfg := validConfig(t)
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterLivenessCheck("live", func(ctx context.Context) error { return nil })
 	s.RegisterReadinessCheck("db", func(ctx context.Context) error { return errors.New("数据库未就绪") })
 	s.RegisterRoute(Route{
@@ -1719,7 +1769,7 @@ func TestRegisterProbeStartedGuard(t *testing.T) {
 func TestShutdownMarksReadinessDown(t *testing.T) {
 	cfg := validConfig(t)
 	s := newTestServer(t, cfg)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method:  "GET",
 		Path:    "/ok",
@@ -1829,7 +1879,7 @@ func TestServerStaticAndSPA(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>spa</html>"), 0o600)
 
 	s := newTestServer(t, validConfig(t))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.ServeStaticDir("/static", dir)
 	s.EnableSPA(http.Dir(dir), "index.html")
 	startServer(t, s)
@@ -1913,7 +1963,7 @@ func TestGlobalMiddlewareCoversFallbacks(t *testing.T) {
 			next.ServeHTTP(w, r)
 		})
 	})
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{Method: http.MethodGet, Path: "/hello",
 		Handler: func(c *Context) { _ = c.String(http.StatusOK, "ok") }})
 	startServer(t, s)

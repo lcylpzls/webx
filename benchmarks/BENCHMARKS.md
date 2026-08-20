@@ -227,8 +227,9 @@ webx 可作为工业级基座的性能依据：
 
 ## 注意事项
 
-- webx 设计上**强制 TLS**（生产默认 HTTP/2 + HTTP/3），本基准的
-  HTTP/1.1 对比统一走 HTTPS；HTTP/2 对比使用 ALPN 协商；
+- webx 传输可裁剪：`UseHttp1or2Listen(addr, true)` 为 HTTPS
+  （HTTP/1.1+HTTP/2，ALPN 协商），本基准的 HTTP/1.1 对比统一走 HTTPS；
+  纯 HTTP/1.1 明文模式（`useTLS=false`）不经 TLS 加密，未纳入横向对比；
 - HTTP/3 宿主为 quic-go `http3.Server`：标准库 `net/http` 无 h3 服务端，
   gin/echo/ServeMux 以 `http.Handler` 挂载，webx 内建同栈实现；
 - hertz 的 HTTP/2 需额外注册 `hertz-contrib/http2` 扩展（`AddProtocol`），

@@ -42,18 +42,11 @@ func TestConfigValidateSuccessWithDefaults(t *testing.T) {
 
 func TestConfigValidateErrors(t *testing.T) {
 	cert, key := writeTestCert(t)
-	dir := t.TempDir()
 	cases := []struct {
 		name string
 		cfg  Config
 		msg  string
 	}{
-		{"证书为空", Config{}, "TLS 证书文件路径不能为空"},
-		{"证书不存在", Config{TLSCertFile: filepath.Join(dir, "no.pem"), TLSKeyFile: key}, "文件不存在"},
-		{"证书是目录", Config{TLSCertFile: dir, TLSKeyFile: key}, "路径是目录而非文件"},
-		{"私钥为空", Config{TLSCertFile: cert}, "TLS 私钥文件路径不能为空"},
-		{"私钥不存在", Config{TLSCertFile: cert, TLSKeyFile: filepath.Join(dir, "no.key")}, "文件不存在"},
-		{"证书私钥不配对", Config{TLSCertFile: cert, TLSKeyFile: cert}, "TLS 证书加载失败"},
 		{"关闭超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, ShutdownTimeout: -1}, "关闭超时时间不能为负数"},
 		{"请求超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, RequestTimeout: -1}, "请求超时时间不能为负数"},
 		{"读取超时负数", Config{TLSCertFile: cert, TLSKeyFile: key, ReadTimeout: -1}, "读取超时时间不能为负数"},
@@ -82,6 +75,41 @@ func TestConfigValidateErrors(t *testing.T) {
 		}
 		testx.RequireTrue(t, strings.Contains(err.Error(), tc.msg))
 	}
+}
+
+func TestConfigValidateWithoutTLS(t *testing.T) {
+	// 纯 HTTP 场景：Config 可完全不配置 TLS 证书。
+	var cfg Config
+	testx.RequireNoError(t, cfg.Validate())
+}
+
+func TestValidateTLSConfig(t *testing.T) {
+	cert, key := writeTestCert(t)
+	dir := t.TempDir()
+	cases := []struct {
+		name string
+		cfg  Config
+		msg  string
+	}{
+		{"证书为空", Config{}, "TLS 证书文件路径不能为空"},
+		{"证书不存在", Config{TLSCertFile: filepath.Join(dir, "no.pem"), TLSKeyFile: key}, "文件不存在"},
+		{"证书是目录", Config{TLSCertFile: dir, TLSKeyFile: key}, "路径是目录而非文件"},
+		{"私钥为空", Config{TLSCertFile: cert}, "TLS 私钥文件路径不能为空"},
+		{"私钥不存在", Config{TLSCertFile: cert, TLSKeyFile: filepath.Join(dir, "no.key")}, "文件不存在"},
+		{"证书私钥不配对", Config{TLSCertFile: cert, TLSKeyFile: cert}, "TLS 证书加载失败"},
+	}
+	for _, tc := range cases {
+		err := validateTLSConfig(tc.cfg)
+		if err == nil {
+			t.Errorf("%s：应返回错误", tc.name)
+			continue
+		}
+		if !errx.Is(err, CodeConfigInvalid) {
+			t.Errorf("%s：错误码不符：%v", tc.name, err)
+		}
+		testx.RequireTrue(t, strings.Contains(err.Error(), tc.msg))
+	}
+	testx.RequireNoError(t, validateTLSConfig(Config{TLSCertFile: cert, TLSKeyFile: key}))
 }
 
 func TestConfigValidateExplicitLevelAndCORS(t *testing.T) {
@@ -241,9 +269,15 @@ func TestLoadConfigErrors(t *testing.T) {
 	}
 	// 加载成功但校验失败
 	invalid := filepath.Join(dir, "invalid.toml")
-	_ = os.WriteFile(invalid, []byte("tls_cert_file = \"x\"\ntls_key_file = \"y\"\n"), 0o600)
+	_ = os.WriteFile(invalid, []byte("log_level = \"verbose\"\n"), 0o600)
 	if _, err := LoadConfig(invalid); !errx.Is(err, CodeConfigInvalid) {
 		t.Errorf("校验失败错误码不符：%v", err)
+	}
+	// 纯 HTTP 场景：不配置证书也能加载成功
+	plain := filepath.Join(dir, "plain.toml")
+	_ = os.WriteFile(plain, []byte("log_level = \"info\"\n"), 0o600)
+	if _, err := LoadConfig(plain); err != nil {
+		t.Errorf("无证书配置加载失败：%v", err)
 	}
 	// 成功路径快速确认
 	ok := filepath.Join(dir, "ok.toml")

@@ -30,7 +30,7 @@ type routeGroupEntry struct {
 	fn     func(*RouteGroup)
 }
 
-// Server 是 webx 的核心类型，提供多通道 HTTPS 服务能力。
+// Server 是 webx 的核心类型，提供多通道 HTTP/HTTPS 服务能力。
 // 通过链式 API 配置，Start() 启动，Stop(ctx) 优雅关闭。
 type Server struct {
 	config             Config
@@ -59,8 +59,9 @@ type Server struct {
 	listenersMu   sync.Mutex
 	httpServers   []*http.Server
 
-	http2Enabled    bool
-	http2Addr       string
+	httpEnabled     bool
+	httpAddr        string
+	httpTLS         bool
 	http3Enabled    bool
 	http3Addr       string
 	unixEnabled     bool
@@ -229,16 +230,18 @@ func (s *Server) RegisterRouteGroup(prefix string, fn func(*RouteGroup)) *Server
 	return s
 }
 
-// UseHttp2Listen 启用 HTTP/2 TLS 监听（含 HTTP/1.1 兼容）。
-func (s *Server) UseHttp2Listen(addr string) *Server {
+// UseHttp1or2Listen 启用 TCP 监听：useTLS=true 时启用 TLS（HTTPS，
+// 通过 ALPN 协商 HTTP/2 与 HTTP/1.1）；useTLS=false 时仅提供明文 HTTP/1.1。
+func (s *Server) UseHttp1or2Listen(addr string, useTLS bool) *Server {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.started {
-		s.warnStarted("启用 HTTP/2 监听")
+		s.warnStarted("启用 HTTP/1.1+HTTP/2 监听")
 		return s
 	}
-	s.http2Enabled = true
-	s.http2Addr = addr
+	s.httpEnabled = true
+	s.httpAddr = addr
+	s.httpTLS = useTLS
 	return s
 }
 
@@ -531,8 +534,16 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	if !s.http2Enabled && !s.http3Enabled && !s.unixEnabled {
-		return errx.NewCode(CodeStartFailed, "至少需要启用一种监听方式（HTTP/2、HTTP/3 或 Unix Socket）")
+	if !s.httpEnabled && !s.http3Enabled && !s.unixEnabled {
+		return errx.NewCode(CodeStartFailed, "至少需要启用一种监听方式（HTTP/1.1+HTTP/2、HTTP/3 或 Unix Socket）")
+	}
+	// 仅 HTTPS（UseHttp1or2Listen 开启 TLS）或 HTTP/3 需要 TLS 证书；
+	// 纯 HTTP 监听不校验证书路径与文件。
+	needTLS := (s.httpEnabled && s.httpTLS) || s.http3Enabled
+	if needTLS {
+		if err := validateTLSConfig(s.config); err != nil {
+			return err
+		}
 	}
 	if err := s.config.Validate(); err != nil {
 		return err
@@ -637,9 +648,15 @@ func (s *Server) Start() error {
 		}
 	}
 	var wg sync.WaitGroup
-	if s.http2Enabled {
-		getCert := s.buildGetCertificate()
-		ln, err := createTLSListener(s.http2Addr, getCert, s.config.MinTLSVersion)
+	if s.httpEnabled {
+		var ln net.Listener
+		var err error
+		if s.httpTLS {
+			getCert := s.buildGetCertificate()
+			ln, err = createTLSListener(s.httpAddr, getCert, s.config.MinTLSVersion)
+		} else {
+			ln, err = createPlainListener(s.httpAddr)
+		}
 		if err != nil {
 			s.closeListeners()
 			return err
@@ -660,9 +677,13 @@ func (s *Server) Start() error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s.logger.WithContext(ctx).Info("webx：HTTP/2 服务已启动", logx.Fields(logx.String("地址", s.http2Addr)))
+			if s.httpTLS {
+				s.logger.WithContext(ctx).Info("webx：HTTPS（HTTP/1.1+HTTP/2）服务已启动", logx.Fields(logx.String("地址", s.httpAddr)))
+			} else {
+				s.logger.WithContext(ctx).Info("webx：HTTP/1.1 服务已启动", logx.Fields(logx.String("地址", s.httpAddr)))
+			}
 			if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				s.logger.WithContext(ctx).Error("webx：HTTP/2 服务异常退出", logx.Fields(logx.Any("error", err)))
+				s.logger.WithContext(ctx).Error("webx：HTTP 服务异常退出", logx.Fields(logx.Any("error", err)))
 			}
 		}()
 	}

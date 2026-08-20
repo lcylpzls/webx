@@ -4,6 +4,30 @@
 
 
 
+## [v1.7.0] - 2026-08-20
+
+### 破坏性变更
+
+- `UseHttp2Listen(addr)` 删除，改为 `UseHttp1or2Listen(addr, useTLS)`：
+  - `useTLS=true` 启用 HTTPS 监听（TLS ALPN 协商 HTTP/2 与 HTTP/1.1），
+    行为与旧 `UseHttp2Listen` 一致；
+  - `useTLS=false` 仅提供明文 HTTP/1.1 监听，无需任何证书配置；
+  - 所有既有调用点改为 `UseHttp1or2Listen(addr, true)`。
+
+### 变更
+
+- TLS 证书校验从 `Config.Validate()` 移入 `Start()`：仅当启用 HTTPS
+  （`UseHttp1or2Listen` 开启 TLS）或 HTTP/3 监听时，才检查证书路径已配置、
+  文件存在且可配对；纯 HTTP / 仅 Unix Socket 场景完全不触碰证书；
+- `LoadConfig` 与 `Config.Validate()` 不再校验 TLS 证书（结构校验保留）；
+- 新增明文 TCP 监听器 `createPlainListener`，纯 HTTP 模式走
+  `http.Server.Serve` 直接服务 HTTP/1.1。
+
+### 质量
+
+- 新增纯 HTTP 端到端、HTTPS/HTTP/3 缺证书、明文监听失败等用例；
+  三平台 CI + race + fuzz + 100% 覆盖率门禁全绿。
+
 ## [v1.6.5] - 2026-08-12
 
 ### 变更

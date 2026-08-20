@@ -73,6 +73,15 @@ func createTLSListener(addr string, getCert func(*tls.ClientHelloInfo) (*tls.Cer
 	return ln, nil
 }
 
+// createPlainListener 创建明文 TCP 监听器（HTTP/1.1）。
+func createPlainListener(addr string) (net.Listener, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, errx.WrapCode(err, CodeListenFailed, "TCP 监听失败，地址 "+addr)
+	}
+	return ln, nil
+}
+
 // createQUICListener 创建 QUIC over UDP 监听器，用于 HTTP/3。
 func createQUICListener(addr string, getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), minVersion uint16, maxIdle time.Duration, maxStreams int64) (*quic.Listener, error) {
 	ln, err := quic.ListenAddr(addr, buildTLSConfig(getCert, minVersion, []string{"h3"}), &quic.Config{

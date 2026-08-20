@@ -19,7 +19,8 @@ webx 是基于 Go 标准库自研的 HTTP/HTTPS 服务组件库，核心设计�
 ```
 ┌──────────────────────────────────────────────────────────┐
 │ transport 传输层                                           │
-│   TCP/TLS(HTTP/1.1+HTTP/2) · QUIC(HTTP/3) · Unix Socket │
+│  TCP(HTTP/1.1) / TCP+TLS(HTTP/1.1+HTTP/2) · QUIC(HTTP/3) │
+│                        · Unix Socket                      │
 └──────────────────────────┬───────────────────────────────┘
                            │
 ┌──────────────────────────▼───────────────────────────────┐
@@ -106,7 +107,10 @@ webx 对外接受框架风格路由语法：`:id`（单段参数）与 `*filepat
 
 ### 3.4 传输与生命周期
 
-- **HTTP/2**：标准库 `http.Server` + `tls.Config{NextProtos: ["h2","http/1.1"]}`；
+- **TCP 监听**：`UseHttp1or2Listen(addr, useTLS)` 统一入口——
+  `useTLS=true` 走 `tls.Listen`（`NextProtos: ["h2","http/1.1"]`，HTTPS，
+  同时服务 HTTP/1.1 与 HTTP/2）；`useTLS=false` 走明文 `net.Listen`
+  （仅 HTTP/1.1，无需证书）；
 - **HTTP/3**：quic-go 的 `http3.Server`，UDP 监听，与 TCP 同端口不冲突；
 - **Unix Socket**：`net.Listen("unix", path)`，含残留文件清理与权限设置；
   Windows 要求 build 1803（10.0.17134）以上（AF_UNIX 双工通信），

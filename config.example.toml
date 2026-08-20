@@ -1,8 +1,8 @@
 # webx 参考配置：复制为 config.toml 并按需修改。
 
-# --- TLS（必填） ---
-tls_cert_file = "/etc/ssl/certs/server.crt"
-tls_key_file = "/etc/ssl/private/server.key"
+# --- TLS（仅在启用 HTTPS/HTTP/3 监听时必填；纯 HTTP 可留空） ---
+tls_cert_file = "/etc/ssl/certs/server.crt"     # 证书文件路径（PEM 格式）
+tls_key_file = "/etc/ssl/private/server.key"    # 私钥文件路径（PEM 格式）
 # 最低 TLS 版本：771=TLS1.2，772=TLS1.3（0=默认 TLS1.2）
 min_tls_version = 771
 

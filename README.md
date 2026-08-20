@@ -27,7 +27,8 @@
 
 ## 快速开始
 
-1. 复制 `config.example.toml` 为 `config.toml`，填入 TLS 证书路径并按需修改；
+1. 复制 `config.example.toml` 为 `config.toml`，按需修改；
+   仅启用 HTTPS/HTTP/3 监听时才需要填写 TLS 证书路径，纯 HTTP 可留空；
 2. 从 [examples/basic](examples/basic) 起步体验最小服务；
 3. 生产部署直接参考 [examples/production](examples/production)：
    探针、可信代理、限流、并发限制、外置指标、上传与优雅关闭全配置模板。
@@ -44,7 +45,9 @@
 
 ## 功能清单
 
-- 🔒 强制 TLS：HTTP/2（TLS over TCP）+ HTTP/3（QUIC over UDP）+ Unix Socket 多通道同时监听；
+- 🔐 传输可裁剪：`UseHttp1or2Listen(addr, true)` 启用 HTTPS（HTTP/1.1+HTTP/2，
+  ALPN 协商）；`UseHttp1or2Listen(addr, false)` 仅提供明文 HTTP/1.1；
+  HTTP/3（QUIC，强制 TLS）+ Unix Socket 多通道可同时监听；
 - 🔗 链式配置：路由、分组、中间件、限流、静态文件一键组装；
 - 🗺️ 路由：`:id` / `*filepath` 参数语法、404/405 JSON、尾斜杠重定向；
 - 🧱 内置中间件：Recovery / RequestID / Timeout / CORS / Validation / RateLimit /
@@ -94,7 +97,7 @@
 | --- | --- |
 | 创建服务 | `webx.NewServer(cfg, logger)` |
 | 加载配置 | `webx.LoadConfig("config.toml")` |
-| 多通道监听 | `UseHttp2Listen / UseHttp3Listen / UseUnixSocketListen` |
+| 多通道监听 | `UseHttp1or2Listen / UseHttp3Listen / UseUnixSocketListen` |
 | 路由/分组 | `RegisterRoute / RegisterRouteGroup / RouteGroup.GET...` |
 | 中间件管理 | `UseGlobalMiddleware / OverrideMiddleware / Disable/EnableMiddleware` |
 | 请求 ID | `SetRequestIDOptions`（自定义头名与生成器，默认 UUID v7） |

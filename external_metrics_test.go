@@ -80,7 +80,7 @@ func TestServerExternalMetrics(t *testing.T) {
 	s := newTestServer(t, cfg)
 	sink := newExternalSink()
 	s.WithMetrics(sink)
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method:  "GET",
 		Path:    "/ok",
@@ -123,7 +123,7 @@ func TestServerExternalMetricsRateLimited(t *testing.T) {
 	sink := newExternalSink()
 	s.WithMetrics(sink)
 	s.EnableRateLimit(RateLimitOptions{QPS: 1, Window: time.Second})
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method:  "GET",
 		Path:    "/ok",

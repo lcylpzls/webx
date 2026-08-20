@@ -83,7 +83,7 @@ func BenchmarkServerRequest(b *testing.B) {
 	cfg.MiddlewareRequestID = true
 	cfg.MiddlewareRecovery = true
 	s := NewServer(cfg, newTestLogger(b))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method: "GET",
 		Path:   "/ping",
@@ -154,7 +154,7 @@ func BenchmarkServerRequestFull(b *testing.B) {
 	cfg.AccessLogEnabled = true
 	cfg.LogSuccessReq = true
 	s := NewServer(cfg, newTestLogger(b))
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(Route{
 		Method: "GET",
 		Path:   "/ping",

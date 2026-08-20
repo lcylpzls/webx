@@ -17,11 +17,13 @@ var statPath = os.Stat
 var newConfigManager = confx.NewConfigManager
 
 // Config 定义 webx Server 的全部配置项，通过 confx 从 TOML 文件加载。
-// 所有校验在 Validate() 中集中进行，失败返回 errx 结构化错误。
+// 结构校验在 Validate() 中集中进行；TLS 证书校验由 Start() 在
+// 启用 HTTPS/HTTP/3 监听时执行，失败均返回 errx 结构化错误。
 type Config struct {
-	// TLSCertFile TLS 证书文件路径（PEM 格式），必填。
+	// TLSCertFile TLS 证书文件路径（PEM 格式）。
+	// 仅当启用 HTTPS（UseHttp1or2Listen 开启 TLS）或 HTTP/3 监听时必须配置。
 	TLSCertFile string `toml:"tls_cert_file"`
-	// TLSKeyFile TLS 私钥文件路径（PEM 格式），必填。
+	// TLSKeyFile TLS 私钥文件路径（PEM 格式），要求同上。
 	TLSKeyFile string `toml:"tls_key_file"`
 	// MinTLSVersion 最低 TLS 版本，0 表示默认 TLS 1.2（仅允许 TLS1.2/1.3）。
 	MinTLSVersion uint16 `toml:"min_tls_version"`
@@ -155,23 +157,9 @@ func isRegularFile(path string) error {
 }
 
 // Validate 校验配置完整性并填充默认值。
-// 校验规则：证书/私钥必填且可配对、超时非负、日志级别合法。
+// 校验规则：超时非负、日志级别合法等；TLS 证书校验由 Start()
+// 在启用 HTTPS（UseHttp1or2Listen 开启 TLS）或 HTTP/3 监听时执行。
 func (c *Config) Validate() error {
-	if c.TLSCertFile == "" {
-		return errx.NewCode(CodeConfigInvalid, "TLS 证书文件路径不能为空")
-	}
-	if err := isRegularFile(c.TLSCertFile); err != nil {
-		return err
-	}
-	if c.TLSKeyFile == "" {
-		return errx.NewCode(CodeConfigInvalid, "TLS 私钥文件路径不能为空")
-	}
-	if err := isRegularFile(c.TLSKeyFile); err != nil {
-		return err
-	}
-	if _, err := tls.LoadX509KeyPair(c.TLSCertFile, c.TLSKeyFile); err != nil {
-		return errx.WrapCode(err, CodeConfigInvalid, "TLS 证书加载失败")
-	}
 	if c.MinTLSVersion == 0 {
 		c.MinTLSVersion = tls.VersionTLS12
 	}
@@ -280,6 +268,27 @@ func (c *Config) Validate() error {
 		c.CORSAllowedMethods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}
 		c.CORSAllowedHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"}
 		c.CORSExposeHeaders = []string{"X-Request-ID"}
+	}
+	return nil
+}
+
+// validateTLSConfig 校验 TLS 证书配置：路径非空、文件存在且可配对。
+// 仅在启用 HTTPS（UseHttp1or2Listen 开启 TLS）或 HTTP/3 监听时由 Start() 调用。
+func validateTLSConfig(c Config) error {
+	if c.TLSCertFile == "" {
+		return errx.NewCode(CodeConfigInvalid, "TLS 证书文件路径不能为空")
+	}
+	if err := isRegularFile(c.TLSCertFile); err != nil {
+		return err
+	}
+	if c.TLSKeyFile == "" {
+		return errx.NewCode(CodeConfigInvalid, "TLS 私钥文件路径不能为空")
+	}
+	if err := isRegularFile(c.TLSKeyFile); err != nil {
+		return err
+	}
+	if _, err := tls.LoadX509KeyPair(c.TLSCertFile, c.TLSKeyFile); err != nil {
+		return errx.WrapCode(err, CodeConfigInvalid, "TLS 证书加载失败")
 	}
 	return nil
 }
