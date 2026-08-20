@@ -105,7 +105,7 @@ func newWebxServer(b *testing.B, cfg webx.Config, useH3 bool) *webx.Server {
 	if useH3 {
 		s.UseHttp3Listen("127.0.0.1:0")
 	} else {
-		s.UseHttp2Listen("127.0.0.1:0")
+		s.UseHttp1or2Listen("127.0.0.1:0", true)
 	}
 	s.RegisterRoute(webx.Route{
 		Method:  http.MethodGet,

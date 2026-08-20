@@ -19,7 +19,7 @@ func main() {
 		panic(err)
 	}
 	s := webx.NewServer(cfg, logger)
-	s.UseHttp2Listen(":8443").
+	s.UseHttp1or2Listen(":8443", true).
 		UseHttp3Listen(":8443"). // TCP/UDP 同端口不冲突
 		RegisterRoute(webx.Route{
 			Method: "GET",

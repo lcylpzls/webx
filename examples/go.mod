@@ -8,7 +8,7 @@ require (
 	github.com/lcylpzls/logx v1.5.1
 	github.com/lcylpzls/metricsx v1.6.2
 	github.com/lcylpzls/metricsx/prometheus v1.6.3
-	github.com/lcylpzls/webx v1.6.4
+	github.com/lcylpzls/webx v1.7.0
 )
 
 require (

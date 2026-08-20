@@ -1,4 +1,4 @@
-// basic 示例：最小 HTTP/2 服务。
+// basic 示例：最小 HTTP/HTTPS 服务。
 package main
 
 import (
@@ -18,7 +18,7 @@ func main() {
 		panic(err)
 	}
 	if err := webx.NewServer(cfg, logger).
-		UseHttp2Listen(":8443").
+		UseHttp1or2Listen(":8443", true).
 		RegisterRoute(webx.Route{
 			Method: "GET",
 			Path:   "/ping",

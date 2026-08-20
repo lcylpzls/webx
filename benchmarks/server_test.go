@@ -175,7 +175,7 @@ func BenchmarkServerTLSWebx(b *testing.B) {
 		ShutdownTimeout: 5 * time.Second,
 	}
 	s := webx.NewServer(cfg, benchLogger())
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(webx.Route{
 		Method:  http.MethodGet,
 		Path:    "/ping",
@@ -223,7 +223,7 @@ func BenchmarkServerTLSWebxFull(b *testing.B) {
 		LogSuccessReq:        true,
 	}
 	s := webx.NewServer(cfg, benchLogger())
-	s.UseHttp2Listen("127.0.0.1:0")
+	s.UseHttp1or2Listen("127.0.0.1:0", true)
 	s.RegisterRoute(webx.Route{
 		Method:  http.MethodGet,
 		Path:    "/ping",
